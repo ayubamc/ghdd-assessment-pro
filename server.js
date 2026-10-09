@@ -607,6 +607,7 @@ async function aiGenerate(p) {
   const model = process.env.GEMINI_MODEL || 'gemini-2.5-flash';
   const prompt = `
 You are an expert secondary-school assessment designer.
+LANGUAGE RULE (mandatory): Identify the main language of the supplied textbook text and write EVERY student-facing exam element in that same language. If the source is English, write the exam in English. If the source is Arabic, write the exam in Arabic. If the source is Somali, write the exam in Somali. Do not mix Somali helper notes into an English or Arabic paper. The user's interface language is irrelevant; the textbook language controls the exam language.
 Create exactly ${p.count} questions using ONLY the supplied source text. Do not invent facts or repeat questions.
 Use Bloom levels: ${JSON.stringify(p.levels || blooms)}.
 Required ordered section plan: ${JSON.stringify(p.partPlan || [])}. Follow the exact section order and counts.
@@ -614,9 +615,9 @@ SOURCE DISTRIBUTION RULE: ${p.sourceSelectionRule || 'Spread questions across di
 Do not create consecutive questions from the same paragraph or heading. Spread questions across the selected page range and distinct topics. Every question must include sourcePages and topic/heading.
 MCQ: exactly four options A, B, C, D and one correct answer.
 Fill in the Blanks: one clear blank and a clear answer.
-Matching: return matches as [{"question":"prompt/term","answer":"correct answer"}]. options must contain all correct matching answers plus exactly ONE plausible distractor.
-Structured/direct questions: include clear subparts and a model answer/marking guide. Questions should be suitable for written answers.
-Create exactly ${Number(p.diagramCount || 0)} diagrams across Structured questions. If diagramCount is 0, diagram and diagramSvg must be empty for every question. If greater than zero, each requested diagram must include a standalone simple SVG in diagramSvg, with viewBox="0 0 640 300", width="100%", height="auto", visible labels and basic shapes/lines. No scripts, external links, images, foreignObject, or CSS imports. Each diagram must directly support its question and be based on the source. Do not invent scientific labels or unsupported details.
+Matching: return matches as [{"question":"prompt/term","answer":"correct answer"}]. options must contain all correct matching answers plus exactly ONE plausible distractor. Student paper must not reveal answers.
+Structured/direct questions: include clear subparts and a model answer/marking guide. Student-facing questions must be in the source language.
+DIAGRAM RULE: Requested number of diagrams is ${Number(p.diagramCount || 0)}. Create exactly this number of diagrams across Structured questions. If it is 0, every diagram and diagramSvg field must be empty. If it is greater than 0, create actual, visible, accurate SVG diagrams in diagramSvg—not instructions, not placeholder text, and never the word "undefined". Use standalone SVG with viewBox="0 0 640 300", width="100%", height="auto", visible labels in the source language, basic shapes/lines only. No scripts, external links, images, foreignObject, or CSS imports. Diagrams must be based only on the supplied source and relevant to the question.
 Return JSON only:
 {"questions":[{"question":"","answer":"","type":"","section":"","options":[],"matches":[{"question":"","answer":""}],"diagram":"","diagramSvg":"","bloom":"","difficulty":"","marks":1,"topic":"","sourcePages":""}]}
 Subject: ${p.subject || ''}
@@ -625,7 +626,7 @@ Source title: ${p.sourceTitle || ''}
 Page range: ${JSON.stringify(p.pageRange || {})}
 Source text:
 ${String(p.sourceText || p.text || '').slice(0, 70000)}
-`;
+`;;
 
   const r = await fetch(
     `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`,
@@ -652,7 +653,71 @@ ${String(p.sourceText || p.text || '').slice(0, 70000)}
   const raw = (data.candidates?.[0]?.content?.parts || [])
     .map(x => x.text || '').join('');
 
-  return JSON.parse(raw.replace(/^```json|```$/g, '').trim()).questions || [];
+  const questions = JSON.parse(raw.replace(/^```json|```$/g, '').trim()).questions || [];
+  const requestedDiagrams = Math.max(0, Math.min(30, Number(p.diagramCount || 0)));
+  // Never expose "undefined" or text-only placeholders as diagrams.
+  for (const q of questions) {
+    if (typeof q.diagram !== 'string' || q.diagram.trim().toLowerCase() === 'undefined') q.diagram = '';
+    if (typeof q.diagramSvg !== 'string' || !/<svg\\b/i.test(q.diagramSvg)) q.diagramSvg = '';
+  }
+  if (requestedDiagrams > 0) {
+    const candidates = questions.filter(q => /structured|direct/i.test(String(q.type || '')) || /STRUCTURED|DIRECT/i.test(String(q.section || '')));
+    if (candidates.length < requestedDiagrams) {
+      throw new Error(`The exam plan has only ${candidates.length} structured questions, but ${requestedDiagrams} diagrams were requested. Increase question count or reduce diagrams.`);
+    }
+    let made = 0;
+    for (const q of candidates) {
+      if (made >= requestedDiagrams) break;
+      if (!q.diagramSvg) q.diagramSvg = await aiGenerateDiagram(p, q, made + 1);
+      q.diagram = '';
+      made++;
+    }
+    // Remove any unrequested diagrams that the main response added.
+    let kept = 0;
+    for (const q of questions) {
+      if (q.diagramSvg) {
+        kept++;
+        if (kept > requestedDiagrams) { q.diagramSvg = ''; q.diagram = ''; }
+      }
+    }
+  } else {
+    for (const q of questions) { q.diagramSvg = ''; q.diagram = ''; }
+  }
+  return questions;
+}
+
+
+async function aiGenerateDiagram(p, question, index) {
+  const key = process.env.GEMINI_API_KEY;
+  if (!key) throw new Error('GEMINI_API_KEY is missing; cannot create requested diagrams.');
+  const model = process.env.GEMINI_MODEL || 'gemini-3.5-flash-lite';
+  const lang = p.examLanguage === 'ar' ? 'Arabic' : p.examLanguage === 'so' ? 'Somali' : 'the same language as the source textbook';
+  const prompt = `Create one accurate, student-exam-ready educational diagram as SVG for this question. Diagram labels must be in ${lang}. Use only source-supported information; if the source does not support exact details, make a clearly schematic diagram and avoid invented labels.
+Question: ${String(question.question || question.text || '')}
+Topic: ${String(question.topic || '')}
+Source pages: ${String(question.sourcePages || '')}
+Source text: ${String(p.sourceText || '').slice(0, 18000)}
+Return ONLY a single standalone SVG element, no markdown or explanation. Requirements: viewBox="0 0 640 300", width="100%", height="auto"; clear readable labels; simple shapes/lines; white background; no scripts, no external links, no images, no foreignObject, no CSS imports.`;
+  const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`, {
+    method: 'POST',
+    headers: {'content-type':'application/json','x-goog-api-key':key},
+    body: JSON.stringify({
+      contents:[{role:'user',parts:[{text:prompt}]}],
+      generationConfig:{temperature:0.2,maxOutputTokens:3000}
+    })
+  });
+  const data = await response.json();
+  if (!response.ok) throw new Error(data?.error?.message || 'Diagram generation request failed.');
+  const raw=(data.candidates?.[0]?.content?.parts||[]).map(x=>x.text||'').join('').trim();
+  const svgMatch=raw.match(/<svg\b[\s\S]*?<\/svg>/i);
+  if (!svgMatch) throw new Error(`AI did not return a valid SVG for diagram ${index}.`);
+  const svg=svgMatch[0]
+    .replace(/<script[\s\S]*?<\/script>/gi,'')
+    .replace(/<\/?(?:foreignObject|iframe|object|embed|image|use)\b[^>]*>/gi,'')
+    .replace(/\son\w+\s*=\s*(?:"[^"]*"|'[^']*'|[^\s>]+)/gi,'')
+    .replace(/\s(?:href|xlink:href)\s*=\s*(?:"[^"]*"|'[^']*'|[^\s>]+)/gi,'')
+    .replace(/url\s*\([^)]*\)/gi,'none');
+  return svg;
 }
 
 app.post('/api/generate', async (req, res) => {
