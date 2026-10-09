@@ -1,155 +1,638 @@
 
-<!doctype html>
+<!DOCTYPE html>
 <html lang="so">
 <head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
 <meta name="theme-color" content="#123b78">
 <title>GHDD Assessment Pro</title>
 <style>
-:root{--navy:#123b78;--blue:#168bd2;--gold:#e9b63f;--ink:#172338;--muted:#65738a;--bg:#f3f6fb;--line:#dce4ef;--green:#168454;--red:#b42318}
-*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--ink);font:16px/1.5 system-ui,Arial,sans-serif}
-header{background:linear-gradient(120deg,#102d60,#15569c);color:white;padding:18px 16px 20px;border-bottom:5px solid var(--gold)}
-.brand,.wrap{max-width:1180px;margin:auto}.brand{display:flex;align-items:center;gap:14px}.brand img{width:76px;height:76px;object-fit:contain;background:#fff;border-radius:14px;padding:4px}.brand h1{font-size:clamp(20px,4vw,30px);margin:0}.brand p{margin:5px 0 0;color:#dbeafe}.tag{font-size:12px;letter-spacing:.08em;font-weight:700;color:#ffe5a0;margin-bottom:5px}.wrap{margin:18px auto;padding:0 14px}
-.nav{display:flex;gap:8px;flex-wrap:wrap;background:white;padding:10px;border:1px solid var(--line);border-radius:14px;margin-bottom:18px}.nav button{border:0;background:#edf3fb;color:var(--navy);font-weight:700;padding:10px 13px;border-radius:9px;cursor:pointer}.nav button.active{background:var(--navy);color:white}
-.tab{display:none}.tab.active{display:block}.hero,.card,.panel{background:white;border:1px solid var(--line);border-radius:14px;padding:18px;min-width:0}.hero{padding:24px;margin-bottom:18px;background-image:linear-gradient(110deg,#fff 65%,#eaf5ff)}.hero h2{margin:0 0 8px;color:var(--navy);font-size:clamp(23px,4vw,34px)}.hero p,.card p{color:var(--muted)}.grid,.row{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px}.cards{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px}.card h3,.panel h3{margin:0 0 8px;color:var(--navy)}.emoji{font-size:27px}.section-title{margin:0 0 14px;color:var(--navy)}
-label{display:block;font-weight:700;font-size:14px;margin:12px 0 5px}input,select,textarea{width:100%;padding:11px 12px;border:1px solid #cbd6e4;border-radius:9px;background:white;color:var(--ink);font:inherit}textarea{min-height:88px;resize:vertical}
-.btn{display:inline-flex;align-items:center;justify-content:center;gap:7px;border:0;border-radius:9px;background:var(--navy);color:white;font-weight:700;padding:11px 15px;cursor:pointer;text-decoration:none;margin:6px 5px 0 0}.btn:disabled{opacity:.5;cursor:wait}.secondary{background:#e8eef7;color:var(--navy)}.danger{background:#b42318}.green{background:var(--green)}.muted{color:var(--muted)}.notice{background:#fff8e5;border:1px solid #f0d48a;padding:12px;border-radius:10px;color:#6e5107;margin:12px 0}
-.list{display:grid;gap:10px;margin-top:12px}.item{border:1px solid var(--line);border-radius:10px;padding:12px;background:#fbfdff}.item strong{display:block}.item small{color:var(--muted)}.item-actions{margin-top:8px}.empty{padding:18px;text-align:center;border:1px dashed #b8c6d8;border-radius:10px;color:var(--muted)}.table-wrap{overflow-x:auto}table{border-collapse:collapse;width:100%;background:white}th,td{padding:10px;border-bottom:1px solid var(--line);text-align:left;vertical-align:top}th{background:#edf3fb;color:var(--navy)}
-.statgrid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px;margin:14px 0}.stat{padding:14px;border-radius:11px;background:#edf5ff;border:1px solid #d4e6fb}.stat b{font-size:24px;display:block;color:var(--navy)}footer{text-align:center;padding:25px 12px;color:var(--muted);font-size:13px}.hidden{display:none!important}
-@media(max-width:800px){.cards{grid-template-columns:repeat(2,minmax(0,1fr))}.grid{grid-template-columns:1fr}}@media(max-width:480px){.brand img{width:60px;height:60px}.brand{align-items:flex-start}.cards,.row{grid-template-columns:1fr}.hero{padding:18px}.nav button{flex:1 1 42%;font-size:13px}.statgrid{grid-template-columns:1fr 1fr}}
-@media print{header,.nav,.no-print,footer{display:none!important}body{background:white}.wrap{max-width:none;margin:0;padding:0}.tab{display:none!important}#builder.tab.active{display:block!important}.panel,.hero{border:0;padding:0}}
+:root{--blue:#123b78;--light:#edf4fc;--gold:#e9b63f;--text:#172338;--line:#dce4ef}
+*{box-sizing:border-box}
+body{margin:0;background:#f3f6fb;color:var(--text);font:16px/1.5 Arial,sans-serif}
+header{background:linear-gradient(120deg,#102d60,#1761a8);color:white;padding:20px 16px;border-bottom:5px solid var(--gold)}
+header h1{margin:0;font-size:25px}
+header p{margin:5px 0 0}
+.wrap{max-width:1100px;margin:18px auto;padding:0 14px}
+nav{display:flex;flex-wrap:wrap;gap:8px;background:white;padding:10px;border:1px solid var(--line);border-radius:12px;margin-bottom:16px}
+button{cursor:pointer;border:0;border-radius:8px;padding:11px 14px;font-weight:bold;background:var(--blue);color:white}
+nav button{background:var(--light);color:var(--blue)}
+nav button.active{background:var(--blue);color:white}
+.secondary{background:#e7edf7;color:var(--blue)}
+.danger{background:#b42318}
+.green{background:#167849}
+button:disabled{opacity:.5;cursor:wait}
+.tab{display:none}
+.tab.active{display:block}
+.panel,.hero{background:white;border:1px solid var(--line);border-radius:13px;padding:18px;margin-bottom:15px}
+.hero{background:linear-gradient(110deg,#fff,#e8f3ff)}
+h2,h3{color:var(--blue);margin-top:0}
+label{display:block;font-weight:bold;font-size:14px;margin:12px 0 5px}
+input,select,textarea{width:100%;padding:11px;border:1px solid #cbd6e4;border-radius:8px;font:inherit;background:#fff}
+textarea{min-height:90px}
+.grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px}
+.cards{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px}
+.card,.item{border:1px solid var(--line);border-radius:10px;padding:13px;background:#fff}
+.list{display:grid;gap:10px;margin-top:12px}
+.muted{color:#65738a}
+.notice{padding:12px;background:#fff8e5;border:1px solid #efd58a;border-radius:9px;margin:12px 0}
+.progress{height:13px;background:#e4eaf2;border-radius:20px;overflow:hidden;margin:10px 0}
+.progress div{height:100%;width:0;background:#168454;transition:width .2s}
+.stat{padding:13px;background:#edf4fc;border-radius:9px;margin:5px 0}
+.stat b{font-size:23px;color:var(--blue)}
+.hidden{display:none!important}
+footer{text-align:center;color:#65738a;padding:22px;font-size:13px}
+@media(max-width:650px){.grid,.cards{grid-template-columns:1fr}header h1{font-size:21px}nav button{flex:1 1 40%}}
+@media print{header,nav,footer,.no-print{display:none!important}.tab{display:none!important}#builder.active{display:block!important}}
 </style>
 </head>
 <body>
-<header><div class="brand">
-<img src="letterhead.jpg" alt="Astaanta GHDD" onerror="this.style.display='none'">
-<div><div class="tag">NIDAAMKA MAAREYNTA IMTIXAANNADA</div><h1>GHDD Assessment Pro</h1><p>Golaha Horumarinta Dugsiyada Dadweynaha</p></div>
-</div></header>
+<header>
+<h1>GHDD Assessment Pro</h1>
+<p>Maareynta buugaagta, OCR iyo diyaarinta imtixaannada</p>
+</header>
+
 <div class="wrap">
-<nav class="nav no-print" aria-label="Qaybaha app-ka">
+<nav>
 <button class="active" data-tab="home">🏠 Bogga hore</button>
-<button data-tab="builder">📝 Diyaari imtixaan</button>
-<button data-tab="blueprint">📊 Qorshaha imtixaanka</button>
+<button data-tab="builder">📝 Imtixaanka</button>
 <button data-tab="bank">📚 Kaydka su'aalaha</button>
 <button data-tab="books">📖 Buugaagta PDF/OCR</button>
-<button data-tab="analysis">📈 Falanqayn</button>
+<button data-tab="analysis">📊 Falanqayn</button>
 </nav>
 
-<section id="home" class="tab active">
-<div class="hero"><div class="tag">QORSHEYN WANAAGSAN • IMTIXAAN TAYO LEH</div><h2>Ku soo dhowow GHDD Assessment Pro</h2><p>Diyaari su'aalaha, dhis qorshaha imtixaanka, kaydi xogta, kana eeg tayada imtixaannada hal meel.</p><button class="btn" data-go="builder">✍️ Bilow diyaarinta imtixaanka</button></div>
+<section class="tab active" id="home">
+<div class="hero">
+<h2>Ku soo dhowow GHDD Assessment Pro</h2>
+<p>Soo geli buugaagta PDF, OCR ku akhri, dooro bogagga, kadibna ka samee imtixaan.</p>
+<button data-go="books">📖 Fur buugaagta</button>
+<button class="secondary" data-go="builder">Diyaari imtixaan</button>
+</div>
 <div class="cards">
-<article class="card"><div class="emoji">📝</div><h3>Diyaarinta imtixaanka</h3><p>Samee oo habee su'aalaha imtixaanka.</p><button class="btn secondary" data-go="builder">Fur qaybta</button></article>
-<article class="card"><div class="emoji">📊</div><h3>Qorshaha imtixaanka</h3><p>Hubi mawduucyada, heerarka garashada iyo qaybinta su'aalaha.</p><button class="btn secondary" data-go="blueprint">Fur qaybta</button></article>
-<article class="card"><div class="emoji">📚</div><h3>Kaydka su'aalaha</h3><p>Raadi oo dib u eeg su'aalaha la kaydiyey.</p><button class="btn secondary" data-go="bank">Fur qaybta</button></article>
-<article class="card"><div class="emoji">📖</div><h3>Buugaagta PDF/OCR</h3><p>Soo geli buug, akhri bogagga, kana samee su'aalo.</p><button class="btn secondary" data-go="books">Fur qaybta</button></article>
+<div class="card"><h3>📖 PDF iyo OCR</h3><p>Buugaagta ku kaydi database-ka si dib loogu isticmaalo.</p></div>
+<div class="card"><h3>📝 Imtixaan</h3><p>Samee su'aalo leh jawaabo iyo dhibco.</p></div>
+<div class="card"><h3>📚 Kayd</h3><p>Su'aalaha la sameeyey dib u eeg oo isticmaal.</p></div>
 </div>
-<div class="panel" style="margin-top:16px"><h3>Xogtaada</h3><p class="muted">Xogta imtixaannada waxaa lagu waafajin karaa PostgreSQL. Geli furaha maamulka marka app-ku ku weydiiyo.</p><div id="homeStats" class="statgrid"></div><p id="cloudStatus" class="muted" role="status">Kaydka xogta ayaa la xiriirinayaa.</p><button class="btn secondary" id="exportData">Soo dejiso kaydka xogta (JSON)</button><label class="no-print">Soo geli kayd hore (JSON)<input type="file" id="importData" accept=".json,application/json"></label></div>
+<div class="panel">
+<h3>Xaaladda nidaamka</h3>
+<p id="healthStatus">Waxaa la hubinayaa server-ka...</p>
+<button id="checkHealth" class="secondary">Hubi server-ka</button>
+</div>
 </section>
 
-<section id="builder" class="tab">
-<div class="panel"><h2 class="section-title">QAYBTA 1 — Diyaari imtixaan</h2><div class="row">
-<div><label for="examName">Magaca imtixaanka *</label><input id="examName" placeholder="Tusaale: Imtixaanka dhexe"></div>
-<div><label for="subject">Maaddada *</label><input id="subject" placeholder="Tusaale: Xisaab"></div>
-<div><label for="className">Fasalka *</label><input id="className" placeholder="Tusaale: Form 2"></div>
-<div><label for="totalMarks">Dhibcaha guud *</label><input id="totalMarks" type="number" min="1" value="100"></div></div>
-<label for="instructions">Tilmaamaha imtixaanka</label><textarea id="instructions" placeholder="Geli tilmaamaha ardayda..."></textarea></div>
-<div class="grid" style="margin-top:16px">
-<div class="panel"><h3>Su'aal cusub</h3><label for="questionText">Su'aasha *</label><textarea id="questionText" placeholder="Qor su'aasha halkan..."></textarea>
-<div class="row"><div><label for="questionType">Nooca su'aasha</label><select id="questionType"><option>Jawaab gaaban</option><option>Doorasho badan (MCQ)</option><option>Sax ama Khalad</option><option>Qormo</option><option>Xisaab / Xallin</option><option>Isku-aaddin</option></select></div>
-<div><label for="questionMarks">Dhibcaha su'aasha *</label><input id="questionMarks" type="number" min="1" value="5"></div></div>
-<label for="topic">Mawduuca / Cutubka</label><input id="topic" placeholder="Tusaale: Cutubka 1">
-<label for="cognitive">Heerka garashada</label><select id="cognitive"><option>Xusuusasho</option><option>Faham</option><option>Ku-dhaqan</option><option>Falanqayn</option><option>Qiimayn</option><option>Abuurid</option></select>
-<label for="answerGuide">Jawaabta saxda ah / Tilmaamaha sixidda</label><textarea id="answerGuide" placeholder="Geli jawaabta ama tilmaamaha sixidda"></textarea>
-<button class="btn" id="addQuestion">＋ Ku dar su'aasha</button><button class="btn secondary" id="clearQuestion">Nadiifi foomka</button></div>
-<div class="panel"><h3>Hordhaca imtixaanka</h3><div id="examPreview" class="empty">Marka aad su'aalo ku darto, halkan ayaa lagu soo bandhigi doonaa.</div><div class="no-print"><button class="btn green" id="saveExam">1. Kaydi imtixaanka</button><button class="btn secondary" id="printExam">Daabac / PDF</button><button class="btn secondary" id="saveToBank">2. Ku kaydi su'aalaha kaydka</button></div><div id="examStatus" class="muted" role="status"></div></div>
+<section class="tab" id="books">
+<div class="panel">
+<h2>Buugaagta PDF/OCR</h2>
+<p class="muted">Xadka upload-ka: ilaa 500 MB. Faylka waxaa loo diraa server-ka qaybo 4 MB ah.</p>
+<div class="notice">
+PDF weyn wuxuu u baahan karaa xusuus badan, waqti dheeraad ah iyo kayd PostgreSQL oo ku filan. Ha xirin bogga inta OCR iyo upload-ku socdaan.
 </div>
-<div class="panel" style="margin-top:16px"><h3>Liiska su'aalaha</h3><div id="questionList" class="empty">Weli su'aalo lama darin.</div></div>
-<div class="panel" style="margin-top:16px"><h3>Imtixaannada la kaydiyey</h3><div id="savedExams" class="empty">Weli imtixaan lama kaydin.</div></div>
+
+<label for="bookTitle">Magaca buugga *</label>
+<input id="bookTitle" placeholder="Tusaale: Physics Form Four">
+
+<label for="bookSubject">Maaddada</label>
+<input id="bookSubject" placeholder="Tusaale: Physics">
+
+<label for="bookFile">Dooro PDF (ugu badnaan 500 MB)</label>
+<input id="bookFile" type="file" accept=".pdf,application/pdf">
+
+<p id="fileInfo" class="muted">Weli PDF lama dooran.</p>
+<button id="uploadBook">🔎 Akhri PDF / OCR oo kaydi</button>
+<div id="progressBox" class="hidden">
+<div class="progress"><div id="progressBar"></div></div>
+<p id="uploadStatus" role="status">Diyaargarow...</p>
+</div>
+</div>
+
+<div class="panel">
+<h3>Buugaagta la kaydiyey</h3>
+<button id="refreshBooks" class="secondary">Soo cusboonaysii</button>
+<div id="booksList" class="list">
+<div class="item muted">Riix soo cusboonaysii si aad u aragto buugaagta.</div>
+</div>
+</div>
+
+<div class="panel">
+<h3>Samee imtixaan adigoo dooranaya bogagga</h3>
+<label for="sourceBook">Buugga</label>
+<select id="sourceBook"><option value="">Dooro buug...</option></select>
+
+<div class="grid">
+<div><label for="genSubject">Maaddada</label><input id="genSubject" placeholder="Physics"></div>
+<div><label for="genClass">Fasalka</label><input id="genClass" placeholder="Form 4"></div>
+<div><label for="startPage">Bogga bilowga</label><input id="startPage" type="number" min="1" value="1"></div>
+<div><label for="endPage">Bogga dhammaadka</label><input id="endPage" type="number" min="1" value="10"></div>
+<div><label for="genCount">Tirada su'aalaha</label><input id="genCount" type="number" min="1" max="50" value="10"></div>
+<div><label for="genType">Nooca su'aalaha</label>
+<select id="genType">
+<option>Isku-dhafan</option>
+<option>MCQ</option>
+<option>Jawaab gaaban</option>
+<option>Qormo</option>
+<option>Sax ama Khalad</option>
+</select></div>
+</div>
+
+<label for="genLevels">Heerarka Bloom</label>
+<select id="genLevels" multiple size="6">
+<option selected value="Remember">Remember — Xusuusasho</option>
+<option selected value="Understand">Understand — Faham</option>
+<option selected value="Apply">Apply — Ku-dhaqan</option>
+<option selected value="Analyze">Analyze — Falanqayn</option>
+<option selected value="Evaluate">Evaluate — Qiimayn</option>
+<option selected value="Create">Create — Abuurid</option>
+</select>
+<p class="muted">Telefoonka ku taabo heer kasta si aad u doorato ama uga saarto.</p>
+<button id="generateExam" class="green">✨ Samee imtixaanka</button>
+<p id="generateStatus" role="status" class="muted"></p>
+<div id="generatedQuestions" class="list"></div>
+</div>
 </section>
 
-<section id="blueprint" class="tab"><div class="panel"><h2 class="section-title">QAYBTA 2 — Qorshaha imtixaanka</h2><p class="muted">Qorshuhu wuxuu caawiyaa in su'aaluhu daboolaan mawduucyada iyo heerarka waxbarasho.</p>
-<div class="row"><div><label for="bpTopic">Mawduuca / Cutubka *</label><input id="bpTopic" placeholder="Magaca mawduuca"></div><div><label for="bpPercent">Saamiga (%) *</label><input id="bpPercent" type="number" min="0" max="100" value="20"></div><div><label for="bpLevel">Heerka garashada</label><select id="bpLevel"><option>Xusuusasho</option><option>Faham</option><option>Ku-dhaqan</option><option>Falanqayn</option><option>Qiimayn</option><option>Abuurid</option></select></div><div><label for="bpCount">Tirada su'aalaha</label><input id="bpCount" type="number" min="1" value="2"></div></div>
-<button class="btn" id="addBlueprint">＋ Ku dar saf qorshe</button><button class="btn secondary" id="autoBlueprint">Samee qorshe ku salaysan su'aalaha</button><div id="blueprintSummary" class="notice"></div><div id="blueprintList" class="empty">Qorshaha aad samayso ayaa halkan ka muuqan doona.</div></div></section>
+<section class="tab" id="builder">
+<div class="panel">
+<h2>Diyaari imtixaan</h2>
+<label for="examName">Magaca imtixaanka</label>
+<input id="examName" placeholder="Imtixaanka dhexe">
+<label for="subject">Maaddada</label>
+<input id="subject" placeholder="Physics">
+<label for="className">Fasalka</label>
+<input id="className" placeholder="Form 4">
+<label for="examInstructions">Tilmaamaha</label>
+<textarea id="examInstructions"></textarea>
 
-<section id="bank" class="tab"><div class="panel"><h2 class="section-title">QAYBTA 3 — Kaydka su'aalaha</h2><label for="bankSearch">Raadi su'aalaha</label><input id="bankSearch" placeholder="Raadi maaddo, fasal, mawduuc ama eray su'aal..."><div class="no-print"><button class="btn secondary" id="loadBank">Soo cusboonaysii kaydka</button><button class="btn secondary" id="downloadBank">Soo dejiso kaydka (JSON)</button><label>Soo rar kayd JSON<input type="file" id="bankFile" accept=".json,application/json"></label></div><div id="bankList" class="empty">Weli su'aalo laguma kaydin.</div></div></section>
-
-<section id="books" class="tab">
-<div class="panel"><h2 class="section-title">QAYBTA 4 — Buugaagta PDF iyo OCR</h2><p class="muted">Soo geli PDF buug ah. Qoraalka PDF-ga ayaa la soo saarayaa; haddii boggu yahay sawir/scanned, OCR ayaa isku dayaya inuu akhriyo. PDF-ga iyo qoraalka bogagga waxaa lagu kaydinayaa PostgreSQL.</p>
-<div class="notice">OCR wuxuu ku tiirsan yahay adeegyada JavaScript ee internetka. Tayada qoraalka scanned-ka way kala duwanaan kartaa. Dib u eeg qoraalka iyo su'aalaha ka hor isticmaalka.</div>
-<div class="row"><div><label for="bookTitle">Magaca buugga *</label><input id="bookTitle" placeholder="Tusaale: Biology Form 2"></div><div><label for="bookSubject">Maaddada</label><input id="bookSubject" placeholder="Tusaale: Biology"></div></div>
-<label for="bookFile">Dooro PDF (ugu badnaan 25 MB)</label><input type="file" id="bookFile" accept="application/pdf,.pdf">
-<button class="btn" id="processBook">🔎 Akhri PDF / OCR oo kaydi</button><p id="ocrStatus" class="muted" role="status">Weli PDF lama dooran.</p><div id="ocrProgress" class="notice hidden"></div></div>
-<div class="panel" style="margin-top:16px"><h3>Buugaagta la kaydiyey</h3><button class="btn secondary" id="refreshBooks">Soo cusboonaysii liiska</button><div id="booksList" class="empty">Riix soo cusboonaysii si aad u aragto buugaagta kaydsan.</div></div>
-<div class="panel" style="margin-top:16px"><h3>Samee imtixaan adigoo dooranaya bogagga</h3>
-<div class="row"><div><label for="sourceBook">Buugga</label><select id="sourceBook"><option value="">Marka hore soo rar liiska buugaagta</option></select></div><div><label for="genSubject">Maaddada</label><input id="genSubject" placeholder="Tusaale: Biology"></div><div><label for="genClass">Fasalka</label><input id="genClass" placeholder="Tusaale: Form 2"></div><div><label for="genCount">Tirada su'aalaha</label><input id="genCount" type="number" min="1" max="50" value="10"></div><div><label for="startPage">Bogga bilowga</label><input id="startPage" type="number" min="1" value="1"></div><div><label for="endPage">Bogga dhammaadka</label><input id="endPage" type="number" min="1" value="5"></div></div>
-<label for="genLevels">Heerarka Bloom</label><input id="genLevels" value="Xusuusasho, Faham, Ku-dhaqan, Falanqayn, Qiimayn, Abuurid">
-<label for="genTypes">Nooca su'aalaha</label><select id="genTypes"><option>Isku-dhafan</option><option>Doorasho badan (MCQ)</option><option>Jawaab gaaban</option><option>Qormo</option><option>Sax ama Khalad</option></select>
-<button class="btn green" id="generateFromBook">✨ Samee imtixaan bogagga la doortay</button><p id="generateStatus" class="muted" role="status"></p><div id="generatedQuestions" class="list"></div></div>
+<h3>Su'aal cusub</h3>
+<label for="qText">Su'aasha</label>
+<textarea id="qText"></textarea>
+<div class="grid">
+<div><label for="qMarks">Dhibcaha</label><input id="qMarks" type="number" min="1" value="5"></div>
+<div><label for="qLevel">Heerka Bloom</label>
+<select id="qLevel">
+<option>Remember</option><option>Understand</option><option>Apply</option>
+<option>Analyze</option><option>Evaluate</option><option>Create</option>
+</select></div>
+</div>
+<label for="qAnswer">Jawaabta / Tilmaamaha sixidda</label>
+<textarea id="qAnswer"></textarea>
+<button id="addQuestion">＋ Ku dar su'aasha</button>
+<button id="saveExam" class="green">Kaydi imtixaanka</button>
+<button id="printExam" class="secondary">Daabac / PDF</button>
+<div id="questionList" class="list"></div>
+</div>
 </section>
 
-<section id="analysis" class="tab"><div class="panel"><h2 class="section-title">QAYBTA 5 — Falanqaynta iyo hubinta tayada</h2><p class="muted">Hubi caddaynta su'aalaha, su'aalaha soo noqnoqda, jawaabaha iyo isu-dheellitirka dhibcaha. Natiijadu waa taageero dib-u-eegis; ma beddelayso hubinta macallinka.</p><button class="btn" id="runAnalysis">Falanqee su'aalaha hadda jira</button><div id="analysisResult" class="empty" style="margin-top:14px">Natiijada falanqayntu halkan ayay ka muuqan doontaa.</div></div></section>
+<section class="tab" id="bank">
+<div class="panel">
+<h2>Kaydka su'aalaha</h2>
+<p class="muted">Su'aalaha aad imtixaanka ku darto ayaa lagu kaydin karaa browser-kan.</p>
+<div id="bankList" class="list"></div>
+<button id="downloadBackup" class="secondary">Soo dejiso kaydka JSON</button>
 </div>
-<footer>GHDD Assessment Pro · Golaha Horumarinta Dugsiyada Dadweynaha<br>Qorshayn wanaagsan • Imtixaan tayo leh • Horumar waxbarasho</footer>
+</section>
+
+<section class="tab" id="analysis">
+<div class="panel">
+<h2>Falanqaynta tayada</h2>
+<p>Falanqayntu waxay eegaysaa su'aalaha ku jira imtixaanka hadda jira.</p>
+<button id="runAnalysis">Falanqee su'aalaha</button>
+<div id="analysisResult" class="list"></div>
+</div>
+</section>
+</div>
+
+<footer>GHDD Assessment Pro · Qorshayn wanaagsan · Imtixaan tayo leh</footer>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
 <script>
 'use strict';
-const $=id=>document.getElementById(id);
-const KEY='ghdd_assessment_pro_v1';
-let state={questions:[],blueprints:[],bank:[],exams:[],currentExamId:null};
-function loadState(){try{const s=JSON.parse(localStorage.getItem(KEY)||'null');if(s&&typeof s==='object')state={...state,...s}}catch(e){console.warn(e)}}
-let syncTimer=null;
-function adminPassword(){let p=sessionStorage.getItem('ghdd_admin_password')||'';if(!p){p=prompt('Geli furaha maamulka (Railway ADMIN_PASSWORD):')||'';if(p)sessionStorage.setItem('ghdd_admin_password',p)}return p}
-async function syncStateToServer(){const password=adminPassword();if(!password)return;try{const r=await fetch('/api/state',{method:'PUT',headers:{'Content-Type':'application/json','x-admin-password':password},body:JSON.stringify({state})});if(r.status===401){sessionStorage.removeItem('ghdd_admin_password');return}const d=await r.json();if(!r.ok)throw Error(d.error||'Kaydinta server-ka way fashilantay');if($('cloudStatus'))$('cloudStatus').textContent='Xogtu waxay ku kaydsan tahay PostgreSQL.'}catch(e){console.warn(e);if($('cloudStatus'))$('cloudStatus').textContent='Server-ka lama xiriirin; xogta browser-ka ayaa la hayaa.'}}
-function persist(){try{localStorage.setItem(KEY,JSON.stringify(state))}catch(e){alert('Kaydinta browser-ka way fashilantay. Soo dejiso kaydka JSON.')}if(syncTimer)clearTimeout(syncTimer);syncTimer=setTimeout(syncStateToServer,500)}
-async function loadRemoteState(){const password=adminPassword();if(!password)return;try{const r=await fetch('/api/state',{headers:{'x-admin-password':password}});if(r.status===401){sessionStorage.removeItem('ghdd_admin_password');alert('Furaha maamulka waa khaldan yahay.');return}const d=await r.json();if(!r.ok)throw Error(d.error||'Xogta server-ka lama soo dejin');if(d.state&&typeof d.state==='object'){state={...state,...d.state};localStorage.setItem(KEY,JSON.stringify(state));refreshAll();$('cloudStatus').textContent='Xogta PostgreSQL waa la soo raray.'}else await syncStateToServer()}catch(e){console.warn(e);$('cloudStatus').textContent='Xiriirka PostgreSQL lama xaqiijin; eeg Railway Deploy Logs.'}}
-function esc(v){return String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]))}
-function uid(){return Date.now().toString(36)+Math.random().toString(36).slice(2,7)}
-function showTab(id){document.querySelectorAll('.tab').forEach(t=>t.classList.toggle('active',t.id===id));document.querySelectorAll('.nav button').forEach(b=>b.classList.toggle('active',b.dataset.tab===id));if(id==='bank')renderBank();if(id==='books')loadBooks();if(id==='analysis')renderAnalysisSummary();window.scrollTo({top:0,behavior:'smooth'})}
-document.querySelectorAll('[data-tab]').forEach(b=>b.addEventListener('click',()=>showTab(b.dataset.tab)));
-document.querySelectorAll('[data-go]').forEach(b=>b.addEventListener('click',()=>showTab(b.dataset.go)));
-function getExamMeta(){return{name:$('examName').value.trim(),subject:$('subject').value.trim(),className:$('className').value.trim(),totalMarks:Number($('totalMarks').value)||0,instructions:$('instructions').value.trim()}}
-function addQuestion(){const text=$('questionText').value.trim(),marks=Number($('questionMarks').value);if(!text)return alert('Fadlan qor su’aasha.');if(!Number.isFinite(marks)||marks<=0)return alert('Dhibcuhu waa inay ka badan yihiin eber.');state.questions.push({id:uid(),text,type:$('questionType').value,marks,topic:$('topic').value.trim(),level:$('cognitive').value,answer:$('answerGuide').value.trim()});persist();renderQuestions();$('questionText').value='';$('answerGuide').value='';$('topic').value='';$('questionMarks').value=5}
-$('addQuestion').addEventListener('click',addQuestion);
-$('clearQuestion').addEventListener('click',()=>{['questionText','answerGuide','topic'].forEach(id=>$(id).value='');$('questionMarks').value=5});
-function renderQuestions(){const out=$('questionList'),preview=$('examPreview');if(!state.questions.length){out.className='empty';out.textContent='Weli su’aalo lama darin.';preview.className='empty';preview.textContent='Marka aad su’aalo ku darto, halkan ayay ka muuqanayaan.';return}
-out.className='list';out.innerHTML=state.questions.map((q,i)=>`<div class="item"><strong>${i+1}. ${esc(q.text)}</strong><small>${esc(q.type)} · ${q.marks} dhibcood · ${esc(q.topic||'Mawduuc lama cayimin')} · ${esc(q.level)}</small><div class="item-actions no-print"><button class="btn danger" data-del-q="${q.id}">Ka saar</button></div></div>`).join('');
-out.querySelectorAll('[data-del-q]').forEach(b=>b.onclick=()=>{state.questions=state.questions.filter(q=>q.id!==b.dataset.delQ);persist();renderQuestions()});
-const m=getExamMeta(),sum=state.questions.reduce((a,q)=>a+q.marks,0);preview.className='';preview.innerHTML=`<div style="text-align:center"><h2>${esc(m.name||'IMTIXAAN')}</h2><p>${esc(m.subject)} · ${esc(m.className)}</p></div><p>${esc(m.instructions)}</p><hr>${state.questions.map((q,i)=>`<p><b>${i+1}. ${esc(q.text)}</b> <span style="float:right">(${q.marks} dhibcood)</span></p>`).join('')}<hr><b>Dhibcaha su'aalaha: ${sum} / ${m.totalMarks||'—'}</b>`}
-['examName','subject','className','totalMarks','instructions'].forEach(id=>$(id).addEventListener('input',renderQuestions));
-function saveExam(){const m=getExamMeta();if(!m.name||!m.subject||!m.className)return alert('Buuxi magaca imtixaanka, maaddada iyo fasalka.');if(!state.questions.length)return alert('Ku dar ugu yaraan hal su’aal.');const sum=state.questions.reduce((a,q)=>a+q.marks,0);if(m.totalMarks&&sum!==m.totalMarks&&!confirm(`Wadarta dhibcuhu waa ${sum}, halka guudku yahay ${m.totalMarks}. Sii wad?`))return;const rec={id:state.currentExamId||uid(),...m,questions:JSON.parse(JSON.stringify(state.questions)),updatedAt:new Date().toISOString()};const ix=state.exams.findIndex(e=>e.id===rec.id);if(ix>=0)state.exams[ix]=rec;else state.exams.unshift(rec);state.currentExamId=rec.id;persist();renderSavedExams();$('examStatus').textContent='Imtixaanka waa la kaydiyey.';renderHomeStats()}
-$('saveExam').addEventListener('click',saveExam);
-function renderSavedExams(){const el=$('savedExams');if(!state.exams.length){el.className='empty';el.textContent='Weli imtixaan lama kaydin.';return}el.className='list';el.innerHTML=state.exams.map(e=>`<div class="item"><strong>${esc(e.name)}</strong><small>${esc(e.subject)} · ${esc(e.className)} · ${e.questions.length} su’aalood</small><div class="item-actions no-print"><button class="btn secondary" data-open-exam="${e.id}">Fur</button><button class="btn danger" data-del-exam="${e.id}">Tirtir</button></div></div>`).join('');el.querySelectorAll('[data-open-exam]').forEach(b=>b.onclick=()=>{const e=state.exams.find(x=>x.id===b.dataset.openExam);if(!e)return;state.currentExamId=e.id;$('examName').value=e.name;$('subject').value=e.subject;$('className').value=e.className;$('totalMarks').value=e.totalMarks;$('instructions').value=e.instructions;state.questions=JSON.parse(JSON.stringify(e.questions));renderQuestions();showTab('builder')});el.querySelectorAll('[data-del-exam]').forEach(b=>b.onclick=()=>{if(confirm('Ma tirtiraysaa imtixaankan?')){state.exams=state.exams.filter(e=>e.id!==b.dataset.delExam);if(state.currentExamId===b.dataset.delExam)state.currentExamId=null;persist();renderSavedExams();renderHomeStats()}})}
-$('printExam').addEventListener('click',()=>{if(!state.questions.length)return alert('Marka hore ku dar su’aalaha.');renderQuestions();window.print()});
-$('saveToBank').addEventListener('click',()=>{if(!state.questions.length)return alert('Ma jiraan su’aalo la kaydin karo.');let n=0;state.questions.forEach(q=>{if(!state.bank.some(b=>b.text.toLowerCase()===q.text.toLowerCase()&&b.topic===q.topic)){state.bank.unshift({...q,id:uid(),subject:$('subject').value.trim(),className:$('className').value.trim(),savedAt:new Date().toISOString()});n++}});persist();renderBank();alert(`${n} su’aalood ayaa lagu daray kaydka.`)});
-$('addBlueprint').addEventListener('click',()=>{const topic=$('bpTopic').value.trim(),percent=Number($('bpPercent').value),count=Number($('bpCount').value);if(!topic)return alert('Geli mawduuca/cutubka.');if(percent<0||percent>100)return alert('Saamigu waa inuu u dhexeeyaa 0 iyo 100.');if(count<1)return alert('Tirada su’aaluhu waa inay ugu yaraan 1 noqotaa.');state.blueprints.push({id:uid(),topic,percent,level:$('bpLevel').value,count});persist();$('bpTopic').value='';renderBlueprint()});
-$('autoBlueprint').addEventListener('click',()=>{const groups={};state.questions.forEach(q=>{const k=q.topic||'Mawduuc aan la cayimin';groups[k]=(groups[k]||0)+q.marks});const total=Object.values(groups).reduce((a,n)=>a+n,0);if(!total)return alert('Marka hore ku dar su’aalo oo u qor mawduucyadooda.');state.blueprints=Object.entries(groups).map(([topic,marks])=>({id:uid(),topic,percent:Math.round(marks/total*100),level:'Isku-dhafan',count:state.questions.filter(q=>(q.topic||'Mawduuc aan la cayimin')===topic).length}));persist();renderBlueprint()});
-function renderBlueprint(){const el=$('blueprintList'),sum=state.blueprints.reduce((a,b)=>a+b.percent,0);$('blueprintSummary').textContent=`Wadarta saamiyada: ${sum}% ${sum===100?'— qorshuhu waa 100%.':sum<100?'— weli kama gaarin 100%.':'— wadartu way ka badan tahay 100%.'}`;if(!state.blueprints.length){el.className='empty';el.textContent='Qorshaha aad samayso ayaa halkan ka muuqan doona.';return}el.className='table-wrap';el.innerHTML=`<table><thead><tr><th>Mawduuca</th><th>Saami</th><th>Heerka</th><th>Tirada</th><th></th></tr></thead><tbody>${state.blueprints.map(b=>`<tr><td>${esc(b.topic)}</td><td>${b.percent}%</td><td>${esc(b.level)}</td><td>${b.count}</td><td><button class="btn danger no-print" data-del-bp="${b.id}">Ka saar</button></td></tr>`).join('')}</tbody></table>`;el.querySelectorAll('[data-del-bp]').forEach(b=>b.onclick=()=>{state.blueprints=state.blueprints.filter(x=>x.id!==b.dataset.delBp);persist();renderBlueprint()})}
-$('bankSearch').addEventListener('input',renderBank);$('loadBank').addEventListener('click',renderBank);
-function renderBank(){const term=($('bankSearch').value||'').trim().toLowerCase(),rows=state.bank.filter(q=>[q.text,q.topic,q.subject,q.className,q.type].join(' ').toLowerCase().includes(term)),el=$('bankList');if(!rows.length){el.className='empty';el.textContent='Wax su’aalo ah lagama helin kaydka.';return}el.className='list';el.innerHTML=rows.map(q=>`<div class="item"><strong>${esc(q.text)}</strong><small>${esc(q.subject||'Maaddo lama cayimin')} · ${esc(q.className||'Fasal lama cayimin')} · ${esc(q.topic||'Mawduuc lama cayimin')} · ${q.marks} dhibcood</small><div class="item-actions no-print"><button class="btn secondary" data-use-q="${q.id}">Ku dar imtixaanka</button><button class="btn danger" data-del-bank="${q.id}">Tirtir</button></div></div>`).join('');el.querySelectorAll('[data-use-q]').forEach(b=>b.onclick=()=>{const q=state.bank.find(x=>x.id===b.dataset.useQ);if(q){state.questions.push({...q,id:uid()});persist();renderQuestions();showTab('builder')}});el.querySelectorAll('[data-del-bank]').forEach(b=>b.onclick=()=>{state.bank=state.bank.filter(x=>x.id!==b.dataset.delBank);persist();renderBank();renderHomeStats()})}
-function analyze(){const qs=state.questions,notes=[];if(!qs.length)return['Weli su’aalo lama darin.'];const total=qs.reduce((a,q)=>a+q.marks,0);if(qs.some(q=>q.text.length<15))notes.push('Dib u eeg su’aalaha aadka u gaaban.');const seen=new Set();let duplicates=0;qs.forEach(q=>{const t=q.text.toLowerCase().replace(/[^\p{L}\p{N}]+/gu,' ').trim();if(seen.has(t))duplicates++;seen.add(t)});notes.push(duplicates?`${duplicates} su’aalood ayaa u muuqda kuwo soo noqnoqday.`:'Lama helin su’aalo si buuxda isku mid ah.');if(qs.some(q=>!q.topic))notes.push('Su’aalo qaar ma laha mawduuc/cutub.');if(qs.some(q=>!q.answer))notes.push('Su’aalo qaar ma laha jawaab ama tilmaamo sixid.');const m=getExamMeta();notes.push(m.totalMarks&&total!==m.totalMarks?`Wadarta dhibcaha (${total}) ma waafaqsana guudka (${m.totalMarks}).`:`Wadarta dhibcaha su’aalaha: ${total}.`);const levels={};qs.forEach(q=>levels[q.level]=(levels[q.level]||0)+1);notes.push('Qaybinta heerarka: '+Object.entries(levels).map(([k,v])=>`${k} (${v})`).join(', '));return notes}
-function renderAnalysisSummary(){const el=$('analysisResult');if(el&&el.classList.contains('empty'))el.textContent='Riix “Falanqee su’aalaha hadda jira” si aad u hesho talooyinka.'}
-$('runAnalysis').addEventListener('click',()=>{const notes=analyze(),el=$('analysisResult');el.className='list';el.innerHTML=notes.map((n,i)=>`<div class="item">${i+1}. ${esc(n)}</div>`).join('')});
-function renderHomeStats(){$('homeStats').innerHTML=`<div class="stat"><b>${state.exams.length}</b>Imtixaan</div><div class="stat"><b>${state.bank.length}</b>Su’aalo kaydsan</div><div class="stat"><b>${state.questions.length}</b>Su’aalo hadda jira</div>`}
-function download(name,data,type='application/json'){const blob=new Blob([data],{type}),url=URL.createObjectURL(blob),a=document.createElement('a');a.href=url;a.download=name;document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),1000)}
-$('exportData').addEventListener('click',()=>download('GHDD_Assessment_Pro_Backup.json',JSON.stringify(state,null,2)));
-$('downloadBank').addEventListener('click',()=>download('GHDD_Question_Bank.json',JSON.stringify(state.bank,null,2)));
-function importJson(file,handler){if(!file)return;const reader=new FileReader();reader.onload=()=>{try{handler(JSON.parse(reader.result))}catch(e){alert('Faylka JSON lama akhrin karin.')}};reader.readAsText(file)}
-$('importData').addEventListener('change',e=>importJson(e.target.files[0],d=>{if(!d||typeof d!=='object')throw Error();if(!confirm('Soo gelinta xogtu waxay beddeli kartaa xogta hadda jirta. Sii wad?'))return;state={...state,...d};persist();refreshAll();alert('Kaydka xogta waa la soo geliyey.');e.target.value=''}));
-$('bankFile').addEventListener('change',e=>importJson(e.target.files[0],d=>{const arr=Array.isArray(d)?d:(d&&Array.isArray(d.bank)?d.bank:null);if(!arr)throw Error();let n=0;arr.forEach(q=>{if(q&&q.text&&!state.bank.some(b=>b.text===q.text)){state.bank.push({...q,id:q.id||uid()});n++}});persist();renderBank();alert(`${n} su’aalood ayaa la soo geliyey.`);e.target.value=''}));
 
-// BUUGAAGTA PDF, OCR IYO IMTIXAAN KA SAMAYN BOGAG LA DOORTAY
-const API_HEADERS=()=>({'Content-Type':'application/json','x-admin-password':adminPassword()});
-let booksCache=[];
-async function loadBooks(){const box=$('booksList'),sel=$('sourceBook');box.className='empty';box.textContent='Buugaagta waa la soo rarayaa...';try{const r=await fetch('/api/books',{headers:{'x-admin-password':adminPassword()}}),d=await r.json();if(!r.ok)throw Error(d.error||'Buugaagta lama soo dejin.');booksCache=d.books||d||[];sel.innerHTML='<option value="">Dooro buug...</option>'+booksCache.map(b=>`<option value="${esc(b.id)}">${esc(b.title)} (${b.page_count||b.pageCount||'?'} bog)</option>`).join('');if(!booksCache.length){box.className='empty';box.textContent='Weli buug lama kaydin.';return}box.className='list';box.innerHTML=booksCache.map(b=>`<div class="item"><strong>${esc(b.title)}</strong><small>${esc(b.subject||'Maaddo lama cayimin')} · ${b.page_count||b.pageCount||'?'} bog · ${Number(b.text_chars||b.textChars||0).toLocaleString()} xaraf</small><div class="item-actions"><a class="btn secondary" href="/api/books/${encodeURIComponent(b.id)}/pdf" target="_blank" rel="noopener">Fur PDF</a><button class="btn danger" data-delete-book="${esc(b.id)}">Tirtir</button></div></div>`).join('');box.querySelectorAll('[data-delete-book]').forEach(btn=>btn.onclick=async()=>{if(!confirm('Ma hubtaa inaad buuggan tirtirayso?'))return;try{const rr=await fetch('/api/books/'+encodeURIComponent(btn.dataset.deleteBook),{method:'DELETE',headers:{'x-admin-password':adminPassword()}}),dd=await rr.json();if(!rr.ok)throw Error(dd.error||'Tirtiriddu way fashilantay');await loadBooks()}catch(e){alert(e.message)}})}catch(e){box.className='empty';box.textContent='Khalad: '+e.message}}
-$('refreshBooks').addEventListener('click',loadBooks);
-$('processBook').addEventListener('click',async()=>{const file=$('bookFile').files[0],title=$('bookTitle').value.trim(),subject=$('bookSubject').value.trim(),status=$('ocrStatus'),prog=$('ocrProgress'),btn=$('processBook');if(!file)return alert('Fadlan dooro PDF.');if(file.size>25*1024*1024)return alert('PDF-ga waa inuu ka yaraadaa 25 MB.');if(!title)return alert('Geli magaca buugga.');if(!window.pdfjsLib)return alert('PDF.js lama soo dejin. Hubi internetka.');btn.disabled=true;prog.classList.remove('hidden');status.textContent='PDF-ga waa la akhrinayaa...';let worker=null;try{pdfjsLib.GlobalWorkerOptions.workerSrc='https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';const bytes=await file.arrayBuffer(),pdf=await pdfjsLib.getDocument({data:bytes}).promise;if(pdf.numPages>1500)throw Error('Buuggu waa inuu ka yaraadaa 1500 bog.');const pages=[];for(let n=1;n<=pdf.numPages;n++){status.textContent=`Akhrinta bogga ${n}/${pdf.numPages}...`;prog.textContent=`Horumar: ${Math.round(n/pdf.numPages*100)}%`;const page=await pdf.getPage(n),content=await page.getTextContent();let text=content.items.map(x=>x.str||'').join(' ').trim();if(text.length<25){if(!window.Tesseract)throw Error('Tesseract OCR lama soo dejin; hubi internetka.');if(!worker)worker=await Tesseract.createWorker('eng');const viewport=page.getViewport({scale:1.5}),canvas=document.createElement('canvas'),ctx=canvas.getContext('2d');canvas.width=Math.ceil(viewport.width);canvas.height=Math.ceil(viewport.height);await page.render({canvasContext:ctx,viewport}).promise;const result=await worker.recognize(canvas);text=(result.data.text||'').trim();canvas.width=canvas.height=1}pages.push({page:n,text})}if(worker){await worker.terminate();worker=null}const pdfBase64=await new Promise((resolve,reject)=>{const reader=new FileReader();reader.onload=()=>resolve(String(reader.result).split(',')[1]);reader.onerror=reject;reader.readAsDataURL(file)});status.textContent='Qoraalka waa la akhriyey. Buugga ayaa la kaydinayaa...';const response=await fetch('/api/books',{method:'POST',headers:API_HEADERS(),body:JSON.stringify({title,subject,filename:file.name,pageCount:pdf.numPages,pdfBase64,pages})}),result=await response.json();if(!response.ok)throw Error(result.error||'Buugga lama kaydin.');status.textContent=`Waa lagu guuleystay! ${result.title||title} — ${pages.length} bog ayaa la kaydiyey.`;prog.textContent='Dhammaystiran.';$('bookFile').value='';await loadBooks()}catch(e){status.textContent='Khalad: '+e.message;alert('PDF/OCR: '+e.message);if(worker)try{await worker.terminate()}catch(_){}}finally{btn.disabled=false}});
-$('generateFromBook').addEventListener('click',async()=>{const id=$('sourceBook').value,start=Number($('startPage').value),end=Number($('endPage').value),count=Number($('genCount').value);if(!id)return alert('Dooro buug.');if(!Number.isInteger(start)||!Number.isInteger(end)||start<1||end<start)return alert('Hubi bogga bilowga iyo dhammaadka.');if(count<1||count>50)return alert('Tirada su’aaluhu waa 1 ilaa 50.');const status=$('generateStatus'),out=$('generatedQuestions');status.textContent='Qoraalka bogagga la doortay ayaa la soo rarayaa...';out.innerHTML='';try{const r=await fetch(`/api/books/${encodeURIComponent(id)}/text?start=${start}&end=${end}`,{headers:{'x-admin-password':adminPassword()}}),d=await r.json();if(!r.ok)throw Error(d.error||'Qoraalka lama helin');const selected=(d.pages||[]).filter(p=>p.text&&p.text.trim()),sourceText=selected.map(p=>`[Bogga ${p.page}]\n${p.text}`).join('\n\n');if(!sourceText.trim())throw Error('Bogagga la doortay qoraal kuma jiro. Buugga scanned-ka OCR dib uga samee.');status.textContent=`Qoraalka bogagga ${start}–${end} waa la helay. AI ayaa su’aalaha diyaarinaya...`;const payload={sourceText,subject:$('genSubject').value.trim()||$('bookSubject').value.trim(),className:$('genClass').value.trim(),count,questionCount:count,levels:$('genLevels').value.split(',').map(x=>x.trim()).filter(Boolean),type:$('genTypes').value,sourceTitle:d.title,pageRange:{start,end},includeAnswers:true};const gr=await fetch('/api/generate',{method:'POST',headers:API_HEADERS(),body:JSON.stringify(payload)}),gd=await gr.json();if(!gr.ok)throw Error(gd.error||'AI samaynta su’aalaha way fashilantay');const qs=gd.questions||gd.data?.questions||gd.items||[];if(!Array.isArray(qs)||!qs.length)throw Error('AI ma soo celin liis su’aalo ah. Hubi GEMINI_API_KEY iyo qaabka API-ga server.js.');out.innerHTML=qs.map((q,i)=>`<div class="item"><strong>${i+1}. ${esc(q.text||q.question||q.stem||'')}</strong><small>${esc(q.level||q.bloom||'Heer aan la cayimin')} · ${Number(q.marks)||5} dhibcood · ${esc(q.topic||'')}</small><p><b>Jawaabta:</b> ${esc(q.answer||q.modelAnswer||q.answerGuide||'Jawaab lama bixin')}</p><button class="btn secondary" data-add-generated="${i}">Ku dar imtixaanka</button></div>`).join('');out.querySelectorAll('[data-add-generated]').forEach(b=>b.onclick=()=>{const q=qs[Number(b.dataset.addGenerated)];state.questions.push({id:uid(),text:q.text||q.question||q.stem||'',type:q.type||$('genTypes').value,marks:Number(q.marks)||5,topic:q.topic||d.title,level:q.level||q.bloom||'Faham',answer:q.answer||q.modelAnswer||q.answerGuide||''});$('examName').value=$('examName').value||`Imtixaan: ${d.title} bogagga ${start}-${end}`;$('subject').value=$('subject').value||payload.subject;$('className').value=$('className').value||payload.className;persist();renderQuestions();showTab('builder')});status.textContent=`Waxaa la sameeyey ${qs.length} su’aalood oo ku salaysan bogagga ${start}–${end}. Dib u eeg jawaabaha ka hor isticmaalka.`}catch(e){status.textContent='Khalad: '+e.message;alert('Samaynta imtixaanka: '+e.message)}});
+const $ = id => document.getElementById(id);
+const MAX_BYTES = 500 * 1024 * 1024;
+const CHUNK_BYTES = 4 * 1024 * 1024;
+const blooms = ['Remember','Understand','Apply','Analyze','Evaluate','Create'];
 
-function refreshAll(){renderQuestions();renderSavedExams();renderBlueprint();renderBank();renderHomeStats()}
-loadState();refreshAll();loadRemoteState();
+let books = [];
+let questions = [];
+let questionBank = [];
+let exams = [];
+let currentExamId = null;
+
+function uid(){
+  return Date.now().toString(36) + Math.random().toString(36).slice(2,8);
+}
+function esc(v){
+  return String(v ?? '').replace(/[&<>"']/g,c=>({
+    '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'
+  })[c]);
+}
+function adminPassword(){
+  let p = sessionStorage.getItem('ghdd_admin_password') || '';
+  if(!p){
+    p = prompt('Geli furaha maamulka ee Railway ADMIN_PASSWORD:') || '';
+    if(p) sessionStorage.setItem('ghdd_admin_password',p);
+  }
+  return p;
+}
+function headers(json=true){
+  const h={'x-admin-password':adminPassword()};
+  if(json) h['Content-Type']='application/json';
+  return h;
+}
+async function api(url,options={}){
+  const response=await fetch(url,{
+    ...options,
+    headers:{...headers(),...(options.headers||{})}
+  });
+  let data={};
+  try{data=await response.json()}catch(_){}
+  if(!response.ok) throw new Error(data.error||`Server error ${response.status}`);
+  return data;
+}
+function showTab(id){
+  document.querySelectorAll('.tab').forEach(x=>x.classList.toggle('active',x.id===id));
+  document.querySelectorAll('nav button').forEach(x=>x.classList.toggle('active',x.dataset.tab===id));
+  if(id==='books') loadBooks();
+  if(id==='bank') renderBank();
+  window.scrollTo({top:0,behavior:'smooth'});
+}
+document.querySelectorAll('[data-tab]').forEach(b=>b.onclick=()=>showTab(b.dataset.tab));
+document.querySelectorAll('[data-go]').forEach(b=>b.onclick=()=>showTab(b.dataset.go));
+
+async function checkHealth(){
+  try{
+    const r=await fetch('/api/health');
+    const d=await r.json();
+    $('healthStatus').textContent=d.ok
+      ? 'Server-ka iyo PostgreSQL way shaqaynayaan.'
+      : 'Database-ka lama xaqiijin: '+(d.error||'');
+  }catch(e){
+    $('healthStatus').textContent='Server-ka lama xiriirin: '+e.message;
+  }
+}
+$('checkHealth').onclick=checkHealth;
+checkHealth();
+
+$('bookFile').addEventListener('change',()=>{
+  const file=$('bookFile').files[0];
+  if(!file){$('fileInfo').textContent='Weli PDF lama dooran.';return;}
+  $('fileInfo').textContent=`${file.name} · ${(file.size/1024/1024).toFixed(2)} MB`;
+});
+
+function progress(percent,message){
+  $('progressBox').classList.remove('hidden');
+  $('progressBar').style.width=Math.min(100,Math.max(0,percent))+'%';
+  $('uploadStatus').textContent=message;
+}
+function readSlice(file,start,end){
+  return new Promise((resolve,reject)=>{
+    const reader=new FileReader();
+    reader.onload=()=>resolve(reader.result);
+    reader.onerror=()=>reject(new Error('PDF-ga qaybtiisa lama akhrin karin.'));
+    reader.readAsArrayBuffer(file.slice(start,end));
+  });
+}
+function blobBase64(blob){
+  return new Promise((resolve,reject)=>{
+    const reader=new FileReader();
+    reader.onload=()=>{
+      const value=String(reader.result);
+      resolve(value.slice(value.indexOf(',')+1));
+    };
+    reader.onerror=()=>reject(new Error('Qaybta PDF-ga lama beddeli karin.'));
+    reader.readAsDataURL(blob);
+  });
+}
+
+$('uploadBook').onclick=async()=>{
+  const file=$('bookFile').files[0];
+  const title=$('bookTitle').value.trim();
+  const subject=$('bookSubject').value.trim();
+  const btn=$('uploadBook');
+  let worker=null;
+
+  if(!file) return alert('Dooro PDF marka hore.');
+  if(file.type!=='application/pdf'&&!file.name.toLowerCase().endsWith('.pdf'))
+    return alert('Fadlan dooro fayl PDF ah.');
+  if(file.size>MAX_BYTES)
+    return alert('PDF-gu wuxuu ka weyn yahay xadka 500 MB.');
+  if(!title) return alert('Geli magaca buugga.');
+  if(!window.pdfjsLib) return alert('PDF.js lama helin. Hubi internetka.');
+
+  btn.disabled=true;
+  let bookId=null;
+
+  try{
+    pdfjsLib.GlobalWorkerOptions.workerSrc=
+      'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+
+    // PDF.js wuxuu u baahan yahay inuu akhriyo PDF-ga si loo ogaado
+    // bogagga iyo qoraalka. Fayl aad u weyn wuxuu u baahan karaa RAM badan.
+    progress(1,'PDF-ga ayaa la furayaa...');
+    const pdfData=await file.arrayBuffer();
+    const pdf=await pdfjsLib.getDocument({data:pdfData}).promise;
+
+    if(pdf.numPages>3000) throw new Error('Buuggu wuxuu ka badan yahay xadka 3000 bog.');
+
+    progress(3,`PDF-ga wuxuu leeyahay ${pdf.numPages} bog. OCR ayaa bilaabanaya...`);
+
+    // OCR bog-bog
+    const pages=[];
+    let ocrCount=0;
+
+    for(let n=1;n<=pdf.numPages;n++){
+      const page=await pdf.getPage(n);
+      const content=await page.getTextContent();
+      let text=content.items.map(x=>x.str||'').join(' ').trim();
+
+      if(text.length<25){
+        if(!window.Tesseract) throw new Error('OCR lama soo dejin. Hubi internetka.');
+        if(!worker) worker=await Tesseract.createWorker('eng');
+        const viewport=page.getViewport({scale:1.35});
+        const canvas=document.createElement('canvas');
+        canvas.width=Math.ceil(viewport.width);
+        canvas.height=Math.ceil(viewport.height);
+        const ctx=canvas.getContext('2d');
+        await page.render({canvasContext:ctx,viewport}).promise;
+        const result=await worker.recognize(canvas);
+        text=(result.data.text||'').trim();
+        canvas.width=canvas.height=1;
+        ocrCount++;
+      }
+
+      pages.push({page:n,text});
+      const pct=3+Math.round((n/pdf.numPages)*32);
+      progress(pct,`Akhrinta bogga ${n}/${pdf.numPages}. OCR waxaa loo adeegsaday ${ocrCount} bog.`);
+    }
+
+    if(worker){await worker.terminate();worker=null;}
+
+    // Bilow kaydinta buugga server-ka.
+    const start=await api('/api/books/upload/start',{
+      method:'POST',
+      body:JSON.stringify({
+        title,subject,filename:file.name,
+        size:file.size,pageCount:pdf.numPages
+      })
+    });
+    bookId=start.id;
+
+    // PDF-ga si qaybo 4 MB ah u dir; Base64 laguma beddelayo
+    // faylka oo dhan hal mar.
+    const totalChunks=Math.ceil(file.size/CHUNK_BYTES);
+
+    for(let i=0;i<totalChunks;i++){
+      const from=i*CHUNK_BYTES;
+      const to=Math.min(file.size,from+CHUNK_BYTES);
+      const chunk=file.slice(from,to);
+      const encoded=await blobBase64(chunk);
+
+      await api(`/api/books/${encodeURIComponent(bookId)}/chunks/${i}`,{
+        method:'POST',
+        body:JSON.stringify({chunkBase64:encoded})
+      });
+
+      const pct=35+Math.round(((i+1)/totalChunks)*55);
+      progress(pct,`Kaydinta PDF: qaybta ${i+1}/${totalChunks}.`);
+    }
+
+    progress(93,'PDF-ga waa la kaydiyey. Qoraalka OCR ayaa la dhammeystirayaa...');
+
+    await api(`/api/books/${encodeURIComponent(bookId)}/upload/finish`,{
+      method:'POST',
+      body:JSON.stringify({pages})
+    });
+
+    progress(100,`Guul! Buugga ${title} waa la kaydiyey. ${pdf.numPages} bog; OCR: ${ocrCount} bog.`);
+    $('bookFile').value='';
+    $('fileInfo').textContent='Weli PDF lama dooran.';
+    await loadBooks();
+
+  }catch(e){
+    console.error(e);
+    progress(0,'Khalad: '+e.message);
+    alert('PDF/OCR: '+e.message+
+      (bookId?'\nBuugga upload-kiisu wuu bilaabmay. Hubi liiska buugaagta ka hor intaadan mar kale soo gelin.':''));
+  }finally{
+    if(worker) try{await worker.terminate()}catch(_){}
+    btn.disabled=false;
+  }
+};
+
+async function loadBooks(){
+  const box=$('booksList');
+  box.innerHTML='<div class="item">Buugaagta waa la soo rarayaa...</div>';
+  try{
+    const d=await api('/api/books',{method:'GET'});
+    books=d.books||[];
+    $('sourceBook').innerHTML='<option value="">Dooro buug...</option>'+
+      books.map(b=>`<option value="${esc(b.id)}">${esc(b.title)} (${b.page_count||'?'} bog)</option>`).join('');
+
+    if(!books.length){
+      box.innerHTML='<div class="item muted">Weli buug lama kaydin.</div>';
+      return;
+    }
+
+    box.innerHTML=books.map(b=>`
+      <div class="item">
+        <b>${esc(b.title)}</b>
+        <p class="muted">${esc(b.subject||'Maaddo lama cayimin')} · ${b.page_count||'?'} bog · ${Number(b.text_chars||0).toLocaleString()} xaraf</p>
+        <a href="/api/books/${encodeURIComponent(b.id)}/pdf" target="_blank" rel="noopener">
+          <button type="button" class="secondary">Fur / Soo dejiso PDF</button>
+        </a>
+        <button class="danger" data-del-book="${esc(b.id)}">Tirtir</button>
+      </div>`).join('');
+
+    box.querySelectorAll('[data-del-book]').forEach(btn=>{
+      btn.onclick=async()=>{
+        if(!confirm('Ma hubtaa inaad buuggan tirtirayso?'))return;
+        try{
+          await api('/api/books/'+encodeURIComponent(btn.dataset.delBook),{method:'DELETE'});
+          await loadBooks();
+        }catch(e){alert(e.message);}
+      };
+    });
+  }catch(e){
+    box.innerHTML=`<div class="item">Khalad: ${esc(e.message)}</div>`;
+  }
+}
+$('refreshBooks').onclick=loadBooks;
+
+$('generateExam').onclick=async()=>{
+  const id=$('sourceBook').value;
+  const start=Number($('startPage').value);
+  const end=Number($('endPage').value);
+  const count=Number($('genCount').value);
+  const levels=Array.from($('genLevels').selectedOptions).map(o=>o.value);
+
+  if(!id)return alert('Dooro buug.');
+  if(!Number.isInteger(start)||!Number.isInteger(end)||start<1||end<start)
+    return alert('Hubi bogga bilowga iyo dhammaadka.');
+  if(count<1||count>50)return alert('Tirada su’aalaha waa 1 ilaa 50.');
+  if(!levels.length)return alert('Dooro ugu yaraan hal heer Bloom.');
+
+  const status=$('generateStatus');
+  const out=$('generatedQuestions');
+  status.textContent='Qoraalka bogagga ayaa la soo rarayaa...';
+  out.innerHTML='';
+
+  try{
+    const d=await api(`/api/books/${encodeURIComponent(id)}/text?start=${start}&end=${end}`,{method:'GET'});
+    const selected=(d.pages||[]).filter(p=>p.text&&p.text.trim());
+    const sourceText=selected.map(p=>`[Bogga ${p.page}]\n${p.text}`).join('\n\n');
+    if(!sourceText.trim())throw new Error('Qoraal lagama helin bogagga la doortay.');
+
+    status.textContent='AI ayaa diyaarinaya su’aalaha laga soo qaatay bogagga aad dooratay...';
+
+    const book=books.find(b=>String(b.id)===String(id));
+    const subject=$('genSubject').value.trim()||$('bookSubject').value.trim()||book?.subject||'';
+    const className=$('genClass').value.trim();
+
+    const generated=await api('/api/generate',{
+      method:'POST',
+      body:JSON.stringify({
+        sourceText,subject,className,count,questionCount:count,
+        levels,type:$('genType').value,
+        sourceTitle:d.title,
+        pageRange:{start,end}
+      })
+    });
+
+    const qs=generated.questions||[];
+    if(!qs.length)throw new Error('AI ma soo celin su’aalo.');
+
+    out.innerHTML=qs.map((q,i)=>`
+      <div class="item">
+        <b>${i+1}. ${esc(q.question||q.text||'')}</b>
+        <p class="muted">${esc(q.bloom||q.level||'')} · ${Number(q.marks)||1} dhibcood</p>
+        <p><b>Jawaabta:</b> ${esc(q.answer||'Jawaab lama bixin')}</p>
+        <button data-add-generated="${i}">Ku dar imtixaanka</button>
+      </div>`).join('');
+
+    out.querySelectorAll('[data-add-generated]').forEach(btn=>{
+      btn.onclick=()=>{
+        const q=qs[Number(btn.dataset.addGenerated)];
+        questions.push({
+          id:uid(),
+          text:q.question||q.text||'',
+          marks:Number(q.marks)||1,
+          level:q.bloom||q.level||'Understand',
+          answer:q.answer||'',
+          topic:q.topic||`${d.title} bogagga ${start}-${end}`,
+          type:q.type||$('genType').value
+        });
+        renderQuestions();
+        showTab('builder');
+      };
+    });
+
+    status.textContent=`Guul! ${qs.length} su’aalood ayaa laga sameeyey bogagga ${start}–${end}. Dib u eeg su’aalaha iyo jawaabaha.`;
+  }catch(e){
+    status.textContent='Khalad: '+e.message;
+    alert('Samaynta imtixaanka: '+e.message);
+  }
+};
+
+function renderQuestions(){
+  const el=$('questionList');
+  if(!questions.length){
+    el.innerHTML='<div class="item muted">Weli su’aalo lama darin.</div>';
+    return;
+  }
+  el.innerHTML=questions.map((q,i)=>`
+    <div class="item">
+      <b>${i+1}. ${esc(q.text)}</b>
+      <p>${esc(q.level)} · ${Number(q.marks)||1} dhibcood</p>
+      <p><b>Jawaab:</b> ${esc(q.answer||'')}</p>
+      <button class="danger" data-remove-q="${q.id}">Ka saar</button>
+    </div>`).join('');
+
+  el.querySelectorAll('[data-remove-q]').forEach(btn=>{
+    btn.onclick=()=>{
+      questions=questions.filter(q=>q.id!==btn.dataset.removeQ);
+      renderQuestions();
+    };
+  });
+}
+$('addQuestion').onclick=()=>{
+  const text=$('qText').value.trim();
+  if(!text)return alert('Qor su’aasha marka hore.');
+  questions.push({
+    id:uid(),text,
+    marks:Number($('qMarks').value)||1,
+    level:$('qLevel').value,
+    answer:$('qAnswer').value.trim()
+  });
+  $('qText').value='';
+  $('qAnswer').value='';
+  renderQuestions();
+};
+$('printExam').onclick=()=>window.print();
+
+$('saveExam').onclick=async()=>{
+  if(!questions.length)return alert('Ku dar su’aalo marka hore.');
+  const exam={
+    id:currentExamId||uid(),
+    title:$('examName').value.trim()||'Imtixaan',
+    subject:$('subject').value.trim(),
+    className:$('className').value.trim(),
+    instructions:$('examInstructions').value,
+    questions:JSON.parse(JSON.stringify(questions)),
+    createdAt:new Date().toISOString()
+  };
+  exams.unshift(exam);
+  questionBank.push(...exam.questions.map(q=>({...q,subject:exam.subject,className:exam.className})));
+  localStorage.setItem('ghdd_exams',JSON.stringify(exams));
+  localStorage.setItem('ghdd_bank',JSON.stringify(questionBank));
+  renderBank();
+  alert('Imtixaanka waxaa lagu kaydiyey browser-ka. Soo dejiso backup si aad u ilaaliso.');
+};
+
+function renderBank(){
+  const el=$('bankList');
+  if(!questionBank.length){
+    el.innerHTML='<div class="item muted">Weli su’aalo lama kaydin.</div>';
+    return;
+  }
+  el.innerHTML=questionBank.map((q,i)=>`
+    <div class="item">
+      <b>${i+1}. ${esc(q.text)}</b>
+      <p class="muted">${esc(q.subject||'')} · ${esc(q.className||'')}</p>
+      <p><b>Jawaab:</b> ${esc(q.answer||'')}</p>
+    </div>`).join('');
+}
+$('runAnalysis').onclick=()=>{
+  const el=$('analysisResult');
+  if(!questions.length){
+    el.innerHTML='<div class="item">Ku dar su’aalo si loo falanqeeyo.</div>';
+    return;
+  }
+  const total=questions.reduce((s,q)=>s+(Number(q.marks)||0),0);
+  const missing=questions.filter(q=>!q.answer).length;
+  const levels={};
+  questions.forEach(q=>levels[q.level]=(levels[q.level]||0)+1);
+  el.innerHTML=`
+    <div class="item">Tirada su’aalaha: <b>${questions.length}</b></div>
+    <div class="item">Wadarta dhibcaha: <b>${total}</b></div>
+    <div class="item">Su’aalaha aan jawaab lahayn: <b>${missing}</b></div>
+    <div class="item">Heerarka Bloom: ${Object.entries(levels).map(([k,v])=>`${esc(k)}: ${v}`).join(' · ')}</div>`;
+};
+$('downloadBackup').onclick=()=>{
+  const blob=new Blob([JSON.stringify({questions,questionBank,exams},null,2)],{type:'application/json'});
+  const url=URL.createObjectURL(blob);
+  const a=document.createElement('a');
+  a.href=url;a.download='GHDD_Assessment_Backup.json';a.click();
+  URL.revokeObjectURL(url);
+};
+
+try{
+  questions=JSON.parse(localStorage.getItem('ghdd_questions')||'[]');
+  questionBank=JSON.parse(localStorage.getItem('ghdd_bank')||'[]');
+  exams=JSON.parse(localStorage.getItem('ghdd_exams')||'[]');
+}catch(_){}
+renderQuestions();
+renderBank();
 </script>
 </body>
 </html>
