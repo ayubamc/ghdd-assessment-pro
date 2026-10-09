@@ -1,3 +1,4 @@
+
 <!doctype html>
 <html lang="so">
 <head>
@@ -19,8 +20,7 @@ header{background:linear-gradient(120deg,#102d60,#15569c);color:white;padding:18
 .nav{display:flex;gap:8px;flex-wrap:wrap;background:white;padding:10px;border:1px solid var(--line);border-radius:14px;margin-bottom:18px}
 .nav button{border:0;background:#edf3fb;color:var(--navy);font-weight:700;padding:10px 13px;border-radius:9px;cursor:pointer}
 .nav button.active{background:var(--navy);color:#fff}
-.tab{display:none}
-.tab.active{display:block}
+.tab{display:none}.tab.active{display:block}
 .hero{background:white;border:1px solid var(--line);border-radius:16px;padding:24px;margin-bottom:18px;background-image:linear-gradient(110deg,#fff 65%,#eaf5ff)}
 .hero h2{margin:0 0 8px;color:var(--navy);font-size:clamp(23px,4vw,34px)}
 .hero p{max-width:780px;color:var(--muted);margin:0 0 18px}
@@ -29,26 +29,20 @@ header{background:linear-gradient(120deg,#102d60,#15569c);color:white;padding:18
 .card,.panel{background:white;border:1px solid var(--line);border-radius:14px;padding:18px;min-width:0}
 .card h3,.panel h3{margin:0 0 8px;color:var(--navy)}
 .card p{color:var(--muted);margin:0 0 12px}
-.emoji{font-size:27px}
-.section-title{margin:0 0 14px;color:var(--navy)}
+.emoji{font-size:27px}.section-title{margin:0 0 14px;color:var(--navy)}
 label{display:block;font-weight:700;font-size:14px;margin:12px 0 5px}
 input,select,textarea{width:100%;padding:11px 12px;border:1px solid #cbd6e4;border-radius:9px;background:#fff;color:var(--ink);font:inherit}
 textarea{min-height:88px;resize:vertical}
 .row{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}
 .btn{display:inline-flex;align-items:center;justify-content:center;gap:7px;border:0;border-radius:9px;background:var(--navy);color:white;font-weight:700;padding:11px 15px;cursor:pointer;text-decoration:none;margin:6px 5px 0 0}
-.btn.secondary{background:#e8eef7;color:var(--navy)}
-.btn.gold{background:#b78312;color:#fff}
-.btn.danger{background:#b42318}
-.btn.green{background:var(--green)}
+.btn.secondary{background:#e8eef7;color:var(--navy)}.btn.gold{background:#b78312;color:#fff}.btn.danger{background:#b42318}.btn.green{background:var(--green)}
+.btn:disabled{opacity:.55;cursor:wait}
 .muted{color:var(--muted)}
 .notice{background:#fff8e5;border:1px solid #f0d48a;padding:12px;border-radius:10px;color:#6e5107;margin:12px 0}
 .list{display:grid;gap:10px;margin-top:12px}
 .item{border:1px solid var(--line);border-radius:10px;padding:12px;background:#fbfdff}
-.item strong{display:block}
-.item small{color:var(--muted)}
-.item-actions{margin-top:8px}
-.table-wrap{overflow-x:auto}
-table{border-collapse:collapse;width:100%;background:#fff}
+.item strong{display:block}.item small{color:var(--muted)}.item-actions{margin-top:8px}
+.table-wrap{overflow-x:auto}table{border-collapse:collapse;width:100%;background:#fff}
 th,td{padding:10px;border-bottom:1px solid var(--line);text-align:left;vertical-align:top}
 th{background:#edf3fb;color:var(--navy)}
 .statgrid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px;margin:14px 0}
@@ -56,8 +50,7 @@ th{background:#edf3fb;color:var(--navy)}
 .stat b{font-size:24px;display:block;color:var(--navy)}
 .empty{padding:18px;text-align:center;border:1px dashed #b8c6d8;border-radius:10px;color:var(--muted)}
 footer{text-align:center;padding:25px 12px;color:var(--muted);font-size:13px}
-.hidden{display:none!important}
-.pill{display:inline-block;background:#eaf5ee;color:#176b42;border-radius:99px;padding:2px 8px;font-size:12px;font-weight:700}
+.hidden{display:none!important}.pill{display:inline-block;background:#eaf5ee;color:#176b42;border-radius:99px;padding:2px 8px;font-size:12px;font-weight:700}
 @media(max-width:800px){.cards{grid-template-columns:repeat(2,minmax(0,1fr))}.grid{grid-template-columns:1fr}}
 @media(max-width:480px){.brand img{width:60px;height:60px}.brand{align-items:flex-start}.cards{grid-template-columns:1fr}.row{grid-template-columns:1fr}.hero{padding:18px}.nav button{flex:1 1 42%;font-size:13px}.statgrid{grid-template-columns:1fr 1fr}}
 @media print{header,.nav,.no-print,footer{display:none!important}body{background:#fff}.wrap{max-width:none;margin:0;padding:0}.tab{display:none!important}#builder.tab.active{display:block!important}.panel,.hero{border:0;padding:0}}
@@ -72,751 +65,375 @@ footer{text-align:center;padding:25px 12px;color:var(--muted);font-size:13px}
 </header>
 
 <div class="wrap">
- <nav class="nav no-print" aria-label="Qaybaha app-ka">
-  <button class="active" data-tab="home">🏠 Bogga hore</button>
-  <button data-tab="builder">📝 Diyaari imtixaan</button>
-  <button data-tab="blueprint">📊 Qorshaha imtixaanka</button>
-  <button data-tab="bank">📚 Kaydka su'aalaha</button>
-  <button data-tab="analysis">📈 Falanqayn</button>
- </nav>
+<nav class="nav no-print" aria-label="Qaybaha app-ka">
+ <button class="active" data-tab="home">🏠 Bogga hore</button>
+ <button data-tab="builder">📝 Diyaari imtixaan</button>
+ <button data-tab="blueprint">📊 Qorshaha imtixaanka</button>
+ <button data-tab="bank">📚 Kaydka su'aalaha</button>
+ <button data-tab="analysis">📈 Falanqayn</button>
+</nav>
 
- <section id="home" class="tab active">
-  <div class="hero">
-   <div class="tag">QORSHEYN WANAAGSAN • IMTIXAAN TAYO LEH</div>
-   <h2>Ku soo dhowow GHDD Assessment Pro</h2>
-   <p>Diyaari su'aalaha, dhis qorshaha imtixaanka, kaydi xogta, kana eeg tayada imtixaannada hal meel.</p>
-   <button class="btn" data-go="builder">✍️ Bilow diyaarinta imtixaanka</button>
+<section id="home" class="tab active">
+ <div class="hero">
+  <div class="tag">QORSHEYN WANAAGSAN • IMTIXAAN TAYO LEH</div>
+  <h2>Ku soo dhowow GHDD Assessment Pro</h2>
+  <p>Diyaari su'aalaha, dhis qorshaha imtixaanka, kaydi xogta, kana eeg tayada imtixaannada hal meel.</p>
+  <button class="btn" data-go="builder">✍️ Bilow diyaarinta imtixaanka</button>
+ </div>
+ <div class="cards">
+  <article class="card"><div class="emoji">📝</div><h3>Diyaarinta imtixaanka</h3><p>Samee oo habee su'aalaha imtixaanka.</p><button class="btn secondary" data-go="builder">Fur qaybta</button></article>
+  <article class="card"><div class="emoji">📊</div><h3>Qorshaha imtixaanka</h3><p>Hubi mawduucyada iyo qaybinta su'aalaha.</p><button class="btn secondary" data-go="blueprint">Fur qaybta</button></article>
+  <article class="card"><div class="emoji">📚</div><h3>Kaydka su'aalaha</h3><p>Raadi oo dib u eeg su'aalaha la kaydiyey.</p><button class="btn secondary" data-go="bank">Fur qaybta</button></article>
+  <article class="card"><div class="emoji">📈</div><h3>Falanqaynta tayada</h3><p>Dib u eeg caddaynta su'aalaha iyo dhibcaha.</p><button class="btn secondary" data-go="analysis">Fur qaybta</button></article>
+ </div>
+ <div class="panel" style="margin-top:16px">
+  <h3>Xogtaada</h3>
+  <p class="muted">Xogta waxaa lagu kaydinayaa PostgreSQL. Marka ugu horreysa geli furaha maamulka ee Railway (ADMIN_PASSWORD).</p>
+  <div id="homeStats" class="statgrid"></div>
+  <p id="cloudStatus" class="muted" role="status">Xiriirka PostgreSQL ayaa la hubinayaa.</p>
+  <button class="btn secondary" id="exportData">Soo dejiso kaydka xogta (JSON)</button>
+  <label class="no-print">Soo geli kayd hore (JSON)<input type="file" id="importData" accept=".json,application/json"></label>
+ </div>
+</section>
+
+<section id="builder" class="tab">
+ <div class="panel">
+  <h2 class="section-title">QAYBTA 1 — Diyaari imtixaan</h2>
+  <div class="row">
+   <div><label for="examName">Magaca imtixaanka *</label><input id="examName" placeholder="Tusaale: Imtixaanka dhexe"></div>
+   <div><label for="subject">Maaddada *</label><input id="subject" placeholder="Tusaale: Xisaab"></div>
+   <div><label for="className">Fasalka *</label><input id="className" placeholder="Tusaale: Form 2"></div>
+   <div><label for="totalMarks">Dhibcaha guud *</label><input id="totalMarks" type="number" min="1" value="100"></div>
   </div>
-
-  <div class="cards">
-   <article class="card"><div class="emoji">📝</div><h3>Diyaarinta imtixaanka</h3><p>Samee oo habee su'aalaha imtixaanka.</p><button class="btn secondary" data-go="builder">Fur qaybta</button></article>
-   <article class="card"><div class="emoji">📊</div><h3>Qorshaha imtixaanka</h3><p>Hubi mawduucyada, heerarka garashada iyo qaybinta su'aalaha.</p><button class="btn secondary" data-go="blueprint">Fur qaybta</button></article>
-   <article class="card"><div class="emoji">📚</div><h3>Kaydka su'aalaha</h3><p>Raadi oo dib u eeg su'aalaha la kaydiyey.</p><button class="btn secondary" data-go="bank">Fur qaybta</button></article>
-   <article class="card"><div class="emoji">📈</div><h3>Falanqaynta tayada</h3><p>Dib u eeg caddaynta su'aalaha iyo isu-dheellitirka dhibcaha.</p><button class="btn secondary" data-go="analysis">Fur qaybta</button></article>
-  </div>
-
-  <div class="panel" style="margin-top:16px">
-   <h3>Xogtaada</h3>
-   <p class="muted">Xogta waxaa lagu kaydinayaa PostgreSQL si ay uga muuqato qalabyo kala duwan. Marka ugu horreysa geli furaha maamulka ee Railway (ADMIN_PASSWORD).</p>
-   <div id="homeStats" class="statgrid"></div>
-   <p class="muted" id="cloudStatus" role="status">Kaydka PostgreSQL ayaa la xiriirinayaa marka boggu furmo.</p>
-   <button class="btn secondary" id="exportData">Soo dejiso kaydka xogta (JSON)</button>
-   <label class="no-print">Soo geli kayd hore (JSON)<input type="file" id="importData" accept=".json,application/json"></label>
-  </div>
- </section>
-
- <section id="builder" class="tab">
+  <label for="instructions">Tilmaamaha imtixaanka</label><textarea id="instructions" placeholder="Geli tilmaamaha ardayda..."></textarea>
+ </div>
+ <div class="grid" style="margin-top:16px">
   <div class="panel">
-   <h2 class="section-title">QAYBTA 1 — Diyaari imtixaan</h2>
+   <h3>Su'aal cusub</h3>
+   <label for="questionText">Su'aasha *</label><textarea id="questionText" placeholder="Qor su'aasha halkan..."></textarea>
    <div class="row">
-    <div><label for="examName">Magaca imtixaanka *</label><input id="examName" placeholder="Tusaale: Imtixaanka dhexe"></div>
-    <div><label for="subject">Maaddada *</label><input id="subject" placeholder="Tusaale: Xisaab"></div>
-    <div><label for="className">Fasalka *</label><input id="className" placeholder="Tusaale: Form 2"></div>
-    <div><label for="totalMarks">Dhibcaha guud *</label><input id="totalMarks" type="number" min="1" value="100"></div>
+    <div><label for="questionType">Nooca su'aasha</label><select id="questionType"><option>Jawaab gaaban</option><option>Doorasho badan (MCQ)</option><option>Sax ama Khalad</option><option>Qormo</option><option>Xisaab / Xallin</option><option>Isku-aaddin</option></select></div>
+    <div><label for="questionMarks">Dhibcaha su'aasha *</label><input id="questionMarks" type="number" min="1" value="5"></div>
    </div>
-   <label for="instructions">Tilmaamaha imtixaanka</label>
-   <textarea id="instructions" placeholder="Geli tilmaamaha ardayda..."></textarea>
+   <label for="topic">Mawduuca / Cutubka</label><input id="topic" placeholder="Tusaale: Cutubka 1">
+   <label for="cognitive">Heerka garashada</label><select id="cognitive"><option>Xusuusasho</option><option>Faham</option><option>Ku-dhaqan</option><option>Falanqayn</option><option>Qiimayn</option><option>Abuurid</option></select>
+   <label for="answerGuide">Jawaabta saxda ah / Tilmaamaha sixidda</label><textarea id="answerGuide" placeholder="Geli jawaabta ama tilmaamaha sixidda"></textarea>
+   <button class="btn" id="addQuestion">＋ Ku dar su'aasha</button>
+   <button class="btn secondary" id="clearQuestion">Nadiifi foomka</button>
   </div>
-
-  <div class="grid" style="margin-top:16px">
-   <div class="panel">
-    <h3>Su'aal cusub</h3>
-    <label for="questionText">Su'aasha *</label>
-    <textarea id="questionText" placeholder="Qor su'aasha halkan..."></textarea>
-    <div class="row">
-     <div><label for="questionType">Nooca su'aasha</label><select id="questionType"><option>Jawaab gaaban</option><option>Doorasho badan (MCQ)</option><option>Sax ama Khalad</option><option>Qormo</option><option>Xisaab / Xallin</option><option>Isku-aaddin</option></select></div>
-     <div><label for="questionMarks">Dhibcaha su'aasha *</label><input id="questionMarks" type="number" min="1" value="5"></div>
-    </div>
-    <label for="topic">Mawduuca / Cutubka</label><input id="topic" placeholder="Tusaale: Cutubka 1">
-    <label for="cognitive">Heerka garashada</label>
-    <select id="cognitive"><option>Xusuusasho</option><option>Faham</option><option>Ku-dhaqan</option><option>Falanqayn</option><option>Qiimayn</option><option>Abuurid</option></select>
-    <label for="answerGuide">Jawaabta saxda ah / Tilmaamaha sixidda</label>
-    <textarea id="answerGuide" placeholder="Ikhtiyaari: geli jawaabta ama tilmaamaha sixidda"></textarea>
-    <button class="btn" id="addQuestion">＋ Ku dar su'aasha</button>
-    <button class="btn secondary" id="clearQuestion">Nadiifi foomka</button>
-   </div>
-
-   <div class="panel">
-    <h3>Hordhaca imtixaanka</h3>
-    <div id="examPreview" class="empty">Marka aad su'aalo ku darto, halkan ayaa lagu soo bandhigi doonaa.</div>
-    <div class="no-print">
-     <button class="btn green" id="saveExam">Kaydi imtixaanka</button>
-     <button class="btn secondary" id="printExam">Soo dejiso / Daabac imtixaanka</button>
-     <button class="btn secondary" id="saveToBank">Ku kaydi su'aalaha kaydka</button>
-    </div>
-    <div id="examStatus" class="muted" role="status"></div>
-   </div>
-  </div>
-  <div class="panel" style="margin-top:16px"><h3>Liiska su'aalaha</h3><div id="questionList" class="empty">Weli su'aalo lama darin.</div></div>
-  <div class="panel" style="margin-top:16px"><h3>Imtixaannada la kaydiyey</h3><div id="savedExams" class="empty">Weli imtixaan lama kaydin.</div></div>
- </section>
-
- <section id="blueprint" class="tab">
   <div class="panel">
-   <h2 class="section-title">QAYBTA 2 — Qorshaha imtixaanka (Question Blueprint)</h2>
-   <p class="muted">Qorshuhu wuxuu kaa caawinayaa in su'aaluhu daboolaan mawduucyada iyo heerarka waxbarasho ee la bartay.</p>
-   <div class="row">
-    <div><label for="bpTopic">Mawduuca / Cutubka *</label><input id="bpTopic" placeholder="Magaca mawduuca"></div>
-    <div><label for="bpPercent">Saamiga (%) *</label><input id="bpPercent" type="number" min="0" max="100" value="20"></div>
-    <div><label for="bpLevel">Heerka garashada</label><select id="bpLevel"><option>Xusuusasho</option><option>Faham</option><option>Ku-dhaqan</option><option>Falanqayn</option><option>Qiimayn</option><option>Abuurid</option></select></div>
-    <div><label for="bpCount">Tirada su'aalaha</label><input id="bpCount" type="number" min="1" value="2"></div>
-   </div>
-   <button class="btn" id="addBlueprint">＋ Ku dar saf qorshe</button>
-   <button class="btn secondary" id="autoBlueprint">Samee qorshe ku salaysan su'aalaha</button>
-   <div id="blueprintSummary" class="notice"></div>
-   <div id="blueprintList" class="empty">Qorshaha aad samayso ayaa halkan ka muuqan doona.</div>
-  </div>
- </section>
-
- <section id="bank" class="tab">
-  <div class="panel">
-   <h2 class="section-title">QAYBTA 3 — Kaydka su'aalaha</h2>
-   <label for="bankSearch">Raadi su'aalaha</label>
-   <input id="bankSearch" placeholder="Raadi maaddo, fasal, mawduuc ama eray su'aal...">
+   <h3>Hordhaca imtixaanka</h3><div id="examPreview" class="empty">Marka aad su'aalo ku darto, halkan ayay ka muuqanayaan.</div>
    <div class="no-print">
-    <button class="btn secondary" id="loadBank">Soo cusboonaysii kaydka su'aalaha</button>
-    <button class="btn secondary" id="downloadBank">Soo dejiso kaydka (JSON)</button>
-    <label>Soo rar kayd JSON<input type="file" id="bankFile" accept=".json,application/json"></label>
+    <button class="btn green" id="saveExam">1. Kaydi imtixaanka</button>
+    <button class="btn secondary" id="printExam">Soo dejiso / Daabac imtixaanka</button>
+    <button class="btn secondary" id="saveToBank">2. Ku kaydi su'aalaha kaydka</button>
    </div>
-   <div id="bankList" class="empty">Weli su'aalo laguma kaydin kaydka.</div>
+   <div id="examStatus" class="muted" role="status"></div>
+   <p class="muted">Habka saxda ah: marka hore kaydi imtixaanka, kadibna su'aalaha ku kaydi kaydka su'aalaha.</p>
   </div>
- </section>
+ </div>
+ <div class="panel" style="margin-top:16px"><h3>Liiska su'aalaha</h3><div id="questionList" class="empty">Weli su'aalo lama darin.</div></div>
+ <div class="panel" style="margin-top:16px"><h3>Imtixaannada la kaydiyey</h3><div id="savedExams" class="empty">Weli imtixaan lama kaydin.</div></div>
+</section>
 
- <section id="analysis" class="tab">
-  <div class="panel">
-   <h2 class="section-title">QAYBTA 4 — Falanqaynta iyo hubinta tayada</h2>
-   <p class="muted">Hubintani waxay tilmaamaysaa su'aalaha aan caddayn, kuwa isku eg iyo isu-dheellitirka dhibcaha. Natiijadu waa taageero dib-u-eegis; ma beddelayso hubinta macallinka.</p>
-   <button class="btn" id="runAnalysis">Falanqee su'aalaha hadda jira</button>
-   <div id="analysisResult" class="empty" style="margin-top:14px">Natiijada falanqayntu halkan ayay ka muuqan doontaa.</div>
+<section id="blueprint" class="tab">
+ <div class="panel">
+  <h2 class="section-title">QAYBTA 2 — Qorshaha imtixaanka</h2>
+  <p class="muted">Qorshuhu wuxuu kaa caawinayaa in su'aaluhu daboolaan mawduucyada iyo heerarka waxbarasho.</p>
+  <div class="row">
+   <div><label for="bpTopic">Mawduuca / Cutubka *</label><input id="bpTopic" placeholder="Magaca mawduuca"></div>
+   <div><label for="bpPercent">Saamiga (%) *</label><input id="bpPercent" type="number" min="0" max="100" value="20"></div>
+   <div><label for="bpLevel">Heerka garashada</label><select id="bpLevel"><option>Xusuusasho</option><option>Faham</option><option>Ku-dhaqan</option><option>Falanqayn</option><option>Qiimayn</option><option>Abuurid</option></select></div>
+   <div><label for="bpCount">Tirada su'aalaha</label><input id="bpCount" type="number" min="1" value="2"></div>
   </div>
- </section>
+  <button class="btn" id="addBlueprint">＋ Ku dar saf qorshe</button><button class="btn secondary" id="autoBlueprint">Samee qorshe ku salaysan su'aalaha</button>
+  <div id="blueprintSummary" class="notice"></div><div id="blueprintList" class="empty">Qorshaha aad samayso ayaa halkan ka muuqan doona.</div>
+ </div>
+</section>
+
+<section id="bank" class="tab">
+ <div class="panel">
+  <h2 class="section-title">QAYBTA 3 — Kaydka su'aalaha</h2>
+  <label for="bankSearch">Raadi su'aalaha</label><input id="bankSearch" placeholder="Raadi maaddo, fasal, mawduuc ama eray su'aal...">
+  <div class="no-print">
+   <button class="btn secondary" id="loadBank">Soo cusboonaysii kaydka</button>
+   <button class="btn secondary" id="downloadBank">Soo dejiso kaydka (JSON)</button>
+   <label>Soo rar kayd JSON<input type="file" id="bankFile" accept=".json,application/json"></label>
+  </div>
+  <div id="bankList" class="empty">Weli su'aalo laguma kaydin kaydka.</div>
+ </div>
+</section>
+
+<section id="analysis" class="tab">
+ <div class="panel">
+  <h2 class="section-title">QAYBTA 4 — Falanqaynta iyo hubinta tayada</h2>
+  <p class="muted">Hubintani waxay tilmaamaysaa su'aalaha aan caddayn, kuwa isku eg iyo isu-dheellitirka dhibcaha.</p>
+  <button class="btn" id="runAnalysis">Falanqee su'aalaha hadda jira</button>
+  <div id="analysisResult" class="empty" style="margin-top:14px">Riix badhanka si aad u hesho talooyinka hubinta tayada.</div>
+ </div>
+</section>
 </div>
 
 <footer>GHDD Assessment Pro · Golaha Horumarinta Dugsiyada Dadweynaha<br>Qorshayn wanaagsan • Imtixaan tayo leh • Horumar waxbarasho</footer>
 
 <script>
 'use strict';
+const $=id=>document.getElementById(id);
+const KEY='ghdd_assessment_pro_v1';
+let state={questions:[],blueprints:[],bank:[],exams:[],currentExamId:null};
+let syncTimer=null;
+let saving=false;
 
-const $ = id => document.getElementById(id);
-const KEY = 'ghdd_assessment_pro_v1';
-let state = {questions:[],blueprints:[],bank:[],exams:[],currentExamId:null};
-let syncTimer = null;
-
+function uid(){return Date.now().toString(36)+Math.random().toString(36).slice(2,8)}
+function esc(v){return String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]))}
 function loadState(){
-  try {
-    const saved = JSON.parse(localStorage.getItem(KEY) || 'null');
-    if(saved && typeof saved === 'object') state = {...state,...saved};
-  } catch(e) {
-    console.warn('Could not load local data', e);
-  }
+ try{const s=JSON.parse(localStorage.getItem(KEY)||'null');if(s&&typeof s==='object')state={...state,...s}}
+ catch(e){console.warn('Local data load failed',e)}
+ if(!Array.isArray(state.questions))state.questions=[];
+ if(!Array.isArray(state.bank))state.bank=[];
+ if(!Array.isArray(state.exams))state.exams=[];
+ if(!Array.isArray(state.blueprints))state.blueprints=[];
 }
-
 function adminPassword(){
-  let password = sessionStorage.getItem('ghdd_admin_password') || '';
-  if(!password){
-    password = prompt('Geli furaha maamulka ee GHDD Assessment Pro (Railway ADMIN_PASSWORD):') || '';
-    if(password) sessionStorage.setItem('ghdd_admin_password', password);
-  }
-  return password;
+ let p=sessionStorage.getItem('ghdd_admin_password')||'';
+ if(!p){p=prompt('Geli furaha maamulka ee Railway (ADMIN_PASSWORD):')||'';if(p)sessionStorage.setItem('ghdd_admin_password',p)}
+ return p;
 }
-
-async function syncStateToServer(){
-  const password = adminPassword();
-  if(!password) return;
-
-  try {
-    const response = await fetch('/api/state', {
-      method:'PUT',
-      headers:{
-        'Content-Type':'application/json',
-        'x-admin-password':password
-      },
-      body:JSON.stringify({state})
-    });
-
-    if(response.status === 401){
-      sessionStorage.removeItem('ghdd_admin_password');
-      alert('Furaha maamulka waa khaldan yahay. Dib u geli furaha saxda ah.');
-      return;
-    }
-
-    const result = await response.json();
-    if(!response.ok) throw new Error(result.error || 'Kaydinta server-ka way fashilantay.');
-
-    if($('cloudStatus')) $('cloudStatus').textContent = 'Xogtu waxay ku kaydsan tahay PostgreSQL.';
-    if($('examStatus')) $('examStatus').textContent = 'Imtixaanka waxaa lagu kaydiyey PostgreSQL.';
-  } catch(e) {
-    console.warn('PostgreSQL sync failed:', e.message);
-    if($('cloudStatus')) $('cloudStatus').textContent = 'Server-ka lama xiriirin; xogta ku meel gaarka ah waxay ku jirtaa browser-ka.';
-  }
+async function api(path,options={}){
+ const password=adminPassword();
+ if(!password)throw new Error('Furaha maamulka lama gelin.');
+ const headers={...(options.headers||{}),'x-admin-password':password};
+ if(options.body)headers['Content-Type']='application/json';
+ const response=await fetch(path,{...options,headers});
+ if(response.status===401){sessionStorage.removeItem('ghdd_admin_password');throw new Error('Furaha maamulka waa khaldan yahay. Dib u geli furaha saxda ah.')}
+ let result={};
+ try{result=await response.json()}catch{}
+ if(!response.ok)throw new Error(result.error||`Codsiga server-ka wuu fashilmay (${response.status}).`);
+ return result;
 }
-
+function saveLocal(){
+ try{localStorage.setItem(KEY,JSON.stringify(state));return true}
+ catch(e){alert('Kaydinta browser-ka way fashilantay. Soo dejiso kaydka JSON.');return false}
+}
+async function persistNow(){
+ if(!saveLocal())throw new Error('Xogta browser-ka lama kaydin.');
+ const result=await api('/api/state',{method:'PUT',body:JSON.stringify({state})});
+ if(!result.ok)throw new Error('Server-ku ma xaqiijin kaydinta.');
+ $('cloudStatus').textContent='Xogta waxaa lagu kaydiyey PostgreSQL.';
+ return true;
+}
 function persist(){
-  try {
-    localStorage.setItem(KEY, JSON.stringify(state));
-  } catch(e) {
-    alert('Kaydinta browser-ka way fashilantay. Soo dejiso kaydka JSON.');
-  }
-
-  if(syncTimer) clearTimeout(syncTimer);
-  syncTimer = setTimeout(syncStateToServer, 500);
+ saveLocal();
+ if(syncTimer)clearTimeout(syncTimer);
+ syncTimer=setTimeout(async()=>{
+  try{await persistNow()}
+  catch(e){console.warn(e);$('cloudStatus').textContent='Xogta browser-ka waa la hayaa, balse server-ku weli ma xaqiijin kaydinta.'}
+ },700);
 }
-
 async function loadRemoteState(){
-  const password = adminPassword();
-  if(!password) return;
-
-  try {
-    const response = await fetch('/api/state', {
-      headers:{'x-admin-password':password}
-    });
-
-    if(response.status === 401){
-      sessionStorage.removeItem('ghdd_admin_password');
-      alert('Furaha maamulka waa khaldan yahay. Bogga dib u fur oo geli furaha saxda ah.');
-      return;
-    }
-
-    const result = await response.json();
-    if(!response.ok) throw new Error(result.error || 'Xogta server-ka lama soo dejin.');
-
-    if(result.state && typeof result.state === 'object'){
-      state = {...state,...result.state};
-      localStorage.setItem(KEY, JSON.stringify(state));
-      refreshAll();
-      if($('cloudStatus')) $('cloudStatus').textContent = 'Xogta PostgreSQL waa la soo raray.';
-    } else {
-      await syncStateToServer();
-    }
-  } catch(e) {
-    console.warn('Could not load PostgreSQL state:', e.message);
-    if($('cloudStatus')) $('cloudStatus').textContent = 'Xiriirka PostgreSQL lama xaqiijin; eeg Railway Deploy Logs.';
+ try{
+  const result=await api('/api/state');
+  if(result.state&&typeof result.state==='object'){
+   state={...state,...result.state};
+   saveLocal();
+   refreshAll();
+   $('cloudStatus').textContent='Xogta PostgreSQL waa la soo raray.';
+  }else{
+   await persistNow();
+   $('cloudStatus').textContent='Kaydka PostgreSQL waa diyaar.';
   }
+ }catch(e){
+  console.warn(e);
+  $('cloudStatus').textContent='Xiriirka PostgreSQL lama xaqiijin: '+e.message;
+ }
 }
-
-function esc(value){
-  return String(value ?? '').replace(/[&<>"']/g, char => ({
-    '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'
-  }[char]));
-}
-
-function uid(){
-  return Date.now().toString(36) + Math.random().toString(36).slice(2,7);
-}
-
 function showTab(id){
-  document.querySelectorAll('.tab').forEach(tab => tab.classList.toggle('active',tab.id===id));
-  document.querySelectorAll('.nav button').forEach(button => button.classList.toggle('active',button.dataset.tab===id));
-  if(id==='bank') renderBank();
-  if(id==='analysis') renderAnalysisSummary();
-  window.scrollTo({top:0,behavior:'smooth'});
+ document.querySelectorAll('.tab').forEach(t=>t.classList.toggle('active',t.id===id));
+ document.querySelectorAll('.nav button').forEach(b=>b.classList.toggle('active',b.dataset.tab===id));
+ if(id==='bank')renderBank();
+ window.scrollTo({top:0,behavior:'smooth'});
 }
+document.querySelectorAll('[data-tab]').forEach(b=>b.addEventListener('click',()=>showTab(b.dataset.tab)));
+document.querySelectorAll('[data-go]').forEach(b=>b.addEventListener('click',()=>showTab(b.dataset.go)));
 
-document.querySelectorAll('[data-tab]').forEach(button => button.addEventListener('click',()=>showTab(button.dataset.tab)));
-document.querySelectorAll('[data-go]').forEach(button => button.addEventListener('click',()=>showTab(button.dataset.go)));
-
-function getExamMeta(){
-  return {
-    name:$('examName').value.trim(),
-    subject:$('subject').value.trim(),
-    className:$('className').value.trim(),
-    totalMarks:Number($('totalMarks').value)||0,
-    instructions:$('instructions').value.trim()
-  };
-}
-
+function getMeta(){return{name:$('examName').value.trim(),subject:$('subject').value.trim(),className:$('className').value.trim(),totalMarks:Number($('totalMarks').value)||0,instructions:$('instructions').value.trim()}}
 function addQuestion(){
-  const text = $('questionText').value.trim();
-  const marks = Number($('questionMarks').value);
-
-  if(!text){
-    alert('Fadlan qor su’aasha.');
-    $('questionText').focus();
-    return;
-  }
-
-  if(!Number.isFinite(marks)||marks<=0){
-    alert('Dhibcaha su’aashu waa inay ka badan yihiin eber.');
-    return;
-  }
-
-  state.questions.push({
-    id:uid(),
-    text,
-    type:$('questionType').value,
-    marks,
-    topic:$('topic').value.trim(),
-    level:$('cognitive').value,
-    answer:$('answerGuide').value.trim()
-  });
-
-  persist();
-  renderQuestions();
-  $('questionText').value='';
-  $('answerGuide').value='';
-  $('topic').value='';
-  $('questionMarks').value=5;
-  $('questionText').focus();
+ const text=$('questionText').value.trim(),marks=Number($('questionMarks').value);
+ if(!text)return alert('Fadlan qor su’aasha.');
+ if(!Number.isFinite(marks)||marks<=0)return alert('Dhibcaha su’aashu waa inay ka badan yihiin eber.');
+ state.questions.push({id:uid(),text,type:$('questionType').value,marks,topic:$('topic').value.trim(),level:$('cognitive').value,answer:$('answerGuide').value.trim()});
+ persist();renderQuestions();
+ $('questionText').value='';$('answerGuide').value='';$('topic').value='';$('questionMarks').value=5;$('questionText').focus();
 }
-
 $('addQuestion').addEventListener('click',addQuestion);
-
-$('clearQuestion').addEventListener('click',()=>{
-  ['questionText','answerGuide','topic'].forEach(id=>$(id).value='');
-  $('questionMarks').value=5;
-});
-
-function renderQuestions(){
-  const out = $('questionList');
-  const preview = $('examPreview');
-
-  if(!state.questions.length){
-    out.className='empty';
-    out.textContent='Weli su’aalo lama darin.';
-    preview.className='empty';
-    preview.textContent='Marka aad su’aalo ku darto, halkan ayaa lagu soo bandhigi doonaa.';
-    return;
-  }
-
-  out.className='list';
-  out.innerHTML=state.questions.map((q,i)=>`
-    <div class="item">
-      <strong>${i+1}. ${esc(q.text)}</strong>
-      <small>${esc(q.type)} · ${q.marks} dhibcood · ${esc(q.topic||'Mawduuc lama cayimin')} · ${esc(q.level)}</small>
-      <div class="item-actions no-print"><button class="btn danger" data-del-q="${q.id}">Ka saar</button></div>
-    </div>
-  `).join('');
-
-  out.querySelectorAll('[data-del-q]').forEach(button=>{
-    button.onclick=()=>{
-      state.questions=state.questions.filter(q=>q.id!==button.dataset.delQ);
-      persist();
-      renderQuestions();
-    };
-  });
-
-  const meta=getExamMeta();
-  const sum=state.questions.reduce((total,q)=>total+q.marks,0);
-
-  preview.className='';
-  preview.innerHTML=`
-    <div style="text-align:center">
-      <h2>${esc(meta.name||'IMTIXAAN')}</h2>
-      <p>${esc(meta.subject)} · ${esc(meta.className)}</p>
-    </div>
-    <p>${esc(meta.instructions)}</p>
-    <hr>
-    ${state.questions.map((q,i)=>`<p><b>${i+1}. ${esc(q.text)}</b> <span style="float:right">(${q.marks} dhibcood)</span></p>`).join('')}
-    <hr>
-    <b>Dhibcaha su'aalaha: ${sum} / ${meta.totalMarks||'—'}</b>
-  `;
-}
-
+$('clearQuestion').addEventListener('click',()=>{['questionText','answerGuide','topic'].forEach(id=>$(id).value='');$('questionMarks').value=5});
 ['examName','subject','className','totalMarks','instructions'].forEach(id=>$(id).addEventListener('input',renderQuestions));
 
-function saveExam(){
-  const meta=getExamMeta();
-
-  if(!meta.name||!meta.subject||!meta.className){
-    alert('Buuxi magaca imtixaanka, maaddada iyo fasalka.');
-    return;
-  }
-
-  if(!state.questions.length){
-    alert('Ku dar ugu yaraan hal su’aal.');
-    return;
-  }
-
-  const sum=state.questions.reduce((total,q)=>total+q.marks,0);
-
-  if(meta.totalMarks>0&&sum!==meta.totalMarks&&!confirm(`Wadarta dhibcaha su’aaluhu waa ${sum}, halka dhibcaha guud yihiin ${meta.totalMarks}. Ma rabtaa inaad sii kaydiso?`)) return;
-
-  const record={
-    id:state.currentExamId||uid(),
-    ...meta,
-    questions:JSON.parse(JSON.stringify(state.questions)),
-    updatedAt:new Date().toISOString()
-  };
-
-  const index=state.exams.findIndex(exam=>exam.id===record.id);
-  if(index>=0) state.exams[index]=record;
-  else state.exams.unshift(record);
-
-  state.currentExamId=record.id;
-  persist();
-  renderSavedExams();
-  $('examStatus').textContent='Imtixaanka waa la kaydinayaa.';
-  renderHomeStats();
+function renderQuestions(){
+ const out=$('questionList'),preview=$('examPreview');
+ if(!state.questions.length){out.className='empty';out.textContent='Weli su’aalo lama darin.';preview.className='empty';preview.textContent='Marka aad su'aalo ku darto, halkan ayay ka muuqanayaan.';return}
+ out.className='list';
+ out.innerHTML=state.questions.map((q,i)=>`<div class="item"><strong>${i+1}. ${esc(q.text)}</strong><small>${esc(q.type)} · ${q.marks} dhibcood · ${esc(q.topic||'Mawduuc lama cayimin')} · ${esc(q.level)}</small><div class="item-actions no-print"><button class="btn danger" data-del-q="${esc(q.id)}">Ka saar</button></div></div>`).join('');
+ out.querySelectorAll('[data-del-q]').forEach(b=>b.onclick=()=>{state.questions=state.questions.filter(q=>q.id!==b.dataset.delQ);persist();renderQuestions()});
+ const m=getMeta(),sum=state.questions.reduce((n,q)=>n+Number(q.marks||0),0);
+ preview.className='';
+ preview.innerHTML=`<div style="text-align:center"><h2>${esc(m.name||'IMTIXAAN')}</h2><p>${esc(m.subject)} · ${esc(m.className)}</p></div><p>${esc(m.instructions)}</p><hr>${state.questions.map((q,i)=>`<p><b>${i+1}. ${esc(q.text)}</b><span style="float:right">(${q.marks} dhibcood)</span></p>`).join('')}<hr><b>Dhibcaha su'aalaha: ${sum} / ${m.totalMarks||'—'}</b>`;
 }
-
+async function saveExam(){
+ if(saving)return;
+ const m=getMeta();
+ if(!m.name||!m.subject||!m.className)return alert('Buuxi magaca imtixaanka, maaddada iyo fasalka.');
+ if(!state.questions.length)return alert('Ku dar ugu yaraan hal su’aal.');
+ const sum=state.questions.reduce((n,q)=>n+Number(q.marks||0),0);
+ if(m.totalMarks>0&&sum!==m.totalMarks&&!confirm(`Wadarta dhibcaha su’aaluhu waa ${sum}, halka dhibcaha guud yihiin ${m.totalMarks}. Ma sii wadnaa?`))return;
+ const record={id:state.currentExamId||uid(),...m,questions:JSON.parse(JSON.stringify(state.questions)),updatedAt:new Date().toISOString()};
+ const index=state.exams.findIndex(e=>e.id===record.id);
+ if(index>=0)state.exams[index]=record;else state.exams.unshift(record);
+ state.currentExamId=record.id;
+ saving=true;$('saveExam').disabled=true;$('examStatus').textContent='Imtixaanka ayaa la kaydinayaa...';
+ try{
+  await persistNow();
+  $('examStatus').textContent='Guul: imtixaanka waxaa lagu kaydiyey PostgreSQL. Hadda waxaad kaydin kartaa su’aalaha kaydka.';
+  renderSavedExams();renderHomeStats();
+ }catch(e){
+  $('examStatus').textContent='Kaydinta server-ka way fashilantay: '+e.message;
+  alert('Imtixaanka server-ka laguma xaqiijin kaydintiisa. Hubi furaha maamulka iyo Railway, kadib mar kale isku day.');
+ }finally{saving=false;$('saveExam').disabled=false}
+}
 $('saveExam').addEventListener('click',saveExam);
 
 function renderSavedExams(){
-  const element=$('savedExams');
-
-  if(!state.exams.length){
-    element.className='empty';
-    element.textContent='Weli imtixaan lama kaydin.';
-    return;
-  }
-
-  element.className='list';
-  element.innerHTML=state.exams.map(exam=>`
-    <div class="item">
-      <strong>${esc(exam.name)}</strong>
-      <small>${esc(exam.subject)} · ${esc(exam.className)} · ${exam.questions.length} su’aalood</small>
-      <div class="item-actions no-print">
-        <button class="btn secondary" data-open-exam="${exam.id}">Fur</button>
-        <button class="btn danger" data-del-exam="${exam.id}">Tirtir</button>
-      </div>
-    </div>
-  `).join('');
-
-  element.querySelectorAll('[data-open-exam]').forEach(button=>{
-    button.onclick=()=>{
-      const exam=state.exams.find(item=>item.id===button.dataset.openExam);
-      if(!exam) return;
-
-      state.currentExamId=exam.id;
-      $('examName').value=exam.name;
-      $('subject').value=exam.subject;
-      $('className').value=exam.className;
-      $('totalMarks').value=exam.totalMarks;
-      $('instructions').value=exam.instructions;
-      state.questions=JSON.parse(JSON.stringify(exam.questions));
-      renderQuestions();
-      showTab('builder');
-    };
-  });
-
-  element.querySelectorAll('[data-del-exam]').forEach(button=>{
-    button.onclick=()=>{
-      if(confirm('Ma tirtiraysaa imtixaankan?')){
-        state.exams=state.exams.filter(exam=>exam.id!==button.dataset.delExam);
-        if(state.currentExamId===button.dataset.delExam) state.currentExamId=null;
-        persist();
-        renderSavedExams();
-        renderHomeStats();
-      }
-    };
-  });
+ const el=$('savedExams');
+ if(!state.exams.length){el.className='empty';el.textContent='Weli imtixaan lama kaydin.';return}
+ el.className='list';
+ el.innerHTML=state.exams.map(e=>`<div class="item"><strong>${esc(e.name)}</strong><small>${esc(e.subject)} · ${esc(e.className)} · ${(e.questions||[]).length} su’aalood</small><div class="item-actions no-print"><button class="btn secondary" data-open-exam="${esc(e.id)}">Fur</button><button class="btn danger" data-del-exam="${esc(e.id)}">Tirtir</button></div></div>`).join('');
+ el.querySelectorAll('[data-open-exam]').forEach(b=>b.onclick=()=>{
+  const e=state.exams.find(x=>x.id===b.dataset.openExam);if(!e)return;
+  state.currentExamId=e.id;$('examName').value=e.name||'';$('subject').value=e.subject||'';$('className').value=e.className||'';$('totalMarks').value=e.totalMarks||100;$('instructions').value=e.instructions||'';state.questions=JSON.parse(JSON.stringify(e.questions||[]));renderQuestions();showTab('builder');
+ });
+ el.querySelectorAll('[data-del-exam]').forEach(b=>b.onclick=async()=>{
+  if(!confirm('Ma tirtiraysaa imtixaankan?'))return;
+  const old=state.exams;state.exams=old.filter(e=>e.id!==b.dataset.delExam);
+  if(state.currentExamId===b.dataset.delExam)state.currentExamId=null;
+  try{await persistNow();renderSavedExams();renderHomeStats()}catch(e){state.exams=old;alert('Tirtiridda server-ka lama xaqiijin: '+e.message)}
+ });
 }
+$('printExam').addEventListener('click',()=>{if(!state.questions.length)return alert('Marka hore ku dar su’aalaha.');renderQuestions();window.print()});
 
-function printExam(){
-  if(!state.questions.length){
-    alert('Marka hore ku dar su’aalaha.');
-    return;
-  }
-  renderQuestions();
-  window.print();
-}
-
-$('printExam').addEventListener('click',printExam);
-
-$('saveToBank').addEventListener('click',()=>{
-  if(!state.questions.length){
-    alert('Ma jiraan su’aalo la kaydin karo.');
-    return;
-  }
-
-  let count=0;
-
-  state.questions.forEach(question=>{
-    if(!state.bank.some(item=>item.text.toLowerCase()===question.text.toLowerCase()&&item.topic===question.topic)){
-      state.bank.unshift({
-        ...question,
-        id:uid(),
-        subject:$('subject').value.trim(),
-        className:$('className').value.trim(),
-        savedAt:new Date().toISOString()
-      });
-      count++;
-    }
-  });
-
-  persist();
-  renderBank();
-  alert(`${count} su’aalood ayaa lagu daray kaydka.`);
+$('saveToBank').addEventListener('click',async()=>{
+ if(saving)return;
+ if(!state.questions.length)return alert('Ma jiraan su’aalo la kaydin karo.');
+ if(!state.currentExamId||!state.exams.some(e=>e.id===state.currentExamId)){
+  alert('Marka hore taabo “1. Kaydi imtixaanka”. Markuu guulaysto, dabadeed taabo “2. Ku kaydi su’aalaha kaydka”.');
+  return;
+ }
+ const exam=state.exams.find(e=>e.id===state.currentExamId);
+ if(!exam)return alert('Imtixaanka hadda jira lama helin. Fadlan mar kale kaydi imtixaanka.');
+ const old=JSON.parse(JSON.stringify(state.bank));let count=0;
+ state.questions.forEach(q=>{
+  const exists=state.bank.some(b=>String(b.text||'').trim().toLowerCase()===String(q.text||'').trim().toLowerCase()&&String(b.topic||'')===String(q.topic||'')&&String(b.subject||'')===String(exam.subject||'')&&String(b.className||'')===String(exam.className||''));
+  if(!exists){state.bank.unshift({...q,id:uid(),subject:exam.subject,className:exam.className,examId:exam.id,savedAt:new Date().toISOString()});count++}
+ });
+ if(count===0)return alert('Su’aalahan hore ayay ugu jireen kaydka; nuqul cusub laguma darin.');
+ saving=true;$('saveToBank').disabled=true;$('examStatus').textContent='Su’aalaha ayaa lagu kaydinayaa PostgreSQL...';
+ try{
+  await persistNow();
+  renderBank();renderHomeStats();
+  $('examStatus').textContent=`Guul: ${count} su’aalood ayaa lagu kaydiyey PostgreSQL.`;
+  alert(`Guul! ${count} su’aalood ayaa lagu kaydiyey kaydka PostgreSQL.`);
+ }catch(e){
+  state.bank=old;saveLocal();
+  $('examStatus').textContent='Kaydka su’aalaha server-ka lama xaqiijin: '+e.message;
+  alert('Su’aalaha server-ka laguma xaqiijin kaydintooda. Hubi xiriirka Railway, kadib mar kale isku day.');
+ }finally{saving=false;$('saveToBank').disabled=false}
 });
 
 $('addBlueprint').addEventListener('click',()=>{
-  const topic=$('bpTopic').value.trim();
-  const percent=Number($('bpPercent').value);
-  const count=Number($('bpCount').value);
-
-  if(!topic){alert('Geli mawduuca/cutubka.');return;}
-  if(percent<0||percent>100||!Number.isFinite(percent)){alert('Saamigu waa inuu u dhexeeyaa 0 iyo 100.');return;}
-  if(count<1){alert('Tirada su’aaluhu waa inay ugu yaraan 1 noqotaa.');return;}
-
-  state.blueprints.push({
-    id:uid(),
-    topic,
-    percent,
-    level:$('bpLevel').value,
-    count
-  });
-
-  persist();
-  $('bpTopic').value='';
-  renderBlueprint();
+ const topic=$('bpTopic').value.trim(),percent=Number($('bpPercent').value),count=Number($('bpCount').value);
+ if(!topic)return alert('Geli mawduuca/cutubka.');
+ if(percent<0||percent>100||!Number.isFinite(percent))return alert('Saamigu waa inuu u dhexeeyaa 0 iyo 100.');
+ if(count<1)return alert('Tirada su’aaluhu waa inay ugu yaraan 1 noqotaa.');
+ state.blueprints.push({id:uid(),topic,percent,level:$('bpLevel').value,count});persist();$('bpTopic').value='';renderBlueprint();
 });
-
 $('autoBlueprint').addEventListener('click',()=>{
-  const groups={};
-
-  state.questions.forEach(question=>{
-    const topic=question.topic||'Mawduuc aan la cayimin';
-    groups[topic]=(groups[topic]||0)+question.marks;
-  });
-
-  const total=Object.values(groups).reduce((sum,marks)=>sum+marks,0);
-
-  if(!total){
-    alert('Marka hore ku dar su’aalo oo u qor mawduucyadooda.');
-    return;
-  }
-
-  state.blueprints=Object.entries(groups).map(([topic,marks])=>({
-    id:uid(),
-    topic,
-    percent:Math.round(marks/total*100),
-    level:'Isku-dhafan',
-    count:state.questions.filter(q=>(q.topic||'Mawduuc aan la cayimin')===topic).length
-  }));
-
-  persist();
-  renderBlueprint();
+ const groups={};state.questions.forEach(q=>{const t=q.topic||'Mawduuc aan la cayimin';groups[t]=(groups[t]||0)+Number(q.marks||0)});
+ const total=Object.values(groups).reduce((a,b)=>a+b,0);if(!total)return alert('Marka hore ku dar su’aalo oo u qor mawduucyadooda.');
+ state.blueprints=Object.entries(groups).map(([topic,marks])=>({id:uid(),topic,percent:Math.round(marks/total*100),level:'Isku-dhafan',count:state.questions.filter(q=>(q.topic||'Mawduuc aan la cayimin')===topic).length}));
+ persist();renderBlueprint();
 });
-
 function renderBlueprint(){
-  const element=$('blueprintList');
-  const sum=state.blueprints.reduce((total,item)=>total+item.percent,0);
-
-  $('blueprintSummary').textContent=`Wadarta saamiyada qorshaha: ${sum}% ${sum===100?'— qorshuhu wuxuu gaaray 100%.':sum<100?'— weli kama gaarin 100%.':'— wadarta waxay ka badan tahay 100%.'}`;
-
-  if(!state.blueprints.length){
-    element.className='empty';
-    element.textContent='Qorshaha aad samayso ayaa halkan ka muuqan doona.';
-    return;
-  }
-
-  element.className='table-wrap';
-  element.innerHTML=`
-    <table>
-      <thead><tr><th>Mawduuca</th><th>Saami</th><th>Heerka</th><th>Tirada</th><th></th></tr></thead>
-      <tbody>
-        ${state.blueprints.map(item=>`
-          <tr>
-            <td>${esc(item.topic)}</td><td>${item.percent}%</td><td>${esc(item.level)}</td><td>${item.count}</td>
-            <td><button class="btn danger no-print" data-del-bp="${item.id}">Ka saar</button></td>
-          </tr>
-        `).join('')}
-      </tbody>
-    </table>
-  `;
-
-  element.querySelectorAll('[data-del-bp]').forEach(button=>{
-    button.onclick=()=>{
-      state.blueprints=state.blueprints.filter(item=>item.id!==button.dataset.delBp);
-      persist();
-      renderBlueprint();
-    };
-  });
+ const el=$('blueprintList'),sum=state.blueprints.reduce((n,b)=>n+Number(b.percent||0),0);
+ $('blueprintSummary').textContent=`Wadarta saamiyada qorshaha: ${sum}% ${sum===100?'— qorshuhu wuxuu gaaray 100%.':sum<100?'— weli kama gaarin 100%.':'— wadarta waxay ka badan tahay 100%.'}`;
+ if(!state.blueprints.length){el.className='empty';el.textContent='Qorshaha aad samayso ayaa halkan ka muuqan doona.';return}
+ el.className='table-wrap';el.innerHTML=`<table><thead><tr><th>Mawduuca</th><th>Saami</th><th>Heerka</th><th>Tirada</th><th></th></tr></thead><tbody>${state.blueprints.map(b=>`<tr><td>${esc(b.topic)}</td><td>${b.percent}%</td><td>${esc(b.level)}</td><td>${b.count}</td><td><button class="btn danger no-print" data-del-bp="${esc(b.id)}">Ka saar</button></td></tr>`).join('')}</tbody></table>`;
+ el.querySelectorAll('[data-del-bp]').forEach(b=>b.onclick=()=>{state.blueprints=state.blueprints.filter(x=>x.id!==b.dataset.delBp);persist();renderBlueprint()});
 }
-
-$('bankSearch').addEventListener('input',renderBank);
-$('loadBank').addEventListener('click',renderBank);
-
+$('bankSearch').addEventListener('input',renderBank);$('loadBank').addEventListener('click',renderBank);
 function renderBank(){
-  const term=($('bankSearch')?.value||'').trim().toLowerCase();
-  const rows=state.bank.filter(q=>[q.text,q.topic,q.subject,q.className,q.type].join(' ').toLowerCase().includes(term));
-  const element=$('bankList');
-
-  if(!rows.length){
-    element.className='empty';
-    element.textContent='Wax su’aalo ah lagama helin kaydka.';
-    return;
-  }
-
-  element.className='list';
-  element.innerHTML=rows.map(q=>`
-    <div class="item">
-      <strong>${esc(q.text)}</strong>
-      <small>${esc(q.subject||'Maaddo lama cayimin')} · ${esc(q.className||'Fasal lama cayimin')} · ${esc(q.topic||'Mawduuc lama cayimin')} · ${q.marks} dhibcood</small>
-      <div class="item-actions no-print">
-        <button class="btn secondary" data-use-q="${q.id}">Ku dar imtixaanka</button>
-        <button class="btn danger" data-del-bank="${q.id}">Tirtir</button>
-      </div>
-    </div>
-  `).join('');
-
-  element.querySelectorAll('[data-use-q]').forEach(button=>{
-    button.onclick=()=>{
-      const question=state.bank.find(item=>item.id===button.dataset.useQ);
-      if(question){
-        state.questions.push({...question,id:uid()});
-        persist();
-        renderQuestions();
-        showTab('builder');
-      }
-    };
-  });
-
-  element.querySelectorAll('[data-del-bank]').forEach(button=>{
-    button.onclick=()=>{
-      state.bank=state.bank.filter(item=>item.id!==button.dataset.delBank);
-      persist();
-      renderBank();
-      renderHomeStats();
-    };
-  });
+ const term=($('bankSearch').value||'').trim().toLowerCase();
+ const rows=state.bank.filter(q=>[q.text,q.topic,q.subject,q.className,q.type].join(' ').toLowerCase().includes(term));
+ const el=$('bankList');
+ if(!rows.length){el.className='empty';el.textContent='Wax su’aalo ah lagama helin kaydka.';return}
+ el.className='list';el.innerHTML=rows.map(q=>`<div class="item"><strong>${esc(q.text)}</strong><small>${esc(q.subject||'Maaddo lama cayimin')} · ${esc(q.className||'Fasal lama cayimin')} · ${esc(q.topic||'Mawduuc lama cayimin')} · ${q.marks} dhibcood</small><div class="item-actions no-print"><button class="btn secondary" data-use-q="${esc(q.id)}">Ku dar imtixaanka</button><button class="btn danger" data-del-bank="${esc(q.id)}">Tirtir</button></div></div>`).join('');
+ el.querySelectorAll('[data-use-q]').forEach(b=>b.onclick=()=>{const q=state.bank.find(x=>x.id===b.dataset.useQ);if(q){state.questions.push({...q,id:uid()});persist();renderQuestions();showTab('builder')}});
+ el.querySelectorAll('[data-del-bank]').forEach(b=>b.onclick=async()=>{
+  const old=state.bank;state.bank=old.filter(q=>q.id!==b.dataset.delBank);
+  try{await persistNow();renderBank();renderHomeStats()}catch(e){state.bank=old;alert('Tirtiridda server-ka lama xaqiijin: '+e.message)}
+ });
 }
-
 function analyze(){
-  const questions=state.questions;
-  const notes=[];
-
-  if(!questions.length) return ['Weli su’aalo lama darin.'];
-
-  const total=questions.reduce((sum,q)=>sum+q.marks,0);
-
-  if(questions.some(q=>q.text.length<15)){
-    notes.push('Dib u eeg su’aalaha aadka u gaaban; hubi in macnahoodu cad yahay.');
-  }
-
-  const seen=new Set();
-  let duplicates=0;
-
-  questions.forEach(question=>{
-    const text=question.text.toLowerCase().replace(/[^\p{L}\p{N}]+/gu,' ').trim();
-    if(seen.has(text)) duplicates++;
-    seen.add(text);
-  });
-
-  if(duplicates) notes.push(`${duplicates} su’aalood ayaa u muuqda kuwo isku mid ah ama soo noqnoqday.`);
-  else notes.push('Lama helin su’aalo si buuxda isku mid ah marka qoraalka la barbar dhigo.');
-
-  if(questions.some(q=>!q.topic)) notes.push('Su’aalo qaar ma laha mawduuc/cutub; ku dar si qorshaha loo hubiyo.');
-  if(questions.some(q=>!q.answer)) notes.push('Su’aalo qaar ma laha jawaab sax ah ama tilmaamo sixid; macallinku ha dib u eego.');
-
-  const meta=getExamMeta();
-
-  if(meta.totalMarks&&total!==meta.totalMarks){
-    notes.push(`Wadarta dhibcaha su’aalaha (${total}) ma waafaqsana dhibcaha guud (${meta.totalMarks}).`);
-  } else {
-    notes.push(`Wadarta dhibcaha su’aalaha: ${total}.`);
-  }
-
-  const levels={};
-  questions.forEach(q=>levels[q.level]=(levels[q.level]||0)+1);
-  notes.push('Qaybinta heerarka garashada: '+Object.entries(levels).map(([level,count])=>`${level} (${count})`).join(', '));
-
-  return notes;
+ const qs=state.questions,notes=[];if(!qs.length)return['Weli su’aalo lama darin.'];
+ const total=qs.reduce((n,q)=>n+Number(q.marks||0),0);
+ if(qs.some(q=>String(q.text||'').length<15))notes.push('Dib u eeg su’aalaha aadka u gaaban; hubi in macnahoodu cad yahay.');
+ const seen=new Set();let duplicates=0;
+ qs.forEach(q=>{const t=String(q.text||'').toLowerCase().replace(/[^\p{L}\p{N}]+/gu,' ').trim();if(seen.has(t))duplicates++;seen.add(t)});
+ notes.push(duplicates?`${duplicates} su’aalood ayaa u muuqda kuwo soo noqnoqday.`:'Lama helin su’aalo qoraalkoodu si buuxda isku mid yahay.');
+ if(qs.some(q=>!q.topic))notes.push('Su’aalo qaar ma laha mawduuc/cutub.');
+ if(qs.some(q=>!q.answer))notes.push('Su’aalo qaar ma laha jawaab ama tilmaamo sixid.');
+ const m=getMeta();notes.push(m.totalMarks&&total!==m.totalMarks?`Wadarta dhibcaha su’aalaha (${total}) ma waafaqsana dhibcaha guud (${m.totalMarks}).`:`Wadarta dhibcaha su’aalaha: ${total}.`);
+ const levels={};qs.forEach(q=>levels[q.level]=(levels[q.level]||0)+1);
+ notes.push('Qaybinta heerarka garashada: '+Object.entries(levels).map(([k,v])=>`${k} (${v})`).join(', '));
+ return notes;
 }
-
-function renderAnalysisSummary(){
-  const element=$('analysisResult');
-  if(element&&element.classList.contains('empty')){
-    element.textContent='Riix “Falanqee su’aalaha hadda jira” si aad u hesho talooyinka hubinta tayada.';
-  }
-}
-
 $('runAnalysis').addEventListener('click',()=>{
-  const notes=analyze();
-  const element=$('analysisResult');
-  element.className='list';
-  element.innerHTML=notes.map((note,index)=>`<div class="item">${index+1}. ${esc(note)}</div>`).join('');
+ const notes=analyze(),el=$('analysisResult');el.className='list';el.innerHTML=notes.map((n,i)=>`<div class="item">${i+1}. ${esc(n)}</div>`).join('');
 });
-
 function renderHomeStats(){
-  $('homeStats').innerHTML=`
-    <div class="stat"><b>${state.exams.length}</b>Imtixaan</div>
-    <div class="stat"><b>${state.bank.length}</b>Su’aalo kaydsan</div>
-    <div class="stat"><b>${state.questions.length}</b>Su’aalo hadda jira</div>
-  `;
+ $('homeStats').innerHTML=`<div class="stat"><b>${state.exams.length}</b>Imtixaan</div><div class="stat"><b>${state.bank.length}</b>Su’aalo kaydsan</div><div class="stat"><b>${state.questions.length}</b>Su’aalo hadda jira</div>`;
 }
-
-function download(name,data,type='application/json'){
-  const blob=new Blob([data],{type});
-  const url=URL.createObjectURL(blob);
-  const anchor=document.createElement('a');
-  anchor.href=url;
-  anchor.download=name;
-  document.body.appendChild(anchor);
-  anchor.click();
-  anchor.remove();
-  setTimeout(()=>URL.revokeObjectURL(url),1000);
+function download(name,data){
+ const blob=new Blob([data],{type:'application/json'}),url=URL.createObjectURL(blob),a=document.createElement('a');
+ a.href=url;a.download=name;document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),1000);
 }
-
-$('exportData').addEventListener('click',()=>{
-  download('GHDD_Assessment_Pro_Backup.json',JSON.stringify(state,null,2));
-});
-
-$('downloadBank').addEventListener('click',()=>{
-  download('GHDD_Question_Bank.json',JSON.stringify(state.bank,null,2));
-});
-
+$('exportData').addEventListener('click',()=>download('GHDD_Assessment_Pro_Backup.json',JSON.stringify(state,null,2)));
+$('downloadBank').addEventListener('click',()=>download('GHDD_Question_Bank.json',JSON.stringify(state.bank,null,2)));
 function importJson(file,handler){
-  if(!file) return;
-  const reader=new FileReader();
-
-  reader.onload=()=>{
-    try {
-      handler(JSON.parse(reader.result));
-    } catch(e) {
-      alert('Faylka JSON lama akhrin karin. Hubi in faylku sax yahay.');
-    }
-  };
-
-  reader.readAsText(file);
+ if(!file)return;const reader=new FileReader();
+ reader.onload=()=>{try{handler(JSON.parse(reader.result))}catch(e){alert('Faylka JSON lama akhrin karin. Hubi in faylku sax yahay.')}};
+ reader.readAsText(file);
 }
-
-$('importData').addEventListener('change',event=>{
-  importJson(event.target.files[0],data=>{
-    if(!data||typeof data!=='object') throw Error();
-
-    if(!confirm('Soo gelinta xogtu waxay beddeli kartaa xogta hadda jirta. Ma sii wadnaa?')) return;
-
-    state={...state,...data};
-    persist();
-    refreshAll();
-    alert('Kaydka xogta waa la soo geliyey.');
-    event.target.value='';
-  });
+$('importData').addEventListener('change',e=>{
+ importJson(e.target.files[0],async data=>{
+  if(!data||typeof data!=='object')throw Error();
+  if(!confirm('Soo gelinta xogtu waxay beddeli kartaa xogta hadda jirta. Ma sii wadnaa?'))return;
+  const old=state;state={...state,...data};
+  try{await persistNow();refreshAll();alert('Kaydka xogta waa la soo geliyey oo server-ku xaqiijiyey.')}
+  catch(err){state=old;saveLocal();alert('Xogta server-ka lama kaydin: '+err.message)}
+  e.target.value='';
+ });
 });
-
-$('bankFile').addEventListener('change',event=>{
-  importJson(event.target.files[0],data=>{
-    const rows=Array.isArray(data)?data:(data&&Array.isArray(data.bank)?data.bank:null);
-    if(!rows) throw Error();
-
-    let count=0;
-
-    rows.forEach(question=>{
-      if(question&&question.text&&!state.bank.some(item=>item.text===question.text)){
-        state.bank.push({...question,id:question.id||uid()});
-        count++;
-      }
-    });
-
-    persist();
-    renderBank();
-    alert(`${count} su’aalood ayaa la soo geliyey.`);
-    event.target.value='';
-  });
+$('bankFile').addEventListener('change',e=>{
+ importJson(e.target.files[0],async data=>{
+  const rows=Array.isArray(data)?data:(data&&Array.isArray(data.bank)?data.bank:null);if(!rows)throw Error();
+  const old=JSON.parse(JSON.stringify(state.bank));let count=0;
+  rows.forEach(q=>{if(q&&q.text&&!state.bank.some(x=>x.text===q.text)){state.bank.push({...q,id:q.id||uid()});count++}});
+  try{await persistNow();renderBank();renderHomeStats();alert(`${count} su’aalood ayaa la soo geliyey oo server-ku xaqiijiyey.`)}
+  catch(err){state.bank=old;saveLocal();alert('Kaydinta server-ka way fashilantay: '+err.message)}
+  e.target.value='';
+ });
 });
-
-function refreshAll(){
-  renderQuestions();
-  renderSavedExams();
-  renderBlueprint();
-  renderBank();
-  renderHomeStats();
-}
-
-loadState();
-refreshAll();
-loadRemoteState();
+function refreshAll(){renderQuestions();renderSavedExams();renderBlueprint();renderBank();renderHomeStats()}
+loadState();refreshAll();loadRemoteState();
 </script>
 </body>
 </html>
