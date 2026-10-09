@@ -162,6 +162,17 @@ footer{text-align:center;color:#65738a;padding:22px;font-size:13px}
  .matching-choice-cell{vertical-align:top!important}
 }
 
+
+.lesson-plan-card{border:1px solid #222;padding:16px;margin:18px 0;background:#fff;color:#111;break-inside:avoid-page}
+.lesson-plan-card h3,.lesson-plan-card h4{color:#111;text-align:center;margin:6px 0}
+.lesson-plan-card table{width:100%;border-collapse:collapse;margin:8px 0}
+.lesson-plan-card th,.lesson-plan-card td{border:1px solid #333;padding:6px;vertical-align:top;text-align:left}
+.lesson-plan-card .lp-section-title{text-align:center;font-weight:bold;border:1px solid #333;padding:5px;margin-top:10px}
+.lesson-plan-card .lp-meta{display:grid;grid-template-columns:1fr 1fr;gap:6px}
+.lesson-plan-card ol,.lesson-plan-card ul{margin-top:4px}
+.lesson-plan-tools{display:flex;gap:8px;flex-wrap:wrap}
+@media print{.lesson-plan-card{break-inside:auto}.lesson-plan-card h3,.lesson-plan-card h4{break-after:avoid}}
+
 </style>
 </head>
 <body>
@@ -176,6 +187,7 @@ footer{text-align:center;color:#65738a;padding:22px;font-size:13px}
 <button data-tab="builder">📝 Imtixaanka</button>
 <button data-tab="bank">📚 Kaydka su'aalaha</button>
 <button data-tab="books">📖 Buugaagta PDF/OCR</button>
+<button data-tab="lessonplan">🗓️ Lesson Plan + Lesson Note</button>
 <button data-tab="analysis">📊 Falanqayn</button>
 </nav>
 
@@ -308,6 +320,45 @@ PDF weyn wuxuu u baahan karaa xusuus badan, waqti dheeraad ah iyo kayd PostgreSQ
 <div id="bankList" class="list"></div>
 <button id="downloadBackup" class="secondary">Soo dejiso kaydka JSON</button>
 </div>
+</section>
+
+
+<section class="tab" id="lessonplan">
+  <div class="panel">
+    <h2>🗓️ Lesson Plan + Lesson Note</h2>
+    <p>Upload garee Scheme of Work-ka maaddada. AI-gu wuxuu ka diyaarinayaa qorshaha casharrada sannadka oo dhan iyo lesson note kooban oo la jaanqaadaya objectives-ka cashar kasta, isagoo raacaya qaabka sample-ka aad soo dirtay.</p>
+    <div class="notice"><b>Muhiim:</b> Scheme of Work ayaa ah isha ugu weyn. AI-gu waa inuu raacaa cutubyada, mawduucyada iyo kala-horraynta ku qoran. Natiijada dib u eeg ka hor inta aan la isticmaalin.</div>
+    <div class="grid">
+      <div><label for="lpTeacher">Teacher name</label><input id="lpTeacher" placeholder="Magaca macallinka"></div>
+      <div><label for="lpSubject">Subject</label><input id="lpSubject" placeholder="Physics"></div>
+      <div><label for="lpClass">Class</label><input id="lpClass" placeholder="Form 3"></div>
+      <div><label for="lpYear">Academic year</label><input id="lpYear" value="2026-2027"></div>
+      <div><label for="lpLanguage">Lesson plan language</label><select id="lpLanguage"><option value="auto">Raac luqadda Scheme of Work (Auto)</option><option value="en">English</option><option value="so">Soomaali</option><option value="ar">العربية</option></select></div>
+      <div><label for="lpDuration">Lesson duration (minutes)</label><input id="lpDuration" type="number" min="20" max="180" value="40"></div>
+      <div><label for="lpPerWeek">Lessons per week</label><input id="lpPerWeek" type="number" min="1" max="10" value="3"></div>
+      <div><label for="lpTerms">Terms per year</label><select id="lpTerms"><option value="3" selected>3 terms</option><option value="2">2 terms</option><option value="4">4 terms</option></select></div>
+    </div>
+    <label for="schemeFile">Upload Scheme of Work (PDF, TXT, CSV)</label>
+    <input id="schemeFile" type="file" accept=".pdf,.txt,.csv,application/pdf,text/plain,text/csv">
+    <p id="schemeFileStatus" class="muted">Weli Scheme of Work lama dooran.</p>
+    <label for="schemeText">Scheme of Work text (halkan waad ku dhejin kartaa ama wax ka beddeli kartaa)</label>
+    <textarea id="schemeText" style="min-height:180px" placeholder="Unit, week, topic, sub-topic, objectives, term..."></textarea>
+    <div class="paper-tools">
+      <button id="readScheme" class="secondary">📄 Akhri faylka</button>
+      <button id="generateLessonYear">✨ Samee Lesson Plans + Lesson Notes sannadka oo dhan</button>
+    </div>
+    <p id="lpStatus" class="muted" role="status"></p>
+  </div>
+  <div class="panel">
+    <h3>Waxa la soo saarayo</h3>
+    <ul>
+      <li>Qorshaha sannadka: term, week, unit, lesson title iyo lesson/session number.</li>
+      <li>Lesson plan: introduction, objectives, teaching methods, learning aids, evaluation iyo time management.</li>
+      <li>Lesson note: summary, headings/key points iyo homework, oo ku xiran objectives-ka.</li>
+      <li>Jadwalka waqtiga casharka oo wadartiisu la mid tahay muddada aad gelisay.</li>
+    </ul>
+  </div>
+  <div id="lessonPlanOutput" class="panel hidden"></div>
 </section>
 
 <section class="tab" id="analysis">
@@ -904,6 +955,136 @@ $('downloadBackup').onclick=()=>{
   const a=document.createElement('a');
   a.href=url;a.download='GHDD_Assessment_Backup.json';a.click();
   URL.revokeObjectURL(url);
+};
+
+
+// Lesson Plan + Lesson Note feature
+let generatedLessonPackage = null;
+const lpEsc = value => String(value ?? '').replace(/[&<>"']/g, ch => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[ch]));
+const lpEl = id => document.getElementById(id);
+
+lpEl('readScheme').onclick = async () => {
+  const file = lpEl('schemeFile').files?.[0];
+  if (!file) return alert('Marka hore dooro Scheme of Work PDF, TXT ama CSV.');
+  const status = lpEl('schemeFileStatus');
+  try {
+    status.textContent = 'Faylka ayaa la akhrinayaa...';
+    if (/\.pdf$/i.test(file.name) || file.type === 'application/pdf') {
+      if (!window.pdfjsLib) throw new Error('PDF.js lama helin. Hubi internetka ama ku dheji qoraalka sanduuqa.');
+      pdfjsLib.GlobalWorkerOptions.workerSrc='https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+      const pdf = await pdfjsLib.getDocument({data: await file.arrayBuffer()}).promise;
+      const chunks = [];
+      let worker = null;
+      for (let n=1; n<=pdf.numPages; n++) {
+        const page=await pdf.getPage(n);
+        const content=await page.getTextContent();
+        let text=content.items.map(x=>x.str||'').join(' ').trim();
+        if(text.length<25 && window.Tesseract){
+          if(!worker) worker=await Tesseract.createWorker('eng');
+          const viewport=page.getViewport({scale:1.35});
+          const canvas=document.createElement('canvas');
+          canvas.width=Math.ceil(viewport.width);canvas.height=Math.ceil(viewport.height);
+          await page.render({canvasContext:canvas.getContext('2d'),viewport}).promise;
+          const result=await worker.recognize(canvas);
+          text=(result.data.text||'').trim();
+          canvas.width=canvas.height=1;
+        }
+        chunks.push(`\n[Page ${n}]\n${text}`);
+        status.textContent=`Akhrinta Scheme of Work: bogga ${n}/${pdf.numPages}`;
+      }
+      if(worker) await worker.terminate();
+      lpEl('schemeText').value=chunks.join('\n').trim();
+    } else {
+      lpEl('schemeText').value=await file.text();
+    }
+    status.textContent=`Waa la akhriyey: ${file.name}. Qoraalka waa la geliyey sanduuqa; hubi ka hor samaynta.`;
+  } catch(e) {
+    status.textContent='Akhrinta faylka way fashilantay: '+e.message;
+    alert('Scheme of Work: '+e.message);
+  }
+};
+
+function lpList(items) {
+  return Array.isArray(items) && items.length ? `<ul>${items.map(x=>`<li>${lpEsc(x)}</li>`).join('')}</ul>` : '<p>—</p>';
+}
+function renderLessonPackage(pkg) {
+  const output=lpEl('lessonPlanOutput');
+  const lessons=pkg.lessons||[];
+  let content=`<div class="notice"><b>Waxaa la sameeyey ${lessons.length} cashar.</b> Dib u eeg qorshaha iyo qoraallada casharrada. Hubi in dhammaan mawduucyada Scheme of Work lagu daboolay.</div>
+    <h2>${lpEsc(pkg.subject||'')} — ${lpEsc(pkg.className||'')}</h2>
+    <p><b>Academic year:</b> ${lpEsc(pkg.academicYear||'')} &nbsp; <b>Teacher:</b> ${lpEsc(pkg.teacherName||'')}</p>
+    <h3>Year overview</h3><p>${lpEsc(pkg.yearOverview||'')}</p>`;
+  if(pkg.assumptions?.length) content+=`<h3>Assumptions / items to verify</h3>${lpList(pkg.assumptions)}`;
+  content+=`<div class="lesson-plan-tools no-print"><button id="lpPrintAll">🖨️ Daabac dhammaan Lesson Plans + Notes</button><button class="secondary" id="lpDownloadJson">Soo dejiso backup (JSON)</button></div>`;
+  lessons.forEach((l,i)=>{
+    const tm=Array.isArray(l.timeManagement)?l.timeManagement:[];
+    const total=tm.reduce((s,t)=>s+Number(t.minutes||0),0);
+    content+=`<article class="lesson-plan-card">
+      <h3>HOWLWADAAG SECONDARY SCHOOL</h3><h4>LESSON PLAN ${lpEsc(pkg.academicYear||'')}</h4>
+      <table><tr><th>Teacher</th><td>${lpEsc(pkg.teacherName||'')}</td><th>Class</th><td>${lpEsc(pkg.className||'')}</td></tr>
+      <tr><th>Subject</th><td>${lpEsc(pkg.subject||'')}</td><th>Date / Day</th><td>${lpEsc(l.date||'________________')}</td></tr>
+      <tr><th>Term / Week</th><td>${lpEsc(l.term||'')} / ${lpEsc(l.week||'')}</td><th>Unit</th><td>${lpEsc(l.unit||'')}</td></tr>
+      <tr><th>Lesson</th><td>${lpEsc(l.lessonTitle||'')}</td><th>Time / Session</th><td>${lpEsc(l.durationMinutes||40)} min / ${lpEsc(l.lessonNumber||i+1)}</td></tr></table>
+      <div class="lp-section-title">Introduction</div><p>${lpEsc(l.introduction||'')}</p>
+      <div class="lp-section-title">Lesson Objectives</div><p>By the end of the lesson, learners should be able to:</p>${lpList(l.objectives)}
+      <div class="lp-section-title">Teaching Methods</div>${lpList(l.teachingMethods)}
+      <div class="lp-section-title">Learning Aids</div>${lpList(l.learningAids)}
+      <div class="lp-section-title">Evaluation</div>${lpList(l.evaluationQuestions)}
+      <div class="lp-section-title">Time Management (${total} min)</div><table><thead><tr><th>Stage / Activity</th><th>Time (min)</th></tr></thead><tbody>${tm.map(t=>`<tr><td>${lpEsc(t.stage||'')}</td><td>${Number(t.minutes||0)}</td></tr>`).join('')}<tr><th>Total</th><th>${total}</th></tr></tbody></table>
+      <div class="lp-section-title">LESSON NOTE — ${lpEsc(l.lessonTitle||'')}</div>
+      <h4>Summary</h4><p>${lpEsc(l.noteSummary||'')}</p>
+      ${(l.noteHeadings||[]).map(n=>`<h4 style="text-align:left">${lpEsc(n.heading||'')}</h4><p>${lpEsc(n.content||'')}</p>`).join('')}
+      <h4 style="text-align:left">Homework</h4><p>${lpEsc(l.homework||'')}</p>
+      <p><i>Scheme topic: ${lpEsc(l.sourceTopic||l.lessonTitle||'')}</i></p>
+    </article>`;
+  });
+  output.innerHTML=content;
+  output.classList.remove('hidden');
+  lpEl('lpPrintAll').onclick=()=>{
+    const oldTitle=document.title; document.title=`Lesson Plans ${pkg.subject||''} ${pkg.academicYear||''}`;
+    document.body.classList.add('lesson-print-mode');
+    const style=document.createElement('style');style.id='lessonPrintTemp';
+    style.textContent='@media print{body.lesson-print-mode>header,body.lesson-print-mode>.wrap>nav,body.lesson-print-mode>footer,body.lesson-print-mode .no-print{display:none!important}body.lesson-print-mode .tab{display:none!important}body.lesson-print-mode #lessonplan{display:block!important}body.lesson-print-mode #lessonplan .panel:first-child,body.lesson-print-mode #lessonplan .panel:nth-child(2){display:none!important}body.lesson-print-mode #lessonPlanOutput{display:block!important;border:0!important;padding:0!important;margin:0!important}body.lesson-print-mode .lesson-plan-card{break-after:page;page-break-after:always}}';
+    document.head.appendChild(style);window.print();
+    setTimeout(()=>{document.body.classList.remove('lesson-print-mode');style.remove();document.title=oldTitle;},700);
+  };
+  lpEl('lpDownloadJson').onclick=()=>{
+    const blob=new Blob([JSON.stringify(pkg,null,2)],{type:'application/json'});
+    const url=URL.createObjectURL(blob);const a=document.createElement('a');
+    a.href=url;a.download=`Lesson_Plans_${(pkg.subject||'subject').replace(/[^a-z0-9_-]/gi,'_')}_${pkg.academicYear||'year'}.json`;a.click();URL.revokeObjectURL(url);
+  };
+}
+
+lpEl('generateLessonYear').onclick=async()=>{
+  const schemeText=lpEl('schemeText').value.trim();
+  if(schemeText.length<80) return alert('Marka hore upload-garee Scheme of Work oo riix “Akhri faylka”, ama qoraalka ku dheji sanduuqa.');
+  const btn=lpEl('generateLessonYear');
+  const status=lpEl('lpStatus');
+  btn.disabled=true;status.textContent='AI-gu wuxuu diyaarinayaa qorshaha sannadka iyo lesson notes. Ha xirin bogga...';
+  try {
+    const response=await fetch('/api/lesson-plan/generate',{
+      method:'POST',headers:{'Content-Type':'application/json',...headers()},
+      body:JSON.stringify({
+        schemeText,
+        subject:lpEl('lpSubject').value.trim(),
+        className:lpEl('lpClass').value.trim(),
+        teacherName:lpEl('lpTeacher').value.trim(),
+        academicYear:lpEl('lpYear').value.trim()||'2026-2027',
+        language:lpEl('lpLanguage').value,
+        lessonDuration:Number(lpEl('lpDuration').value)||40,
+        lessonsPerWeek:Number(lpEl('lpPerWeek').value)||3,
+        termCount:Number(lpEl('lpTerms').value)||3
+      })
+    });
+    const data=await response.json().catch(()=>({}));
+    if(!response.ok) throw new Error(data.error||`Server error ${response.status}`);
+    generatedLessonPackage=data;renderLessonPackage(data);
+    status.textContent=`Waa diyaar: ${data.lessons.length} cashar ayaa la sameeyey. Hubi natiijada, kadib daabac ama soo dejiso backup.`;
+    lpEl('lessonPlanOutput').scrollIntoView({behavior:'smooth',block:'start'});
+  } catch(e) {
+    status.textContent='Khalad: '+e.message;
+    alert('Lesson Plan + Lesson Note: '+e.message);
+  } finally {btn.disabled=false;}
 };
 
 try{
