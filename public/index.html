@@ -38,6 +38,8 @@ textarea{min-height:90px}
 .notice{padding:12px;background:#fff8e5;border:1px solid #efd58a;border-radius:9px;margin:12px 0}
 .progress{height:13px;background:#e4eaf2;border-radius:20px;overflow:hidden;margin:10px 0}
 .progress div{height:100%;width:0;background:#168454;transition:width .2s}
+.stat{padding:13px;background:#edf4fc;border-radius:9px;margin:5px 0}
+.stat b{font-size:23px;color:var(--blue)}
 .hidden{display:none!important}
 #printRoot{display:none;padding:22px;background:#fff;color:#111;font-family:Arial,sans-serif}
 #printRoot h1,#printRoot h2,#printRoot h3{color:#111}
@@ -58,6 +60,7 @@ footer{text-align:center;color:#65738a;padding:22px;font-size:13px}
   body:not(.print-mode) .tab{display:none!important}
   body:not(.print-mode) #builder.active{display:block!important}
 }
+.matching-table{width:100%;border-collapse:collapse;margin:8px 0 16px;font-size:14px}.matching-table th,.matching-table td{border:1px solid #555;padding:7px;vertical-align:top}.matching-table th{background:#edf3fb;text-align:center}.matching-table td:first-child{text-align:center;width:45px}.matching-options{display:grid;gap:4px}.diagram-note{border:1px dashed #7c8ba1;padding:8px;margin:8px 0}
 </style>
 </head>
 <body>
@@ -101,12 +104,16 @@ footer{text-align:center;color:#65738a;padding:22px;font-size:13px}
 <div class="notice">
 PDF weyn wuxuu u baahan karaa xusuus badan, waqti dheeraad ah iyo kayd PostgreSQL oo ku filan. Ha xirin bogga inta OCR iyo upload-ku socdaan.
 </div>
+
 <label for="bookTitle">Magaca buugga *</label>
 <input id="bookTitle" placeholder="Tusaale: Physics Form Four">
+
 <label for="bookSubject">Maaddada</label>
 <input id="bookSubject" placeholder="Tusaale: Physics">
+
 <label for="bookFile">Dooro PDF (ugu badnaan 500 MB)</label>
 <input id="bookFile" type="file" accept=".pdf,application/pdf">
+
 <p id="fileInfo" class="muted">Weli PDF lama dooran.</p>
 <button id="uploadBook">🔎 Akhri PDF / OCR oo kaydi</button>
 <div id="progressBox" class="hidden">
@@ -127,6 +134,7 @@ PDF weyn wuxuu u baahan karaa xusuus badan, waqti dheeraad ah iyo kayd PostgreSQ
 <h3>Samee imtixaan adigoo dooranaya bogagga</h3>
 <label for="sourceBook">Buugga</label>
 <select id="sourceBook"><option value="">Dooro buug...</option></select>
+
 <div class="grid">
 <div><label for="genSubject">Maaddada</label><input id="genSubject" placeholder="Physics"></div>
 <div><label for="genClass">Fasalka</label><input id="genClass" placeholder="Form 4"></div>
@@ -139,8 +147,7 @@ PDF weyn wuxuu u baahan karaa xusuus badan, waqti dheeraad ah iyo kayd PostgreSQ
 <option value="four-part">Afar qaybood: MCQ, Fill Blanks, Matching, Structured</option>
 <option value="two-section">Laba qaybood: MCQ iyo Structured</option>
 </select></div>
-<div><label for="diagramMode">Jaantusyo (diagrams)</label>
-<select id="diagramMode"><option>Auto</option><option>Include</option><option>Exclude</option></select></div>
+<div><label for="diagramCount">Tirada jaantusyada (0 haddii aadan rabin)</label><input id="diagramCount" type="number" min="0" max="30" value="0"><small class="muted">Geli 0, 1, 2, 5 ama tiro kale. Jaantusyada waxaa lagu xiriirinayaa su’aalaha Structured.</small></div>
 </div>
 
 <label for="genLevels">Heerarka Bloom</label>
@@ -171,6 +178,7 @@ PDF weyn wuxuu u baahan karaa xusuus badan, waqti dheeraad ah iyo kayd PostgreSQ
 <input id="className" placeholder="Form 4">
 <label for="examInstructions">Tilmaamaha</label>
 <textarea id="examInstructions"></textarea>
+
 <h3>Su'aal cusub</h3>
 <label for="qText">Su'aasha</label>
 <textarea id="qText"></textarea>
@@ -321,30 +329,41 @@ $('uploadBook').onclick=async()=>{
   const subject=$('bookSubject').value.trim();
   const btn=$('uploadBook');
   let worker=null;
+
   if(!file) return alert('Dooro PDF marka hore.');
   if(file.type!=='application/pdf'&&!file.name.toLowerCase().endsWith('.pdf'))
     return alert('Fadlan dooro fayl PDF ah.');
   if(file.size>MAX_BYTES)
     return alert('PDF-gu wuxuu ka weyn yahay xadka 500 MB.');
   if(!title) return alert('Geli magaca buugga.');
-  if(!window.pdfjsLib) return alert('PDF.js lama soo dejin. Hubi internetka.');
+  if(!window.pdfjsLib) return alert('PDF.js lama helin. Hubi internetka.');
 
   btn.disabled=true;
   let bookId=null;
+
   try{
-    pdfjsLib.GlobalWorkerOptions.workerSrc='https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+    pdfjsLib.GlobalWorkerOptions.workerSrc=
+      'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+
+    // PDF.js wuxuu u baahan yahay inuu akhriyo PDF-ga si loo ogaado
+    // bogagga iyo qoraalka. Fayl aad u weyn wuxuu u baahan karaa RAM badan.
     progress(1,'PDF-ga ayaa la furayaa...');
     const pdfData=await file.arrayBuffer();
     const pdf=await pdfjsLib.getDocument({data:pdfData}).promise;
+
     if(pdf.numPages>3000) throw new Error('Buuggu wuxuu ka badan yahay xadka 3000 bog.');
+
     progress(3,`PDF-ga wuxuu leeyahay ${pdf.numPages} bog. OCR ayaa bilaabanaya...`);
 
+    // OCR bog-bog
     const pages=[];
     let ocrCount=0;
+
     for(let n=1;n<=pdf.numPages;n++){
       const page=await pdf.getPage(n);
       const content=await page.getTextContent();
       let text=content.items.map(x=>x.str||'').join(' ').trim();
+
       if(text.length<25){
         if(!window.Tesseract) throw new Error('OCR lama soo dejin. Hubi internetka.');
         if(!worker) worker=await Tesseract.createWorker('eng');
@@ -359,38 +378,60 @@ $('uploadBook').onclick=async()=>{
         canvas.width=canvas.height=1;
         ocrCount++;
       }
+
       pages.push({page:n,text});
-      progress(3+Math.round((n/pdf.numPages)*32),`Akhrinta bogga ${n}/${pdf.numPages}. OCR waxaa loo adeegsaday ${ocrCount} bog.`);
+      const pct=3+Math.round((n/pdf.numPages)*32);
+      progress(pct,`Akhrinta bogga ${n}/${pdf.numPages}. OCR waxaa loo adeegsaday ${ocrCount} bog.`);
     }
+
     if(worker){await worker.terminate();worker=null;}
 
+    // Bilow kaydinta buugga server-ka.
     const start=await api('/api/books/upload/start',{
       method:'POST',
-      body:JSON.stringify({title,subject,filename:file.name,size:file.size,pageCount:pdf.numPages})
+      body:JSON.stringify({
+        title,subject,filename:file.name,
+        size:file.size,pageCount:pdf.numPages
+      })
     });
     bookId=start.id;
+
+    // PDF-ga si qaybo 4 MB ah u dir; Base64 laguma beddelayo
+    // faylka oo dhan hal mar.
     const totalChunks=Math.ceil(file.size/CHUNK_BYTES);
+
     for(let i=0;i<totalChunks;i++){
       const from=i*CHUNK_BYTES;
       const to=Math.min(file.size,from+CHUNK_BYTES);
-      const encoded=await blobBase64(file.slice(from,to));
+      const chunk=file.slice(from,to);
+      const encoded=await blobBase64(chunk);
+
       await api(`/api/books/${encodeURIComponent(bookId)}/chunks/${i}`,{
-        method:'POST',body:JSON.stringify({chunkBase64:encoded})
+        method:'POST',
+        body:JSON.stringify({chunkBase64:encoded})
       });
-      progress(35+Math.round(((i+1)/totalChunks)*55),`Kaydinta PDF: qaybta ${i+1}/${totalChunks}.`);
+
+      const pct=35+Math.round(((i+1)/totalChunks)*55);
+      progress(pct,`Kaydinta PDF: qaybta ${i+1}/${totalChunks}.`);
     }
+
     progress(93,'PDF-ga waa la kaydiyey. Qoraalka OCR ayaa la dhammeystirayaa...');
+
     await api(`/api/books/${encodeURIComponent(bookId)}/upload/finish`,{
-      method:'POST',body:JSON.stringify({pages})
+      method:'POST',
+      body:JSON.stringify({pages})
     });
+
     progress(100,`Guul! Buugga ${title} waa la kaydiyey. ${pdf.numPages} bog; OCR: ${ocrCount} bog.`);
     $('bookFile').value='';
     $('fileInfo').textContent='Weli PDF lama dooran.';
     await loadBooks();
+
   }catch(e){
     console.error(e);
     progress(0,'Khalad: '+e.message);
-    alert('PDF/OCR: '+e.message+(bookId?'\nUpload-ku wuu bilaabmay. Hubi liiska buugaagta ka hor intaadan mar kale soo gelin.':''));
+    alert('PDF/OCR: '+e.message+
+      (bookId?'\nBuugga upload-kiisu wuu bilaabmay. Hubi liiska buugaagta ka hor intaadan mar kale soo gelin.':''));
   }finally{
     if(worker) try{await worker.terminate()}catch(_){}
     btn.disabled=false;
@@ -405,10 +446,12 @@ async function loadBooks(){
     books=d.books||[];
     $('sourceBook').innerHTML='<option value="">Dooro buug...</option>'+
       books.map(b=>`<option value="${esc(b.id)}">${esc(b.title)} (${b.page_count||'?'} bog)</option>`).join('');
+
     if(!books.length){
       box.innerHTML='<div class="item muted">Weli buug lama kaydin.</div>';
       return;
     }
+
     box.innerHTML=books.map(b=>`
       <div class="item">
         <b>${esc(b.title)}</b>
@@ -418,6 +461,7 @@ async function loadBooks(){
         </a>
         <button class="danger" data-del-book="${esc(b.id)}">Tirtir</button>
       </div>`).join('');
+
     box.querySelectorAll('[data-del-book]').forEach(btn=>{
       btn.onclick=async()=>{
         if(!confirm('Ma hubtaa inaad buuggan tirtirayso?'))return;
@@ -433,6 +477,46 @@ async function loadBooks(){
 }
 $('refreshBooks').onclick=loadBooks;
 
+
+function makePartPlan(totalCount,totalMarks,format,diagramCount){
+  const specs = format==='two-section'
+    ? [
+        {section:'PART I — MULTIPLE CHOICE QUESTIONS',type:'MCQ',ratio:.45,weight:.4},
+        {section:'PART II — STRUCTURED QUESTIONS',type:'Structured',ratio:.55,weight:.6}
+      ]
+    : [
+        {section:'PART I — MULTIPLE CHOICE QUESTIONS',type:'MCQ',ratio:.455,weight:.2},
+        {section:'PART II — FILL IN THE BLANKS',type:'Fill in the Blank',ratio:.227,weight:.1},
+        {section:'PART III — MATCHING',type:'Matching',ratio:.045,weight:.1},
+        {section:'PART IV — DIRECT / STRUCTURED QUESTIONS',type:'Structured',ratio:.273,weight:.6}
+      ];
+  const raw=specs.map(s=>totalCount*s.ratio),counts=raw.map(Math.floor);
+  let left=totalCount-counts.reduce((a,b)=>a+b,0);
+  raw.map((v,i)=>({i,rem:v-Math.floor(v)})).sort((a,b)=>b.rem-a.rem).forEach((x)=>{if(left>0){counts[x.i]++;left--;}});
+  for(let i=0;i<counts.length;i++)if(counts[i]===0){const donor=counts.map((v,j)=>({v,j})).filter(x=>x.v>1).sort((a,b)=>b.v-a.v)[0];if(donor){counts[donor.j]--;counts[i]++;}}
+  const rawMarks=specs.map(s=>totalMarks*s.weight),marks=rawMarks.map(Math.floor);
+  let markLeft=totalMarks-marks.reduce((a,b)=>a+b,0);
+  rawMarks.map((v,i)=>({i,rem:v-Math.floor(v)})).sort((a,b)=>b.rem-a.rem).forEach(x=>{if(markLeft>0){marks[x.i]++;markLeft--;}});
+  const plan=specs.map((s,i)=>({...s,count:counts[i],targetMarks:marks[i]}));
+  const structured=plan.find(p=>p.type==='Structured');
+  if(diagramCount>0&&structured&&diagramCount>structured.count)throw new Error(`Tirada jaantusyada (${diagramCount}) kama badnaan karto su’aalaha Structured (${structured.count}). Kordhi tirada su’aalaha ama yaree jaantusyada.`);
+  return plan;
+}
+function partAtIndex(index,plan){let n=0;for(const p of plan){n+=p.count;if(index<n)return p;}return plan[plan.length-1];}
+function applyExactMarks(items,plan,totalMarks){
+  items.forEach((q,i)=>{const p=partAtIndex(i,plan);q.section=p.section;q.type=p.type;});
+  let offset=0;
+  for(const p of plan){const group=items.slice(offset,offset+p.count);offset+=p.count;if(!group.length)continue;const base=Math.floor(p.targetMarks/group.length),extra=p.targetMarks-base*group.length;group.forEach((q,i)=>q.marks=base+(i<extra?1:0));}
+  const sum=items.reduce((s,q)=>s+Number(q.marks||0),0);
+  if(items.length&&sum!==totalMarks)items[items.length-1].marks+=totalMarks-sum;
+  return items;
+}
+function cleanMatches(q){
+  q.matches=Array.isArray(q.matches)?q.matches.map((m,i)=>Array.isArray(m)?{question:String(m[0]||`Item ${i+1}`),answer:String(m[1]||'')}:{question:String(m.question||m.term||m.left||`Item ${i+1}`),answer:String(m.answer||m.match||m.right||'')}):[];
+  q.options=Array.isArray(q.options)?q.options:[];
+  return q;
+}
+
 $('generateExam').onclick=async()=>{
   const id=$('sourceBook').value;
   const start=Number($('startPage').value);
@@ -441,74 +525,102 @@ $('generateExam').onclick=async()=>{
   const count=countText===''?null:Number(countText);
   const totalMarks=Number($('genTotalMarks').value)||100;
   const levels=Array.from($('genLevels').selectedOptions).map(o=>o.value);
+
   if(!id)return alert('Dooro buug.');
   if(!Number.isInteger(start)||!Number.isInteger(end)||start<1||end<start)
     return alert('Hubi bogga bilowga iyo dhammaadka.');
-  if(count!==null&&(!Number.isInteger(count)||count<1||count>50))
-    return alert('Tirada su’aalaha waa 1 ilaa 50 ama madhan uga tag.');
-  if(!Number.isInteger(totalMarks)||totalMarks<10||totalMarks>300)
-    return alert('Wadarta dhibcuhu waa inay u dhexaysaa 10 ilaa 300.');
+  if(count!==null&&(!Number.isInteger(count)||count<4||count>50))return alert('Qaabka afarta qaybood ah, tirada su’aaluhu waa 4 ilaa 50; ama madhan uga tag.');
+  if(!Number.isInteger(totalMarks)||totalMarks<10||totalMarks>300)return alert('Wadarta dhibcuhu waa inay u dhexaysaa 10 ilaa 300.');
   if(!levels.length)return alert('Dooro ugu yaraan hal heer Bloom.');
 
   const status=$('generateStatus');
   const out=$('generatedQuestions');
   status.textContent='Qoraalka bogagga ayaa la soo rarayaa...';
   out.innerHTML='';
+
   try{
     const d=await api(`/api/books/${encodeURIComponent(id)}/text?start=${start}&end=${end}`,{method:'GET'});
     const selected=(d.pages||[]).filter(p=>p.text&&p.text.trim());
     const sourceText=selected.map(p=>`[Bogga ${p.page}]\n${p.text}`).join('\n\n');
     if(!sourceText.trim())throw new Error('Qoraal lagama helin bogagga la doortay.');
+
     status.textContent='AI ayaa diyaarinaya su’aalaha laga soo qaatay bogagga aad dooratay...';
 
     const book=books.find(b=>String(b.id)===String(id));
     const subject=$('genSubject').value.trim()||$('bookSubject').value.trim()||book?.subject||'';
     const className=$('genClass').value.trim();
+
     const generated=await api('/api/generate',{
       method:'POST',
       body:JSON.stringify({
-        sourceText,subject,className,count,questionCount:count,totalMarks,
-        format:$('genFormat').value,diagramMode:$('diagramMode').value,
-        levels,type:'Isku-dhafan',sourceTitle:d.title,pageRange:{start,end}
+        sourceText,subject,className,count,questionCount:count,
+        totalMarks,format:$('genFormat').value,diagramMode:$('diagramMode').value,
+        levels,type:'Isku-dhafan',
+        sourceTitle:d.title,
+        pageRange:{start,end}
       })
     });
-    const qs=generated.questions||[];
-    if(!qs.length)throw new Error('AI ma soo celin su’aalo.');
 
-    const examTitle=$('examName').value.trim()||`${subject||'Imtixaan'} — ${className||'Fasal'}`;
+    let qs=generated.questions||[];
+     if(!qs.length)throw new Error('AI ma soo celin su’aalo.');
+     qs=qs.slice(0,effectiveCount).map(q=>cleanMatches(q));
+     qs=applyExactMarks(qs,partPlan,totalMarks);
+     let diagramsLeft=diagramCount;
+     qs.forEach(q=>{
+       if(q.type!=='Structured'){q.diagram='';return;}
+       if(diagramsLeft>0){
+         if(!q.diagram)q.diagram=`Jaantus ku habboon su’aashan: ${q.text}. Macallinku ha xaqiijiyo saxnaanta jaantuska iyo calaamadaha.`;
+         diagramsLeft--;
+       }else q.diagram='';
+     });
+     const examTitle=$('examName').value.trim()||`${subject||'Imtixaan'} — ${className||'Fasal'}`;
     const schoolName='Golaha Horumarinta Dugsiyada Dadweynaha (GHDD)';
-    const normalized=qs.map(q=>({
-      id:uid(),text:q.question||q.text||'',marks:Number(q.marks)||1,
-      level:q.bloom||q.level||'Understand',answer:q.answer||q.modelAnswer||'',
+    const normalized=qs.map((q,i)=>({
+      id:uid(),
+      text:q.question||q.text||'',
+      marks:Number(q.marks)||1,
+      level:q.bloom||q.level||'Understand',
+      answer:q.answer||q.modelAnswer||'',
       topic:q.topic||`${d.title} bogagga ${start}-${end}`,
-      type:q.type||'Structured',section:q.section||'',
+      type:q.type||'Structured',
+      section:q.section||'',
       options:Array.isArray(q.options)?q.options:[],
-      diagram:q.diagram||'',sourcePages:q.sourcePages||''
+      matches:Array.isArray(q.matches)?q.matches:[],
+      diagram:q.diagram||'',
+      sourcePages:q.sourcePages||''
     }));
-    // Su'aalaha oo dhan si toos ah ayaa loogu daraa imtixaanka.
+    // The generated questions are added automatically; no per-question "add" step is required.
     questions=normalized;
     $('examName').value=examTitle;
     $('subject').value=subject;
     $('className').value=className;
     renderQuestions();
 
-    const renderPaperQuestions=withAnswers=>{
-      let lastSection='';
-      return normalized.map((q,i)=>{
-        const section=q.section||'Questions';
-        let sectionHtml='';
-        if(section!==lastSection){
-          sectionHtml=`<h3 class="paper-section">${esc(section)}</h3>`;
-          lastSection=section;
-        }
-        const options=q.options.length
-          ?`<ol type="A">${q.options.map(opt=>`<li>${esc(String(opt).replace(/^[A-D]\.\s*/i,''))}</li>`).join('')}</ol>`:'';
-        const diagram=q.diagram?`<p><strong>Diagram:</strong> ${esc(q.diagram)}</p>`:'';
-        const answer=withAnswers?`<p><strong>Answer / Marking guide:</strong> ${esc(q.answer||'Not provided')}</p>`:'';
-        return `${sectionHtml}<div class="paper-question"><p><strong>${i+1}. ${esc(q.text)}</strong> <span>(${q.marks} marks)</span></p>${options}${diagram}${answer}</div>`;
-      }).join('');
-    };
-    const instructions=$('examInstructions').value.trim()||'Answer all questions. Read each question carefully.';
+    const renderPaperQuestions=(withAnswers)=> {
+       let lastSection='';
+       return normalized.map((q,i)=>{
+         const section=q.section||'Questions';
+         let sectionHtml='';
+         if(section!==lastSection){sectionHtml=`<h3 class="paper-section">${esc(section)}</h3>`;lastSection=section;}
+         if(q.type==='Matching'){
+           const pairs=Array.isArray(q.matches)?q.matches:[];
+           const choices=Array.isArray(q.options)?q.options:[];
+           const rows=pairs.map((pair,j)=>{
+             const answerCell=withAnswers?esc(pair.answer||''):'________________';
+             const choiceCell=j===0?`<td rowspan="${Math.max(1,pairs.length)}"><div class="matching-options">${choices.map((c,k)=>`<div><b>${String.fromCharCode(65+k)}.</b> ${esc(String(c).replace(/^[A-Z]\.\s*/i,''))}</div>`).join('')}</div></td>`:'';
+             return `<tr><td>${j+1}</td><td>${esc(pair.question||'')}</td><td>${answerCell}</td>${choiceCell}</tr>`;
+           }).join('');
+           const correct=withAnswers?`<p><strong>Correct matches:</strong> ${pairs.map((p,j)=>`${j+1}. ${esc(p.question)} — ${esc(p.answer)}`).join('; ')}</p>`:'';
+           const warning=choices.length===pairs.length+1?'':'<p class="muted"><em>Hubi in doorashooyinka jawaabuhu hal ka badan yihiin tirada su’aalaha.</em></p>';
+           return `${sectionHtml}<div class="paper-question"><p><strong>${i+1}. ${esc(q.text||'Isku-aadi su’aalaha iyo jawaabahooda.')}</strong> <span>(${q.marks} marks)</span></p><div class="table-wrap"><table class="matching-table"><thead><tr><th>S/N</th><th>Su’aalaha</th><th>Jawaabta ardaygu qoro</th><th>Doorashooyinka jawaabaha</th></tr></thead><tbody>${rows}</tbody></table></div>${correct}${warning}</div>`;
+         }
+         const options=q.options?.length?`<ol type="A">${q.options.map(opt=>`<li>${esc(String(opt).replace(/^[A-D]\.\s*/i,''))}</li>`).join('')}</ol>`:'';
+         const diagram=q.diagram?`<p class="diagram-note"><strong>Jaantus / sawir:</strong> ${esc(q.diagram)}</p>`:'';
+         const answer=withAnswers?`<p><strong>Answer / Marking guide:</strong> ${esc(q.answer||'Not provided')}</p>`:'';
+         return `${sectionHtml}<div class="paper-question"><p><strong>${i+1}. ${esc(q.text)}</strong> <span>(${q.marks} marks)</span></p>${options}${diagram}${answer}</div>`;
+       }).join('');
+     };
+    const instructions= $('examInstructions').value.trim()||'Answer all questions. Read each question carefully.';
     const total=normalized.reduce((sum,q)=>sum+q.marks,0);
     const header=`<div class="paper-head"><h1>${esc(schoolName)}</h1><h2>${esc(examTitle)}</h2><p>${esc(subject)} · ${esc(className)}</p></div>`;
     const meta=`<div class="paper-meta"><div><strong>Name:</strong> ________________________</div><div><strong>Date:</strong> ________________________</div><div><strong>Class:</strong> ${esc(className)}</div><div><strong>Total Marks:</strong> ${total}</div></div>`;
@@ -518,12 +630,11 @@ $('generateExam').onclick=async()=>{
     out.innerHTML=`<div class="notice"><strong>Imtixaanka oo dhammaystiran ayaa diyaar ah.</strong><br>Wadarta dhibcaha: ${total}/${total}. Su’aalaha si toos ah ayaa loogu daray imtixaanka; looma baahna inaad mid-mid u riixdo.<br>Dib u eeg su’aalaha, kadib dooro daabacaadda imtixaanka ama answer key-ga.</div>
       <div class="paper-tools no-print"><button id="previewPrintExam">🖨️ Daabac imtixaanka</button><button id="previewPrintKey" class="secondary">🔑 Daabac answer key</button><button id="previewPrintBoth" class="secondary">Daabac labadaba</button></div>
       <div class="item"><strong>${esc(examTitle)}</strong><p>${esc(subject)} · ${esc(className)} · ${total} dhibcood · ${normalized.length} su’aalood</p><p>Su’aalaha si toos ah ayaa loogu daray imtixaanka.</p></div>`;
-
     function printSelection(which){
       document.body.classList.add('print-mode');
       $('studentPaper').style.display=which==='key'?'none':'block';
       $('keyPaper').style.display=which==='exam'?'none':'block';
-      if(which==='both')$('keyPaper').style.display='block';
+      if(which==='both'){$('keyPaper').style.display='block';}
       window.print();
       setTimeout(()=>document.body.classList.remove('print-mode'),700);
     }
@@ -532,6 +643,7 @@ $('generateExam').onclick=async()=>{
     $('previewPrintBoth').onclick=()=>printSelection('both');
     $('printExamOnly').onclick=()=>printSelection('exam');
     $('printAnswerKey').onclick=()=>printSelection('key');
+
     status.textContent=`Guul! ${qs.length} su’aalood ayaa laga sameeyey bogagga ${start}–${end}. Dib u eeg su’aalaha iyo jawaabaha.`;
   }catch(e){
     status.textContent='Khalad: '+e.message;
@@ -552,6 +664,7 @@ function renderQuestions(){
       <p><b>Jawaab:</b> ${esc(q.answer||'')}</p>
       <button class="danger" data-remove-q="${q.id}">Ka saar</button>
     </div>`).join('');
+
   el.querySelectorAll('[data-remove-q]').forEach(btn=>{
     btn.onclick=()=>{
       questions=questions.filter(q=>q.id!==btn.dataset.removeQ);
@@ -559,19 +672,19 @@ function renderQuestions(){
     };
   });
 }
-
 $('addQuestion').onclick=()=>{
   const text=$('qText').value.trim();
   if(!text)return alert('Qor su’aasha marka hore.');
   questions.push({
-    id:uid(),text,marks:Number($('qMarks').value)||1,
-    level:$('qLevel').value,answer:$('qAnswer').value.trim()
+    id:uid(),text,
+    marks:Number($('qMarks').value)||1,
+    level:$('qLevel').value,
+    answer:$('qAnswer').value.trim()
   });
   $('qText').value='';
   $('qAnswer').value='';
   renderQuestions();
 };
-
 $('printExam').onclick=()=>window.print();
 
 $('saveExam').onclick=async()=>{
@@ -606,7 +719,6 @@ function renderBank(){
       <p><b>Jawaab:</b> ${esc(q.answer||'')}</p>
     </div>`).join('');
 }
-
 $('runAnalysis').onclick=()=>{
   const el=$('analysisResult');
   if(!questions.length){
@@ -623,7 +735,6 @@ $('runAnalysis').onclick=()=>{
     <div class="item">Su’aalaha aan jawaab lahayn: <b>${missing}</b></div>
     <div class="item">Heerarka Bloom: ${Object.entries(levels).map(([k,v])=>`${esc(k)}: ${v}`).join(' · ')}</div>`;
 };
-
 $('downloadBackup').onclick=()=>{
   const blob=new Blob([JSON.stringify({questions,questionBank,exams},null,2)],{type:'application/json'});
   const url=URL.createObjectURL(blob);
