@@ -120,6 +120,48 @@ footer{text-align:center;color:#65738a;padding:22px;font-size:13px}
 .answer-box{border:1px solid #777;padding:8px;margin:8px 0}
 @media print{.paper-question{break-inside:avoid;page-break-inside:avoid}.mcq-options-table td,.matching-table th,.matching-table td{border:1px solid #222}}
 
+
+/* Matching section layout: keep the one Part III heading with the first matching question. */
+.paper-section{
+  break-after:avoid-page!important;
+  page-break-after:avoid!important;
+  break-inside:avoid!important;
+  page-break-inside:avoid!important;
+  margin-bottom:8px;
+}
+.paper-section + .paper-question{
+  break-before:avoid-page!important;
+  page-break-before:avoid!important;
+  margin-top:6px;
+}
+.paper-question:has(.matching-table),.matching-question{
+  break-inside:avoid-page;
+  page-break-inside:avoid;
+  margin-top:6px;
+  margin-bottom:10px;
+}
+@media print{
+  .paper-section{break-after:avoid-page!important;page-break-after:avoid!important}
+  .paper-section + .paper-question{break-before:avoid-page!important;page-break-before:avoid!important}
+  .paper-question:has(.matching-table),.matching-question{break-inside:avoid-page;page-break-inside:avoid}
+}
+
+
+/* Matching table follows the user's sample: four columns, grouped A/B/C... options on the right. */
+.matching-table{width:100%;border-collapse:collapse;table-layout:fixed;font-size:10.5pt}
+.matching-table th,.matching-table td{border:1px solid #222;padding:5px 6px;vertical-align:top;overflow-wrap:anywhere}
+.matching-table th:nth-child(1),.matching-table td:nth-child(1){width:8%;text-align:center}
+.matching-table th:nth-child(2),.matching-table td:nth-child(2){width:30%}
+.matching-table th:nth-child(3),.matching-table td:nth-child(3){width:16%;text-align:center}
+.matching-table th:nth-child(4),.matching-table td:nth-child(4){width:46%}
+.matching-choice-cell{vertical-align:top!important}
+.matching-options>div{padding:2px 0 5px;margin-bottom:2px}
+.matching-question .question-line{margin-bottom:5px}
+@media print{
+ .matching-table tr{break-inside:avoid;page-break-inside:avoid}
+ .matching-choice-cell{vertical-align:top!important}
+}
+
 </style>
 </head>
 <body>
@@ -714,22 +756,25 @@ $('generateExam').onclick=async()=>{
          if(section!==lastSection){sectionHtml=`<h3 class="paper-section">${esc(section)}</h3>`;lastSection=section;}
          if(q.type==='Matching'){
            const pairs=Array.isArray(q.matches)?q.matches:[];
-           const choices=Array.isArray(q.options)?q.options:[];
+           const rawChoices=Array.isArray(q.options)?q.options:[];
+           // Keep the sample's layout: choices A, B, C... appear together in one right-hand column.
+           // Each item in Part A has only a blank for the student to enter the matching letter.
+           const choices=rawChoices.map(c=>String(c).replace(/^[A-Z]\.\s*/i,''));
            const rows=pairs.map((pair,j)=>{
-             const answerCell=withAnswers?esc(pair.answer||''):'____________';
-             const choiceCell=j===0?`<td rowspan="${Math.max(1,pairs.length)}" class="matching-choice-cell"><div class="matching-options">${choices.map((c,k)=>`<div><b>${String.fromCharCode(65+k)}.</b> ${esc(String(c).replace(/^[A-Z]\.\s*/i,''))}</div>`).join('')}</div></td>`:'';
+             const answerCell=withAnswers?esc(pair.answer||''):'[       ]';
+             const choiceCell=j===0?`<td rowspan="${Math.max(1,pairs.length)}" class="matching-choice-cell"><div class="matching-options">${choices.map((c,k)=>`<div><b>${String.fromCharCode(65+k)}.</b> ${esc(c)}</div>`).join('')}</div></td>`:'';
              return `<tr><td class="match-no">${j+1}</td><td>${esc(pair.question||'')}</td><td class="match-answer">${answerCell}</td>${choiceCell}</tr>`;
            }).join('');
-           const correct=withAnswers?`<p class="matching-key"><strong>Jawaabaha saxda ah:</strong> ${pairs.map((p,j)=>`${j+1}. ${esc(p.question)} — ${esc(p.answer)}`).join('; ')}</p>`:'';
-           const warning=choices.length===pairs.length+1?'':'<p class="muted"><em>Hubi: doorashooyinka jawaabuhu waa inay hal ka badan yihiin tirada su’aalaha.</em></p>';
-           return `${sectionHtml}<div class="paper-question"><p class="question-line"><strong>${i+1}. ${esc(q.text||'Isku-aadi su’aalaha iyo jawaabahooda.')}</strong><span class="marks">(${q.marks} marks)</span></p><div class="table-wrap"><table class="matching-table"><thead><tr><th>Lambarka</th><th>Qaybta A: Erayga / Su’aasha</th><th>Xarafka Jawaabta</th><th>Qaybta B: Jawaabaha / Sharaxaadda</th></tr></thead><tbody>${rows}</tbody></table></div>${correct}${warning}</div>`;
+           const correct=withAnswers?`<p class="matching-key"><strong>Answer key:</strong> ${pairs.map((p,j)=>`${j+1}. ${esc(p.answer)}`).join('; ')}</p>`:'';
+           const warning=choices.length===pairs.length+1?'':'<p class="muted"><em>Check: provide exactly one extra option beyond the number of matching items.</em></p>';
+           return `${sectionHtml}<div class="paper-question matching-question"><p class="question-line"><strong>${i+1}. ${esc(q.text||'Match each item in Column A with the correct answer in Column B. Write the letter in the answer column.')}</strong><span class="marks">(${q.marks} marks)</span></p><div class="table-wrap"><table class="matching-table"><thead><tr><th>Number</th><th>Column A: Item / Question</th><th>Answer letter</th><th>Column B: Answers / Descriptions</th></tr></thead><tbody>${rows}</tbody></table></div>${correct}${warning}</div>`;
          }
          const options=q.options?.length?`<table class="mcq-options-table"><tbody><tr>${q.options.slice(0,4).map((opt,k)=>`<td><strong>${String.fromCharCode(65+k)}.</strong> ${esc(String(opt).replace(/^[A-D]\.\s*/i,''))}</td>`).join('')}</tr></tbody></table>`:'';
          const safeSvg=q.diagramSvg?sanitizeDiagramSvg(q.diagramSvg):'';
          const diagram=safeSvg?`<div class="exam-diagram">${safeSvg}</div>`:(q.diagram&&q.diagram!=='undefined'?`<div class="diagram-note"><strong>${lang==='ar'?'الرسم التوضيحي':lang==='so'?'Jaantus / sawir':'Diagram'}:</strong> ${esc(q.diagram)}</div>`:'');
          const isDirect=/structured|direct/i.test(q.type||'')||/STRUCTURED|DIRECT/i.test(section);
          const answerSpace=(!withAnswers&&isDirect)?`<div class="student-answer-label">Answer:</div><div class="answer-space">${Array.from({length:Math.max(2,Math.min(14,Math.ceil(Number(q.marks||1)*1.4)))},()=>'<div class="answer-line"></div>').join('')}</div>`:'';
-         const answer=withAnswers?`<div class="answer-box"><strong>Jawaabta / Marking guide:</strong> ${esc(q.answer||'Not provided')}</div>`:'';
+         const answer = withAnswers ? `<div class="answer-box"><strong>Answer / Marking guide:</strong> ${esc(q.answer||'Not provided')}</div>` : '';
          const questionLine=`<div class="mcq-question-row"><span class="question-number">${i+1}.</span><span class="question-text">${esc(q.text)}</span><span class="marks">(${q.marks} marks)</span></div>`;
          if(q.type==='MCQ'||q.type==='Multiple Choice'||q.type==='Multiple Choice Questions'){
            return `${sectionHtml}<div class="paper-question mcq-box">${questionLine}${options}${answer}</div>`;
@@ -742,7 +787,7 @@ $('generateExam').onclick=async()=>{
     const lang=examLanguage||detectExamLanguage(sourceText);
     const header=`<div class="paper-head"><img class="exam-logo" src="/letterhead.jpg" alt="GHDD logo"><h1>${esc(schoolName)}</h1><h2>${esc(examTitle)}</h2><p>${esc(subject)} · ${esc(className)}</p></div>`;
     const meta=`<div class="paper-meta"><div><strong>${examText(lang,'name')}:</strong> ________________________</div><div><strong>${examText(lang,'date')}:</strong> ________________________</div><div><strong>${examText(lang,'class')}:</strong> ${esc(className)}</div><div><strong>${examText(lang,'total')}:</strong> ${total}</div></div>`;
-    const examPaper=`${header}${meta}<p><strong>${examText(lang,'instructions')}:</strong> ${esc(instructions)}</p>${renderPaperQuestions(false)}<p><strong>${examText(lang,'total')}: ${total} marks</strong></p>`;
+    const examPaper=`<div class="student-paper-no-solutions">${header}${meta}<p><strong>${examText(lang,'instructions')}:</strong> ${esc(instructions)}</p>${renderPaperQuestions(false)}<p><strong>${examText(lang,'total')}: ${total} marks</strong></p></div>`;
     const answerPaper=`${header}<h2>${examText(lang,'answer')}</h2><p><strong>${examText(lang,'total')}:</strong> ${total}</p>${renderPaperQuestions(true)}`;
     $('printRoot').innerHTML=`<div class="paper-tools no-print"><button id="printExamOnly">Daabac imtixaanka (jawaabaha ma muuqdaan)</button><button id="printAnswerKey">Daabac answer key</button></div><div id="studentPaper">${examPaper}</div><div id="keyPaper" style="margin-top:35px;border-top:3px double #333;padding-top:18px">${answerPaper}</div>`;
     out.innerHTML=`<div class="notice"><strong>Imtixaanka oo dhammaystiran ayaa diyaar ah.</strong><br>Wadarta dhibcaha: ${total}/${total}. Su’aalaha si toos ah ayaa loogu daray imtixaanka; looma baahna inaad mid-mid u riixdo.<br>Dib u eeg su’aalaha, kadib dooro daabacaadda imtixaanka ama answer key-ga.</div>
