@@ -9,17 +9,16 @@ import { fileURLToPath } from 'url';
 const { Pool } = pg;
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const app = express();
+app.use(express.json({ limit: '40mb' }));
 
-app.use(express.json({ limit: '15mb' }));
-
-// Find the frontend directory
+// Find the web app folder.
 const publicCandidates = [
-  path.join(__dirname, 'public'),
   path.join(__dirname, 'Public'),
-  path.join(process.cwd(), 'public'),
+  path.join(__dirname, 'public'),
   path.join(process.cwd(), 'Public'),
-  '/app/public',
-  '/app/Public'
+  path.join(process.cwd(), 'public'),
+  '/app/Public',
+  '/app/public'
 ];
 
 const PUBLIC_DIR = publicCandidates.find(dir =>
@@ -30,124 +29,94 @@ if (PUBLIC_DIR) {
   console.log(`Serving web files from: ${PUBLIC_DIR}`);
   app.use(express.static(PUBLIC_DIR));
 } else {
-  console.error(
-    'PUBLIC DIRECTORY ERROR: index.html was not found:',
-    publicCandidates.join(', ')
-  );
+  console.error('Could not find index.html in Public/public.');
 }
 
-// PostgreSQL connection
-const databaseUrl = process.env.DATABASE_URL;
-
-const pool = databaseUrl
+const pool = process.env.DATABASE_URL
   ? new Pool({
-      connectionString: databaseUrl,
-      ssl: /railway/i.test(databaseUrl)
+      connectionString: process.env.DATABASE_URL,
+      ssl: process.env.DATABASE_URL.includes('railway')
         ? { rejectUnauthorized: false }
-        : false,
-      connectionTimeoutMillis: 10000,
-      idleTimeoutMillis: 30000,
-      max: 10
+        : false
     })
   : null;
 
-if (pool) {
-  pool.on('error', error => {
-    console.error('Unexpected PostgreSQL pool error:', error.message);
-  });
-}
-
 async function db(sql, params = []) {
-  if (!pool) {
-    throw new Error('PostgreSQL is not configured. Check DATABASE_URL.');
-  }
+  if (!pool) throw new Error('PostgreSQL is not configured.');
   return pool.query(sql, params);
 }
 
-// Initialize database tables
 async function initDb() {
-  if (!pool) {
-    console.warn('DATABASE_URL is missing. Database features are disabled.');
-    return;
-  }
+  if (!pool) return;
 
-  await db(`
-    CREATE TABLE IF NOT EXISTS assessments (
-      id TEXT PRIMARY KEY,
-      title TEXT,
-      subject TEXT,
-      klass TEXT,
-      total_marks INT,
-      duration TEXT,
-      school TEXT,
-      blueprint JSONB,
-      data JSONB,
-      created_at TIMESTAMPTZ DEFAULT now()
-    )
-  `);
+  await db(`CREATE TABLE IF NOT EXISTS assessments (
+    id TEXT PRIMARY KEY,
+    title TEXT,
+    subject TEXT,
+    klass TEXT,
+    total_marks INT,
+    duration TEXT,
+    school TEXT,
+    blueprint JSONB,
+    data JSONB,
+    created_at TIMESTAMPTZ DEFAULT now()
+  )`);
 
-  await db(`
-    CREATE TABLE IF NOT EXISTS question_bank (
-      id TEXT PRIMARY KEY,
-      subject TEXT,
-      klass TEXT,
-      unit TEXT,
-      topic TEXT,
-      lo TEXT,
-      bloom TEXT,
-      difficulty TEXT,
-      type TEXT,
-      marks INT,
-      question TEXT,
-      answer TEXT,
-      options JSONB,
-      source TEXT,
-      status TEXT DEFAULT 'Approved',
-      created_at TIMESTAMPTZ DEFAULT now()
-    )
-  `);
+  await db(`CREATE TABLE IF NOT EXISTS question_bank (
+    id TEXT PRIMARY KEY,
+    subject TEXT,
+    klass TEXT,
+    unit TEXT,
+    topic TEXT,
+    lo TEXT,
+    bloom TEXT,
+    difficulty TEXT,
+    type TEXT,
+    marks INT,
+    question TEXT,
+    answer TEXT,
+    options JSONB,
+    source TEXT,
+    status TEXT DEFAULT 'Approved',
+    created_at TIMESTAMPTZ DEFAULT now()
+  )`);
 
-  await db(`
-    CREATE TABLE IF NOT EXISTS item_analysis (
-      id TEXT PRIMARY KEY,
-      assessment_id TEXT,
-      data JSONB,
-      created_at TIMESTAMPTZ DEFAULT now()
-    )
-  `);
+  await db(`CREATE TABLE IF NOT EXISTS item_analysis (
+    id TEXT PRIMARY KEY,
+    assessment_id TEXT,
+    data JSONB,
+    created_at TIMESTAMPTZ DEFAULT now()
+  )`);
 
-  // IMPORTANT: app_state uses integer ID 1, not the text "main".
-  await db(`
-    CREATE TABLE IF NOT EXISTS app_state (
-      id INTEGER PRIMARY KEY,
-      data JSONB NOT NULL,
-      updated_at TIMESTAMPTZ DEFAULT now()
-    )
-  `);
+  await db(`CREATE TABLE IF NOT EXISTS app_state (
+    id INTEGER PRIMARY KEY,
+    data JSONB NOT NULL,
+    updated_at TIMESTAMPTZ DEFAULT now()
+  )`);
 
-  console.log('Database tables initialized.');
+  // PDF library: stores original PDFs and OCR text by page.
+  await db(`CREATE TABLE IF NOT EXISTS books (
+    id TEXT PRIMARY KEY,
+    title TEXT NOT NULL,
+    subject TEXT,
+    filename TEXT,
+    page_count INT NOT NULL,
+    pdf BYTEA NOT NULL,
+    pages JSONB NOT NULL,
+    text_chars INT DEFAULT 0,
+    created_at TIMESTAMPTZ DEFAULT now()
+  )`);
 }
 
-const initPromise = initDb();
+initDb().catch(error => console.error('Database setup failed:', error));
 
-initPromise.catch(error => {
-  console.error('Database initialization failed:', error.message);
-});
-
-// Admin password
 const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || 'change-me';
 
-// API authentication
 function auth(req, res, next) {
-  // Login and health checks must be reachable without an existing login.
-  if (req.path === '/login' || req.path === '/health') {
-    return next();
-  }
+  if (req.path === '/api/health') return next();
 
   if ((req.headers['x-admin-password'] || '') !== ADMIN_PASSWORD) {
-    return res.status(401).json({
-      error: 'Unauthorized. Please log in again.'
-    });
+    return res.status(401).json({ error: 'Unauthorized' });
   }
 
   next();
@@ -155,61 +124,24 @@ function auth(req, res, next) {
 
 app.use('/api', auth);
 
-// Health check
-app.get('/api/health', async (req, res) => {
-  try {
-    await initPromise;
-
-    if (!pool) {
-      return res.status(503).json({
-        ok: false,
-        databaseEnabled: false,
-        error: 'DATABASE_URL is not configured.'
-      });
-    }
-
-    await db('SELECT 1');
-
-    res.json({
-      ok: true,
-      app: 'GHDD Assessment Pro',
-      databaseEnabled: true
-    });
-  } catch (error) {
-    console.error('Health check failed:', error.message);
-    res.status(500).json({
-      ok: false,
-      databaseEnabled: Boolean(pool),
-      error: 'Database connection failed.'
-    });
-  }
+app.get('/api/health', (req, res) => {
+  res.json({
+    ok: true,
+    app: 'GHDD Assessment Pro',
+    version: '3.0',
+    databaseEnabled: !!pool
+  });
 });
 
-// Login
 app.post('/api/login', (req, res) => {
-  const password = String(req.body?.password || '');
-
-  if (password !== ADMIN_PASSWORD) {
-    return res.status(401).json({
-      ok: false,
-      error: 'Furaha maamulka waa khaldan yahay.'
-    });
-  }
-
-  res.json({ ok: true });
+  res.json({
+    ok: (req.body?.password || '') === ADMIN_PASSWORD
+  });
 });
 
-// Read persistent application state
+// Save and load the existing application state.
 app.get('/api/state', async (req, res) => {
   try {
-    await initPromise;
-
-    if (!pool) {
-      return res.status(503).json({
-        error: 'PostgreSQL is not configured.'
-      });
-    }
-
     const result = await db(
       'SELECT data, updated_at FROM app_state WHERE id = $1',
       [1]
@@ -219,63 +151,37 @@ app.get('/api/state', async (req, res) => {
       ok: true,
       state: result.rows[0]?.data || null,
       updatedAt: result.rows[0]?.updated_at || null,
-      databaseEnabled: true
+      databaseEnabled: !!pool
     });
   } catch (error) {
-    console.error('State read failed:', error.message);
-    res.status(500).json({
-      error: 'Could not load saved app data.'
-    });
+    res.status(500).json({ error: error.message });
   }
 });
 
-// Save persistent application state
 app.put('/api/state', async (req, res) => {
   try {
-    await initPromise;
+    const state = req.body?.state;
 
-    const incoming = req.body?.state;
-
-    if (
-      !incoming ||
-      typeof incoming !== 'object' ||
-      Array.isArray(incoming)
-    ) {
+    if (!state || typeof state !== 'object' || Array.isArray(state)) {
       return res.status(400).json({
         error: 'A valid state object is required.'
       });
     }
 
-    if (!pool) {
-      return res.status(503).json({
-        error: 'PostgreSQL is not configured.'
-      });
-    }
-
-    // Always use integer ID 1. Never use "main".
     await db(
       `INSERT INTO app_state (id, data, updated_at)
-       VALUES ($1, $2::jsonb, now())
+       VALUES ($1, $2, now())
        ON CONFLICT (id)
-       DO UPDATE SET
-         data = EXCLUDED.data,
-         updated_at = now()`,
-      [1, JSON.stringify(incoming)]
+       DO UPDATE SET data = EXCLUDED.data, updated_at = now()`,
+      [1, JSON.stringify(state)]
     );
 
-    res.json({
-      ok: true,
-      savedAt: new Date().toISOString()
-    });
+    res.json({ ok: true, savedAt: new Date().toISOString() });
   } catch (error) {
-    console.error('State save failed:', error.message);
-    res.status(500).json({
-      error: 'Could not save app data to PostgreSQL.'
-    });
+    res.status(500).json({ error: error.message });
   }
 });
 
-// Helpers
 function uid() {
   return crypto.randomUUID();
 }
@@ -289,148 +195,232 @@ const blooms = [
   'Create'
 ];
 
-function qualityCheck(q) {
+function qualityCheck(question) {
   const issues = [];
   const warnings = [];
   let score = 100;
 
-  const text = String(q.question || q.text || '').trim();
+  const text = String(question.question || '').trim();
 
   if (text.length < 15) {
-    issues.push('Question is too short');
+    issues.push('Question may be too short.');
     score -= 20;
   }
 
-  if (!q.answer || String(q.answer).trim().length < 1) {
-    issues.push('Missing answer/model answer');
+  if (!String(question.answer || '').trim()) {
+    issues.push('Model answer is missing.');
     score -= 25;
   }
 
-  if (q.type === 'MCQ') {
-    const options = Array.isArray(q.options) ? q.options : [];
+  if (question.type === 'MCQ') {
+    const options = Array.isArray(question.options)
+      ? question.options
+      : [];
 
     if (options.length !== 4) {
-      issues.push('MCQ should have exactly 4 options');
+      issues.push('MCQ should have four options.');
       score -= 15;
     }
 
-    const answer = String(q.answer || '').trim();
-
-    if (
-      options.filter(option => String(option).trim() === answer).length !== 1
-    ) {
-      issues.push('MCQ must have exactly one matching correct option');
-      score -= 20;
-    }
-
-    const unique = new Set(
-      options.map(option => String(option).trim().toLowerCase())
-    );
-
-    if (unique.size !== options.length) {
-      issues.push('Duplicate options detected');
+    if (new Set(options.map(x => String(x).trim().toLowerCase())).size
+        !== options.length) {
+      issues.push('Duplicate options detected.');
       score -= 15;
     }
   }
 
-  if (!blooms.includes(q.bloom)) {
-    warnings.push('Bloom level not recognized');
+  if (!blooms.includes(question.bloom)) {
+    warnings.push('Bloom level is missing or invalid.');
     score -= 5;
-  }
-
-  if (!['Easy', 'Moderate', 'Difficult'].includes(q.difficulty)) {
-    warnings.push('Difficulty not set');
-    score -= 5;
-  }
-
-  const lowerText = text.toLowerCase();
-
-  if (
-    lowerText.includes('all of the above') ||
-    lowerText.includes('none of the above')
-  ) {
-    warnings.push('Avoid clue-prone options such as all/none of the above');
   }
 
   return {
     score: Math.max(0, score),
-    status:
-      score >= 90
-        ? 'Excellent'
-        : score >= 75
-          ? 'Review recommended'
-          : 'Needs revision',
+    status: score >= 90
+      ? 'Excellent'
+      : score >= 75
+        ? 'Review recommended'
+        : 'Needs revision',
     issues,
     warnings
   };
 }
 
-// Basic question generation fallback
-function heuristicGenerate(payload) {
-  const count = Math.max(0, Math.min(100, Number(payload.count) || 0));
+// PDF BOOK LIBRARY
 
-  const sourceLines = String(payload.text || '')
-    .split(/\n+/)
-    .map(line => line.trim())
-    .filter(Boolean)
-    .slice(0, count);
+app.get('/api/books', async (req, res) => {
+  try {
+    const result = await db(
+      `SELECT id, title, subject, filename, page_count,
+              text_chars, created_at
+       FROM books ORDER BY created_at DESC`
+    );
 
-  return Array.from({ length: count }, (_, index) => ({
-    id: uid(),
-    type: payload.type || 'Short Answer',
-    question: sourceLines[index]
-      ? `${sourceLines[index]} — explain or apply this concept.`
-      : `Explain one important concept from ${
-          payload.topic || payload.unit || payload.subject || 'the source'
-        }.`,
-    answer:
-      'Teacher review required: add or confirm the model answer from the source material.',
-    options:
-      payload.type === 'MCQ'
-        ? ['Option A', 'Option B', 'Option C', 'Option D']
-        : null,
-    bloom:
-      payload.bloomMix?.[index % Math.max(1, payload.bloomMix.length)] ||
-      'Understand',
-    difficulty:
-      payload.difficultyMix?.[index % Math.max(1, payload.difficultyMix.length)] ||
-      'Moderate',
-    marks: payload.marks || 1,
-    unit: payload.unit || '',
-    topic: payload.topic || '',
-    learningOutcome: payload.learningOutcome || '',
-    source: 'User-provided source',
-    status: 'Draft'
-  }));
-}
+    res.json({ books: result.rows });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
 
-// Optional Gemini AI generation
+// Save the PDF and the OCR text supplied by the front end.
+app.post('/api/books', async (req, res) => {
+  try {
+    const data = req.body || {};
+
+    if (!data.title || !data.pdfBase64 ||
+        !Array.isArray(data.pages) || !data.pages.length) {
+      return res.status(400).json({
+        error: 'Book title, PDF file and OCR page text are required.'
+      });
+    }
+
+    const pdfBuffer = Buffer.from(data.pdfBase64, 'base64');
+
+    if (pdfBuffer.length > 25 * 1024 * 1024) {
+      return res.status(413).json({
+        error: 'PDF must be 25 MB or smaller.'
+      });
+    }
+
+    const pages = data.pages.map(page => ({
+      page: Number(page.page),
+      text: String(page.text || '').slice(0, 100000)
+    }));
+
+    const textChars = pages.reduce(
+      (total, page) => total + page.text.length,
+      0
+    );
+
+    const id = uid();
+
+    await db(
+      `INSERT INTO books
+       (id, title, subject, filename, page_count, pdf, pages, text_chars)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8)`,
+      [
+        id,
+        String(data.title).slice(0, 250),
+        String(data.subject || '').slice(0, 150),
+        String(data.filename || 'book.pdf').slice(0, 250),
+        Number(data.pageCount) || pages.length,
+        pdfBuffer,
+        JSON.stringify(pages),
+        textChars
+      ]
+    );
+
+    res.json({
+      ok: true,
+      id,
+      title: data.title,
+      pageCount: pages.length,
+      textChars
+    });
+  } catch (error) {
+    console.error('Book save failed:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Retrieve OCR text only for the requested page range.
+app.get('/api/books/:id/text', async (req, res) => {
+  try {
+    const start = Math.max(1, Number(req.query.start) || 1);
+    const end = Math.max(start, Number(req.query.end) || 100000);
+
+    const result = await db(
+      'SELECT id, title, page_count, pages FROM books WHERE id = $1',
+      [req.params.id]
+    );
+
+    if (!result.rows.length) {
+      return res.status(404).json({ error: 'Book not found.' });
+    }
+
+    const book = result.rows[0];
+
+    res.json({
+      id: book.id,
+      title: book.title,
+      pageCount: book.page_count,
+      pages: (book.pages || []).filter(
+        page => page.page >= start && page.page <= end
+      )
+    });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Download the original saved PDF.
+app.get('/api/books/:id/pdf', async (req, res) => {
+  try {
+    const result = await db(
+      'SELECT filename, pdf FROM books WHERE id = $1',
+      [req.params.id]
+    );
+
+    if (!result.rows.length) {
+      return res.status(404).json({ error: 'Book not found.' });
+    }
+
+    res.type('application/pdf')
+      .attachment(result.rows[0].filename || 'book.pdf')
+      .send(result.rows[0].pdf);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+app.delete('/api/books/:id', async (req, res) => {
+  try {
+    const result = await db(
+      'DELETE FROM books WHERE id = $1',
+      [req.params.id]
+    );
+
+    res.json({ ok: true, deleted: result.rowCount });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// AI question generation from selected source pages.
 async function aiGenerate(payload) {
-  const key = process.env.GEMINI_API_KEY;
-  if (!key) return null;
+  const apiKey = process.env.GEMINI_API_KEY;
+
+  if (!apiKey) {
+    throw new Error(
+      'GEMINI_API_KEY is missing from Railway Variables.'
+    );
+  }
 
   const model = process.env.GEMINI_MODEL || 'gemini-2.5-flash';
 
   const prompt = `
-You are an expert secondary-school assessment designer.
-Create exactly ${payload.count} questions using ONLY the source text.
-Avoid duplication, ambiguity, trivia and unsupported facts.
-For MCQ, use four plausible options and exactly one correct answer.
-Return JSON only:
-{"questions":[{"id":"","type":"","question":"","answer":"","options":[],"bloom":"","difficulty":"","marks":1,"unit":"","topic":"","learningOutcome":"","source":""}]}
-
+You are an expert secondary-school examination designer.
+Use ONLY the supplied source text.
+Generate exactly ${payload.count} questions.
+Follow Bloom's taxonomy and the requested blueprint.
+Do not invent facts that are absent from the source.
+Avoid duplicate, ambiguous or trivial questions.
+For MCQs, provide four plausible options and one correct answer.
+Include a model answer, marks, Bloom level and difficulty.
+Return valid JSON only in this format:
+{"questions":[
+ {"type":"MCQ","question":"...","answer":"...",
+  "options":["A","B","C","D"],"bloom":"Remember",
+  "difficulty":"Moderate","marks":1,"topic":"..."}
+]}
 Subject: ${payload.subject || ''}
 Class: ${payload.klass || ''}
-Type: ${payload.type || ''}
-Unit: ${payload.unit || ''}
-Topic: ${payload.topic || ''}
-Learning outcome: ${payload.learningOutcome || ''}
-Bloom levels: ${(payload.bloomMix || []).join(', ')}
-Difficulty: ${(payload.difficultyMix || []).join(', ')}
-Marks each: ${payload.marks || 1}
-
+Question count: ${payload.count}
+Question type: ${payload.type || 'Mixed'}
+Bloom levels: ${(payload.bloomMix || blooms).join(', ')}
+Difficulty: ${(payload.difficultyMix || ['Moderate']).join(', ')}
 Source text:
-${String(payload.text || '').slice(0, 70000)}
+${String(payload.sourceText || '').slice(0, 70000)}
 `;
 
   const response = await fetch(
@@ -438,15 +428,12 @@ ${String(payload.text || '').slice(0, 70000)}
     {
       method: 'POST',
       headers: {
-        'content-type': 'application/json',
-        'x-goog-api-key': key
+        'Content-Type': 'application/json',
+        'x-goog-api-key': apiKey
       },
       body: JSON.stringify({
         contents: [
-          {
-            role: 'user',
-            parts: [{ text: prompt }]
-          }
+          { role: 'user', parts: [{ text: prompt }] }
         ],
         generationConfig: {
           responseMimeType: 'application/json',
@@ -460,393 +447,184 @@ ${String(payload.text || '').slice(0, 70000)}
   const result = await response.json();
 
   if (!response.ok) {
-    throw new Error(result?.error?.message || 'AI request failed');
+    throw new Error(result?.error?.message || 'AI generation failed.');
   }
 
   const raw = (result.candidates?.[0]?.content?.parts || [])
     .map(part => part.text || '')
     .join('');
 
-  const parsed = JSON.parse(raw.replace(/^```json|```$/g, '').trim());
-
-  return parsed.questions || [];
+  return JSON.parse(raw).questions || [];
 }
 
-// Generate questions
 app.post('/api/generate', async (req, res) => {
   try {
-    const input = req.body || {};
+    const payload = req.body || {};
 
-    if (!input.sourceText?.trim()) {
+    if (!payload.sourceText?.trim()) {
       return res.status(400).json({
-        error: 'Source text is required'
+        error: 'Select a saved book and valid page range first.'
       });
     }
 
-    const plan = input.blueprint?.questions || [
-      {
-        type: input.type || 'MCQ',
-        count: Number(input.count || 10),
-        bloomMix: ['Remember', 'Understand'],
-        difficultyMix: ['Easy', 'Moderate'],
-        marks: 1
-      }
-    ];
+    const count = Math.max(
+      1,
+      Math.min(100, Number(payload.count) || 10)
+    );
 
-    const questions = [];
-
-    for (const row of plan) {
-      const payload = {
-        ...input,
-        ...row,
-        text: input.sourceText,
-        count: Math.max(0, Math.min(100, Number(row.count) || 0)),
-        marks: Number(row.marks || 1),
-        bloomMix: row.bloomMix || ['Understand'],
-        difficultyMix: row.difficultyMix || ['Moderate']
-      };
-
-      let generated = null;
-
-      try {
-        generated = await aiGenerate(payload);
-      } catch (error) {
-        console.warn('AI fallback:', error.message);
-      }
-
-      const batch =
-        generated?.length
-          ? generated
-          : heuristicGenerate(payload);
-
-      batch.slice(0, payload.count).forEach(question => {
-        questions.push({
-          ...question,
-          id: question.id || uid(),
-          type: question.type || payload.type,
-          marks: Number(question.marks || payload.marks),
-          bloom: question.bloom || payload.bloomMix[0],
-          difficulty: question.difficulty || payload.difficultyMix[0],
-          unit: question.unit || input.unit || '',
-          topic: question.topic || input.topic || '',
-          learningOutcome:
-            question.learningOutcome || input.learningOutcome || '',
-          source: question.source || 'User-provided source',
-          status: 'Draft'
-        });
-      });
-    }
+    const questions = await aiGenerate({
+      ...payload,
+      count,
+      bloomMix: payload.bloomMix || blooms,
+      difficultyMix: payload.difficultyMix || ['Moderate']
+    });
 
     const checked = questions.map(question => ({
       ...question,
-      quality: qualityCheck(question)
+      id: question.id || uid(),
+      quality: qualityCheck(question),
+      status: 'Draft'
     }));
-
-    const totalMarks = checked.reduce(
-      (sum, question) => sum + Number(question.marks || 0),
-      0
-    );
 
     res.json({
       questions: checked,
-      totalMarks,
-      aiUsed: Boolean(process.env.GEMINI_API_KEY)
+      totalMarks: checked.reduce(
+        (total, question) => total + Number(question.marks || 0),
+        0
+      ),
+      aiUsed: true
     });
   } catch (error) {
-    console.error('Question generation failed:', error.message);
+    console.error('Question generation failed:', error);
     res.status(500).json({ error: error.message });
   }
 });
 
-// Similarity helper
-function similarity(a, b) {
-  const A = new Set(a.split(/\s+/).filter(Boolean));
-  const B = new Set(b.split(/\s+/).filter(Boolean));
-
-  let intersection = 0;
-
-  for (const word of A) {
-    if (B.has(word)) intersection++;
-  }
-
-  return intersection / (A.size + B.size - intersection || 1);
-}
-
-// Check question quality and duplication
-app.post('/api/quality-check', (req, res) => {
-  const questions = Array.isArray(req.body?.questions)
-    ? req.body.questions
-    : [];
-
-  const seen = [];
-
-  const output = questions.map((question, index) => {
-    const quality = qualityCheck(question);
-    const text = String(question.question || '')
-      .toLowerCase()
-      .replace(/\W/g, ' ');
-
-    const duplicateIndex = seen.findIndex(
-      previous => similarity(text, previous.text) > 0.82
-    );
-
-    if (duplicateIndex >= 0) {
-      quality.issues.push(`Very similar to question ${duplicateIndex + 1}`);
-      quality.score = Math.max(0, quality.score - 20);
-    }
-
-    seen.push({ text });
-
-    return { ...question, quality };
-  });
-
-  const average = output.length
-    ? Math.round(
-        output.reduce((sum, question) => sum + question.quality.score, 0) /
-          output.length
-      )
-    : 0;
-
-  res.json({
-    questions: output,
-    average,
-    status:
-      average >= 90
-        ? 'Excellent'
-        : average >= 75
-          ? 'Review recommended'
-          : 'Needs revision'
-  });
-});
-
-// Save an assessment
+// Save generated exams.
 app.post('/api/assessments', async (req, res) => {
   try {
-    await initPromise;
-
-    const input = req.body || {};
+    const data = req.body || {};
     const id = uid();
 
     await db(
       `INSERT INTO assessments
-       (id, title, subject, klass, total_marks, duration, school, blueprint, data)
+       (id,title,subject,klass,total_marks,duration,school,blueprint,data)
        VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)`,
       [
         id,
-        input.title || 'Untitled Exam',
-        input.subject || '',
-        input.klass || '',
-        Number(input.totalMarks || 0),
-        input.duration || '',
-        input.school || 'Golaha Horumarinta Dugsiyada Dadweynaha (GHDD)',
-        JSON.stringify(input.blueprint || {}),
-        JSON.stringify(input.data || {})
+        data.title || 'Untitled Exam',
+        data.subject || '',
+        data.klass || '',
+        Number(data.totalMarks) || 0,
+        data.duration || '',
+        data.school || 'GHDD',
+        JSON.stringify(data.blueprint || {}),
+        JSON.stringify(data.data || {})
       ]
     );
 
     res.json({ ok: true, id });
   } catch (error) {
-    console.error('Assessment save failed:', error.message);
     res.status(500).json({ error: error.message });
   }
 });
 
-// List assessments
 app.get('/api/assessments', async (req, res) => {
   try {
-    await initPromise;
-
     const result = await db(
-      `SELECT id, title, subject, klass, total_marks, duration, school, created_at
-       FROM assessments
-       ORDER BY created_at DESC
-       LIMIT 100`
+      `SELECT id,title,subject,klass,total_marks,duration,school,created_at
+       FROM assessments ORDER BY created_at DESC LIMIT 100`
     );
 
     res.json(result.rows);
   } catch (error) {
-    console.error('Assessment list failed:', error.message);
     res.status(500).json({ error: error.message });
   }
 });
 
-// Read one assessment
-app.get('/api/assessments/:id', async (req, res) => {
-  try {
-    await initPromise;
-
-    const result = await db(
-      'SELECT * FROM assessments WHERE id = $1',
-      [req.params.id]
-    );
-
-    if (!result.rows[0]) {
-      return res.status(404).json({ error: 'Not found' });
-    }
-
-    res.json(result.rows[0]);
-  } catch (error) {
-    console.error('Assessment read failed:', error.message);
-    res.status(500).json({ error: error.message });
-  }
-});
-
-// Save a question to the question bank
+// Save and retrieve the question bank.
 app.post('/api/question-bank', async (req, res) => {
   try {
-    await initPromise;
-
     const question = req.body || {};
     const id = question.id || uid();
 
     await db(
       `INSERT INTO question_bank
-       (id, subject, klass, unit, topic, lo, bloom, difficulty, type, marks,
-        question, answer, options, source, status)
+       (id,subject,klass,unit,topic,lo,bloom,difficulty,type,marks,
+        question,answer,options,source,status)
        VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15)
        ON CONFLICT (id) DO UPDATE SET
-         subject = EXCLUDED.subject,
-         klass = EXCLUDED.klass,
-         unit = EXCLUDED.unit,
-         topic = EXCLUDED.topic,
-         lo = EXCLUDED.lo,
-         bloom = EXCLUDED.bloom,
-         difficulty = EXCLUDED.difficulty,
-         type = EXCLUDED.type,
-         marks = EXCLUDED.marks,
-         question = EXCLUDED.question,
-         answer = EXCLUDED.answer,
-         options = EXCLUDED.options,
-         source = EXCLUDED.source,
-         status = EXCLUDED.status`,
+       question=EXCLUDED.question,
+       answer=EXCLUDED.answer,
+       options=EXCLUDED.options,
+       status=EXCLUDED.status`,
       [
-        id,
-        question.subject || '',
-        question.klass || question.className || '',
-        question.unit || '',
-        question.topic || '',
-        question.learningOutcome || '',
-        question.bloom || '',
-        question.difficulty || '',
-        question.type || '',
-        Number(question.marks || 1),
-        question.question || question.text || '',
-        question.answer || '',
-        JSON.stringify(question.options || null),
-        question.source || '',
-        question.status || 'Approved'
+        id, question.subject || '', question.klass || '',
+        question.unit || '', question.topic || '',
+        question.learningOutcome || '', question.bloom || '',
+        question.difficulty || '', question.type || '',
+        Number(question.marks) || 1, question.question || '',
+        question.answer || '', JSON.stringify(question.options || null),
+        question.source || '', question.status || 'Approved'
       ]
     );
 
     res.json({ ok: true, id });
   } catch (error) {
-    console.error('Question save failed:', error.message);
     res.status(500).json({ error: error.message });
   }
 });
 
-// List saved questions
 app.get('/api/question-bank', async (req, res) => {
   try {
-    await initPromise;
-
     const result = await db(
       'SELECT * FROM question_bank ORDER BY created_at DESC LIMIT 300'
     );
 
     res.json(result.rows);
   } catch (error) {
-    console.error('Question list failed:', error.message);
     res.status(500).json({ error: error.message });
   }
 });
 
-// Item analysis
+// Item analysis.
 app.post('/api/item-analysis', (req, res) => {
   const { students = [], questions = [] } = req.body || {};
 
   const rows = questions.map((question, index) => {
-    const difficultyValues = students.map(student =>
-      Number(student.answers?.[index]) === 1 ? 1 : 0
+    const values = students.map(
+      student => Number(student.answers?.[index]) === 1 ? 1 : 0
     );
 
-    const difficultyIndex = difficultyValues.length
-      ? difficultyValues.reduce((sum, value) => sum + value, 0) /
-        difficultyValues.length
+    const difficulty = values.length
+      ? values.reduce((sum, value) => sum + value, 0) / values.length
       : 0;
-
-    const totals = students.map(student => Number(student.total || 0));
-    const sorted = [...totals].sort((a, b) => b - a);
-
-    const groupSize = Math.ceil(sorted.length * 0.27);
-
-    const topCutoff =
-      sorted[Math.max(0, groupSize - 1)] ?? Infinity;
-
-    const bottomCutoff =
-      sorted[Math.max(0, sorted.length - groupSize)] ?? -Infinity;
-
-    const top = students.filter(
-      student => Number(student.total) >= topCutoff
-    );
-
-    const bottom = students.filter(
-      student => Number(student.total) <= bottomCutoff
-    );
-
-    const correctRate = group =>
-      group.length
-        ? group.reduce(
-            (sum, student) =>
-              sum + (Number(student.answers?.[index]) === 1 ? 1 : 0),
-            0
-          ) / group.length
-        : 0;
-
-    const discrimination = correctRate(top) - correctRate(bottom);
 
     return {
       number: index + 1,
       question: question.question,
-      difficultyIndex: Math.round(difficultyIndex * 100),
-      discrimination: Math.round(discrimination * 100) / 100,
-      recommendation:
-        difficultyIndex > 0.9
-          ? 'Too easy'
-          : difficultyIndex < 0.25
-            ? 'Too difficult'
-            : discrimination < 0.2
-              ? 'Review discrimination'
-              : 'Good'
+      difficultyIndex: Math.round(difficulty * 100)
     };
   });
 
   res.json({
     items: rows,
-    summary: {
-      totalQuestions: rows.length,
-      good: rows.filter(row => row.recommendation === 'Good').length,
-      review: rows.filter(row => row.recommendation !== 'Good').length
-    }
+    summary: { totalQuestions: rows.length }
   });
 });
 
-// Frontend fallback
+// Serve the app.
 app.get('*', (req, res) => {
   if (PUBLIC_DIR && fs.existsSync(path.join(PUBLIC_DIR, 'index.html'))) {
     return res.sendFile(path.join(PUBLIC_DIR, 'index.html'));
   }
 
-  res
-    .status(500)
-    .type('text')
-    .send(
-      'GHDD Assessment Pro is running, but public/index.html is missing. Check GitHub and redeploy.'
-    );
+  res.status(500).type('text').send(
+    'GHDD Assessment Pro: index.html was not found. Check the Public folder.'
+  );
 });
 
 const port = process.env.PORT || 3000;
-
 app.listen(port, () => {
   console.log(`GHDD Assessment Pro running on port ${port}`);
 });
