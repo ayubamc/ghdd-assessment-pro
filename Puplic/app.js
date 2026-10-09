@@ -1,16 +1,390 @@
-let currentQuestions=[];
-const $=id=>document.getElementById(id);
-function api(path,opt={}){opt.headers=Object.assign({'Content-Type':'application/json','x-admin-password':localStorage.getItem('adminPassword')||'change-me'},opt.headers||{});return fetch(path,opt).then(async r=>{const j=await r.json().catch(()=>({}));if(!r.ok)throw Error(j.error||'Server error');return j})}
-document.querySelectorAll('nav button').forEach(b=>b.onclick=()=>{document.querySelectorAll('nav button').forEach(x=>x.classList.remove('on'));document.querySelectorAll('.tab').forEach(x=>x.classList.remove('on'));b.classList.add('on');$(b.dataset.tab).classList.add('on');});
-function planRows(){return [...document.querySelectorAll('#plan tr')].map(r=>{const c=r.querySelectorAll('input');return{type:r.children[0].textContent,count:+c[0].value||0,marks:+c[1].value||1,bloomMix:c[2].value.split(',').map(x=>x.trim()).filter(Boolean),difficultyMix:c[3].value.split(',').map(x=>x.trim()).filter(Boolean)}})}
-$('generate').onclick=async()=>{try{$('status').textContent='Generating...';const p={title:$('title').value,subject:$('subject').value,klass:$('klass').value,totalMarks:+$('total').value,duration:$('duration').value,sourceText:$('source').value,unit:$('unit').value,topic:$('topic').value,learningOutcome:$('lo').value,blueprint:{questions:planRows()}};const j=await api('/api/generate',{method:'POST',body:JSON.stringify(p)});currentQuestions=j.questions;renderQuestions();$('status').textContent=j.aiUsed?'AI generated + quality checked':'Offline draft generated + quality checked. Add GEMINI_API_KEY for AI generation.';makeBlueprint()}catch(e){$('status').textContent=e.message}};
-function renderQuestions(){const out=$('questions');out.innerHTML='';let good=0;currentQuestions.forEach((q,i)=>{good+=q.quality.score;const cls=q.quality.score>=90?'excellent':q.quality.score>=75?'review':'bad';out.insertAdjacentHTML('beforeend',`<div class="q"><div class="q-head"><span class="tag">Q${i+1}</span><span class="tag">${q.type}</span><span class="tag">${q.bloom}</span><span class="tag">${q.difficulty}</span><span class="tag">${q.marks} marks</span><span class="score ${cls}">${q.quality.score}/100 • ${q.quality.status}</span></div><p><b>${esc(q.question)}</b></p>${q.options?.length?'<ol type="A">'+q.options.map(x=>`<li>${esc(x)}</li>`).join('')+'</ol>':''}<details><summary>Answer / Marking guide</summary><p>${esc(q.answer)}</p></details>${q.quality.issues.map(x=>`<div class="issue">⚠️ ${esc(x)}</div>`).join('')}${q.quality.warnings.map(x=>`<div class="issue">ℹ️ ${esc(x)}</div>`).join('')}<button onclick="saveQ(${i})">📚 Save to Question Bank</button></div>`)});const avg=currentQuestions.length?Math.round(good/currentQuestions.length):0;$('qualitySummary').innerHTML=`<div class="hero" style="padding:18px"><b>Exam Quality Score: ${avg}/100</b><br>${avg>=90?'🟢 Excellent — ready for teacher review':avg>=75?'🟡 Review recommended':'🔴 Revision required'}</div>`}
-$('runQuality').onclick=async()=>{const j=await api('/api/quality-check',{method:'POST',body:JSON.stringify({questions:currentQuestions})});currentQuestions=j.questions;renderQuestions()};
-$('saveExam').onclick=async()=>{if(!currentQuestions.length)return alert('Generate questions first');const p={title:$('title').value,subject:$('subject').value,klass:$('klass').value,totalMarks:+$('total').value,duration:$('duration').value,school:'Golaha Horumarinta Dugsiyada Dadweynaha (GHDD)',blueprint:{questions:planRows()},data:{questions:currentQuestions,year:$('year').value}};const j=await api('/api/assessments',{method:'POST',body:JSON.stringify(p)});alert('Exam saved: '+j.id);loadRecent()};
-window.saveQ=async i=>{const q=currentQuestions[i];await api('/api/question-bank',{method:'POST',body:JSON.stringify({...q,subject:$('subject').value,klass:$('klass').value,status:'Approved'})});alert('Question saved to bank')};
-window.loadBank=async()=>{const j=await api('/api/question-bank');$('bankOut').innerHTML='<table><tr><th>Question</th><th>Subject</th><th>Bloom</th><th>Difficulty</th><th>Status</th></tr>'+j.map(q=>`<tr><td>${esc(q.question)}</td><td>${esc(q.subject)}</td><td>${esc(q.bloom)}</td><td>${esc(q.difficulty)}</td><td>${esc(q.status)}</td></tr>`).join('')+'</table>'};
-window.makeBlueprint=()=>{const rows=planRows();let html='<table><tr><th>Type</th><th>Questions</th><th>Marks</th><th>Bloom</th><th>Difficulty</th></tr>';rows.forEach(r=>html+=`<tr><td>${r.type}</td><td>${r.count}</td><td>${r.count*r.marks}</td><td>${r.bloomMix.join(', ')}</td><td>${r.difficultyMix.join(', ')}</td></tr>`);html+='</table>';$('blueprintTable').innerHTML=html};
-window.analyze=async()=>{try{const students=JSON.parse($('students').value),questions=JSON.parse($('analysisQs').value);const j=await api('/api/item-analysis',{method:'POST',body:JSON.stringify({students,questions})});$('analysisOut').innerHTML='<h3>Summary</h3><p>Good: '+j.summary.good+' | Review: '+j.summary.review+'</p><table><tr><th>Q</th><th>Difficulty %</th><th>Discrimination</th><th>Recommendation</th></tr>'+j.items.map(x=>`<tr><td>${x.number}</td><td>${x.difficultyIndex}%</td><td>${x.discrimination}</td><td>${x.recommendation}</td></tr>`).join('')+'</table>'}catch(e){$('analysisOut').textContent=e.message}};
-function esc(s){return String(s??'').replace(/[&<>"']/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]))}
-async function loadRecent(){try{const j=await api('/api/assessments');$('recent').innerHTML=j.length?'<table><tr><th>Exam</th><th>Subject</th><th>Class</th><th>Marks</th><th>Date</th></tr>'+j.slice(0,10).map(x=>`<tr><td>${esc(x.title)}</td><td>${esc(x.subject)}</td><td>${esc(x.klass)}</td><td>${x.total_marks}</td><td>${new Date(x.created_at).toLocaleDateString()}</td></tr>`).join('')+'</table>':'No saved exams yet.'}catch(e){$('recent').textContent='Database not connected yet.'}}
-loadRecent();
+
+'use strict';
+
+let currentQuestions = [];
+let adminPassword = '';
+
+const $ = id => document.getElementById(id);
+
+async function api(path, options = {}) {
+  const headers = {
+    'Content-Type': 'application/json',
+    ...(options.headers || {})
+  };
+
+  if (adminPassword) {
+    headers['x-admin-password'] = adminPassword;
+  }
+
+  const response = await fetch('/api' + path, {
+    ...options,
+    headers
+  });
+
+  const result = await response.json().catch(() => ({}));
+
+  if (!response.ok) {
+    throw new Error(result.error || 'Codsiga waa fashilmay.');
+  }
+
+  return result;
+}
+
+function showMessage(message, type = '') {
+  let box = $('app-message');
+
+  if (!box) {
+    box = document.createElement('div');
+    box.id = 'app-message';
+    box.className = 'status-message';
+    box.setAttribute('role', 'status');
+
+    const main = document.querySelector('.app-main');
+    if (main) {
+      main.prepend(box);
+    }
+  }
+
+  box.textContent = message;
+  box.className = 'status-message' + (type ? ' ' + type : '');
+}
+
+function escapeHTML(value) {
+  return String(value ?? '').replace(/[&<>"']/g, char => ({
+    '&': '&amp;',
+    '<': '&lt;',
+    '>': '&gt;',
+    '"': '&quot;',
+    "'": '&#39;'
+  })[char]);
+}
+
+function getExamDetails() {
+  return {
+    title: $('exam-title')?.value.trim() || '',
+    subject: $('exam-subject')?.value.trim() || '',
+    klass: $('exam-class')?.value.trim() || '',
+    duration: $('exam-duration')?.value.trim() || '',
+    school: 'Golaha Horumarinta Dugsiyada Dadweynaha (GHDD)'
+  };
+}
+
+function renderQuestions() {
+  const output = $('questions-list');
+  if (!output) return;
+
+  if (!currentQuestions.length) {
+    output.textContent = 'Weli lama diyaarin su’aalo.';
+    return;
+  }
+
+  output.innerHTML = currentQuestions.map((q, index) => `
+    <article class="question-item">
+      <p><strong>${index + 1}. ${escapeHTML(q.question)}</strong></p>
+      <p>Maado: ${escapeHTML(q.subject)}</p>
+      <p>Fasalka: ${escapeHTML(q.klass)}</p>
+      <p>Dhibcaha: ${q.marks}</p>
+      <label for="answer-${index}">Jawaabta / Tilmaamaha sixidda</label>
+      <textarea id="answer-${index}" rows="2"
+        data-answer-index="${index}"
+        placeholder="Geli jawaabta saxda ah ama marking guide">${escapeHTML(q.answer || '')}</textarea>
+    </article>
+  `).join('');
+}
+
+function makeQuestionsFromText(text) {
+  const sentences = text
+    .replace(/\r/g, '\n')
+    .split(/[\n.!?؟]+/)
+    .map(item => item.trim())
+    .filter(item => item.length >= 20);
+
+  const unique = [...new Set(sentences)];
+
+  return unique.slice(0, 10).map((sentence, index) => ({
+    question: 'Sharax ama ka hadal qodobkan: ' + sentence,
+    answer: '',
+    marks: 2,
+    subject: getExamDetails().subject,
+    klass: getExamDetails().klass,
+    type: 'Short answer',
+    source: 'Teacher-provided text'
+  }));
+}
+
+async function loginIfNeeded() {
+  if (adminPassword) return true;
+
+  const password = window.prompt(
+    'Geli ADMIN_PASSWORD-ka aad ku dejisay Railway Variables si xogta loo kaydiyo:'
+  );
+
+  if (password === null || !password.trim()) {
+    showMessage('Kaydinta waa la joojiyey. Wax xog ah lama dirin.', 'error');
+    return false;
+  }
+
+  try {
+    const result = await api('/login', {
+      method: 'POST',
+      body: JSON.stringify({ password })
+    });
+
+    if (!result.ok) {
+      showMessage('Furaha maamulka waa khalad.', 'error');
+      return false;
+    }
+
+    adminPassword = password;
+    showMessage('Waad gashay. Waxaad hadda adeegsan kartaa API-ga.', 'success');
+    return true;
+  } catch (error) {
+    showMessage(error.message, 'error');
+    return false;
+  }
+}
+
+async function saveExam() {
+  if (!currentQuestions.length) {
+    showMessage('Marka hore diyaari su’aalaha imtixaanka.', 'error');
+    return;
+  }
+
+  const details = getExamDetails();
+
+  if (!details.title || !details.subject || !details.klass) {
+    showMessage('Geli magaca imtixaanka, maadada iyo fasalka.', 'error');
+    return;
+  }
+
+  const totalMarks = currentQuestions.reduce(
+    (sum, q) => sum + Number(q.marks || 0), 0
+  );
+
+  const answers = currentQuestions.map((q, index) => ({
+    ...q,
+    answer: $(`answer-${index}`)?.value || q.answer || ''
+  }));
+
+  if (!(await loginIfNeeded())) return;
+
+  try {
+    const result = await api('/assessments', {
+      method: 'POST',
+      body: JSON.stringify({
+        ...details,
+        totalMarks,
+        data: { questions: answers }
+      })
+    });
+
+    showMessage(
+      'Imtixaanka waa la kaydiyey. Aqoonsiga: ' + result.id,
+      'success'
+    );
+  } catch (error) {
+    showMessage('Kaydinta imtixaanka way fashilantay: ' + error.message, 'error');
+  }
+}
+
+async function saveQuestionsToBank() {
+  if (!currentQuestions.length) {
+    showMessage('Ma jiraan su’aalo la kaydinayo.', 'error');
+    return;
+  }
+
+  if (!(await loginIfNeeded())) return;
+
+  try {
+    for (const question of currentQuestions) {
+      await api('/question-bank', {
+        method: 'POST',
+        body: JSON.stringify(question)
+      });
+    }
+
+    showMessage('Su’aalaha waxaa lagu kaydiyey Question Bank.', 'success');
+    await loadBank();
+  } catch (error) {
+    showMessage('Kaydinta su’aalaha way fashilantay: ' + error.message, 'error');
+  }
+}
+
+async function loadBank() {
+  const output = $('question-bank-content');
+  if (!output) return;
+
+  if (!(await loginIfNeeded())) return;
+
+  try {
+    const rows = await api('/question-bank');
+
+    if (!rows.length) {
+      output.textContent = 'Kaydka su’aaluhu weli waa madhan yahay.';
+      return;
+    }
+
+    output.innerHTML = `
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>Maado</th>
+              <th>Fasal</th>
+              <th>Su’aal</th>
+              <th>Dhibco</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${rows.map(q => `
+              <tr>
+                <td>${escapeHTML(q.subject)}</td>
+                <td>${escapeHTML(q.klass)}</td>
+                <td>${escapeHTML(q.question)}</td>
+                <td>${escapeHTML(q.marks)}</td>
+              </tr>
+            `).join('')}
+          </tbody>
+        </table>
+      </div>
+    `;
+  } catch (error) {
+    output.textContent = 'Lama soo qaadi karin Question Bank: ' + error.message;
+  }
+}
+
+async function loadRecent() {
+  const output = $('blueprint-content');
+  if (!output) return;
+
+  if (!(await loginIfNeeded())) return;
+
+  try {
+    const rows = await api('/assessments');
+
+    if (!rows.length) {
+      output.textContent = 'Weli ma jiraan imtixaanno kaydsan.';
+      return;
+    }
+
+    output.innerHTML = `
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>Imtixaan</th>
+              <th>Maado</th>
+              <th>Fasal</th>
+              <th>Dhibco</th>
+              <th>Taariikh</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${rows.map(item => `
+              <tr>
+                <td>${escapeHTML(item.title)}</td>
+                <td>${escapeHTML(item.subject)}</td>
+                <td>${escapeHTML(item.klass)}</td>
+                <td>${escapeHTML(item.total_marks)}</td>
+                <td>${escapeHTML(item.created_at || '')}</td>
+              </tr>
+            `).join('')}
+          </tbody>
+        </table>
+      </div>
+    `;
+  } catch (error) {
+    output.textContent = 'Lama soo qaadi karin imtixaannada: ' + error.message;
+  }
+}
+
+function analyzeQuestions() {
+  const output = $('analysis-content');
+  if (!output) return;
+
+  if (!currentQuestions.length) {
+    output.textContent = 'Marka hore diyaari su’aalaha imtixaanka.';
+    return;
+  }
+
+  const total = currentQuestions.reduce(
+    (sum, q) => sum + Number(q.marks || 0), 0
+  );
+
+  output.innerHTML = `
+    <div class="question-item">
+      <p>Tirada su’aalaha: <strong>${currentQuestions.length}</strong></p>
+      <p>Wadarta dhibcaha: <strong>${total}</strong></p>
+      <p>
+        Hubi in su’aaluhu daboolayaan ujeeddooyinka waxbarashada,
+        heerarka garashada iyo mawduucyada casharka.
+      </p>
+      <p>
+        Falanqayntan waa mid hordhac ah; ma aha cabbir cilmiyeed
+        oo lagu xaqiijiyey adkaanta ama kala-soocidda su’aalaha.
+      </p>
+    </div>
+  `;
+}
+
+document.addEventListener('DOMContentLoaded', function () {
+  const generateButton = $('generate-questions');
+
+  if (generateButton) {
+    generateButton.addEventListener('click', function () {
+      const text = $('source-text')?.value.trim() || '';
+
+      if (text.length < 20) {
+        showMessage('Fadlan geli qoraal ama cashar ku filan.', 'error');
+        return;
+      }
+
+      currentQuestions = makeQuestionsFromText(text);
+
+      if (!currentQuestions.length) {
+        showMessage('Qoraalka lagama soo saari karin su’aalo hordhac ah.', 'error');
+        return;
+      }
+
+      renderQuestions();
+      showMessage(
+        currentQuestions.length +
+        ' su’aalood oo hordhac ah ayaa la diyaariyey. Dib u eeg oo sax ka hor isticmaalka.',
+        'success'
+      );
+    });
+  }
+
+  const builder = $('builder');
+
+  if (builder) {
+    const saveButton = document.createElement('button');
+    saveButton.type = 'button';
+    saveButton.textContent = 'Kaydi Imtixaanka';
+    saveButton.style.marginRight = '10px';
+    saveButton.addEventListener('click', saveExam);
+
+    const bankButton = document.createElement('button');
+    bankButton.type = 'button';
+    bankButton.textContent = 'Ku kaydi Question Bank';
+    bankButton.addEventListener('click', saveQuestionsToBank);
+
+    const container = builder.querySelector('#generated-questions');
+
+    if (container) {
+      container.append(saveButton, bankButton);
+    }
+  }
+
+  document.querySelectorAll('.main-nav [data-tab]').forEach(button => {
+    button.addEventListener('click', async function () {
+      const target = button.dataset.tab;
+
+      if (target === 'bank') await loadBank();
+      if (target === 'blueprint') await loadRecent();
+      if (target === 'analysis') analyzeQuestions();
+    });
+  });
+
+  console.log('GHDD Assessment Pro frontend initialized.');
+});
