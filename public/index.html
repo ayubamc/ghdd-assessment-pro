@@ -45,7 +45,7 @@ textarea{min-height:90px}
 #printRoot h1,#printRoot h2,#printRoot h3{color:#111}
 .paper-head{text-align:center;border-bottom:2px solid #111;padding-bottom:12px;margin-bottom:18px}
 .paper-meta{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin:15px 0}
-.answer-space{margin:8px 0 16px;break-inside:avoid}.answer-line{height:25px;border-bottom:1px solid #777}.student-answer-label{font-size:12px;color:#555;margin-top:8px}.exam-diagram{margin:10px 0;text-align:center;break-inside:avoid}.exam-diagram svg{max-width:100%;height:auto;max-height:330px}.diagram-drawing-space{height:110px;border:1px dashed #888;margin:8px 0}
+.exam-logo{display:block;max-width:100%;width:100%;max-height:115px;object-fit:contain;margin:0 auto 10px}.answer-space{margin:8px 0 16px;break-inside:avoid}.answer-line{height:25px;border-bottom:1px solid #777}.student-answer-label{font-size:12px;color:#555;margin-top:8px}.exam-diagram{margin:10px 0;text-align:center;break-inside:avoid}.exam-diagram svg{max-width:100%;height:auto;max-height:330px}.diagram-drawing-space{height:110px;border:1px dashed #888;margin:8px 0}
 .paper-question{margin:16px 0;break-inside:avoid}
 .paper-question p{margin:5px 0}
 .paper-section{font-weight:bold;margin-top:22px;border-bottom:1px solid #555;padding-bottom:4px}
@@ -537,6 +537,24 @@ async function loadBooks(){
 $('refreshBooks').onclick=loadBooks;
 
 
+function detectExamLanguage(source){
+  const text=String(source||'');
+  if(/[\u0600-\u06FF]/.test(text))return 'ar';
+  const words=(text.toLowerCase().match(/[a-z]+/g)||[]);
+  const somaliWords=new Set(['waa','iyo','jirka','qaybta','qaybaha','su’aal','su aal','jawaab','jawaabta','xubinta','dhig','dhiigga','qorraxda','dusha','xisaabi','sharax','sheeg','qeex','maxay','sidee','meesha','waxaa','ahaan','lagu','sida','marka','dhammaan','heerka','bogga','erayga','macnaha','tusaale','dhex','habka','waxaa','ardayga','dugsiga','cufka','xawaaraha','tamarta','dareere','koronto','xoogga']);
+  let score=0;
+  for(const w of words)if(somaliWords.has(w))score++;
+  return score>=3?'so':'en';
+}
+function examText(lang,key){
+  const labels={
+    en:{mcq:'PART I — MULTIPLE CHOICE QUESTIONS',fill:'PART II — FILL IN THE BLANKS',matching:'PART III — MATCHING',structured:'PART IV — DIRECT / STRUCTURED QUESTIONS',name:'Name',date:'Date',class:'Class',total:'Total Marks',instructions:'Instructions',answer:'ANSWER KEY AND MARKING GUIDE',studentAnswer:'Answer',question:'Question',answerChoices:'Answer choices',matchPrompt:'Match the following items with the correct answers:',source:'Source'},
+    so:{mcq:'QAYBTA I — SU’AALAHA DOORASHADA',fill:'QAYBTA II — MEELAHA BANNAAN',matching:'QAYBTA III — ISKU-AADINTA',structured:'QAYBTA IV — SU’AALAHA TOOSKA AH / QAABAYSAN',name:'Magaca',date:'Taariikhda',class:'Fasalka',total:'Wadarta dhibcaha',instructions:'Tilmaamaha',answer:'JAWAABAHA SAXDA AH IYO HABKA SAXIDDA',studentAnswer:'Jawaabta',question:'Su’aasha',answerChoices:'Doorashooyinka jawaabaha',matchPrompt:'Isku-aadi su’aalaha iyo jawaabaha saxda ah:',source:'Isha'},
+    ar:{mcq:'القسم الأول — أسئلة الاختيار من متعدد',fill:'القسم الثاني — أكمل الفراغات',matching:'القسم الثالث — المطابقة',structured:'القسم الرابع — الأسئلة المباشرة / المنظمة',name:'الاسم',date:'التاريخ',class:'الصف',total:'الدرجة الكلية',instructions:'التعليمات',answer:'نموذج الإجابة ودليل التصحيح',studentAnswer:'إجابة الطالب',question:'السؤال',answerChoices:'خيارات الإجابة',matchPrompt:'صِل العناصر بالإجابات الصحيحة:',source:'المصدر'}
+  };
+  return (labels[lang]||labels.en)[key]||key;
+}
+
 function sanitizeDiagramSvg(svg){
   if(!svg||typeof svg!=='string')return '';
   let s=svg.replace(/<script[\s\S]*?<\/script>/gi,'')
@@ -547,17 +565,17 @@ function sanitizeDiagramSvg(svg){
   return /<svg\b/i.test(s)?s:'';
 }
 
-function makePartPlan(totalCount,totalMarks,format,diagramCount){
+function makePartPlan(totalCount,totalMarks,format,diagramCount,lang='en'){
   const specs = format==='two-section'
     ? [
-        {section:'PART I — MULTIPLE CHOICE QUESTIONS',type:'MCQ',ratio:.45,weight:.4},
-        {section:'PART II — STRUCTURED QUESTIONS',type:'Structured',ratio:.55,weight:.6}
+         {section:examText(lang,'mcq'),type:'MCQ',ratio:.45,weight:.4},
+        {section:examText(lang,'structured'),type:'Structured',ratio:.55,weight:.6}
       ]
     : [
-        {section:'PART I — MULTIPLE CHOICE QUESTIONS',type:'MCQ',ratio:.455,weight:.2},
-        {section:'PART II — FILL IN THE BLANKS',type:'Fill in the Blank',ratio:.227,weight:.1},
-        {section:'PART III — MATCHING',type:'Matching',ratio:.045,weight:.1},
-        {section:'PART IV — DIRECT / STRUCTURED QUESTIONS',type:'Structured',ratio:.273,weight:.6}
+         {section:examText(lang,'mcq'),type:'MCQ',ratio:.455,weight:.2},
+        {section:examText(lang,'fill'),type:'Fill in the Blank',ratio:.227,weight:.1},
+        {section:examText(lang,'matching'),type:'Matching',ratio:.045,weight:.1},
+        {section:examText(lang,'structured'),type:'Structured',ratio:.273,weight:.6}
       ];
   const raw=specs.map(s=>totalCount*s.ratio),counts=raw.map(Math.floor);
   let left=totalCount-counts.reduce((a,b)=>a+b,0);
@@ -629,7 +647,7 @@ $('generateExam').onclick=async()=>{
       method:'POST',
       body:JSON.stringify({
         sourceText,subject,className,count:effectiveCount,questionCount:effectiveCount,
-        totalMarks,format,diagramCount,partPlan,levels,type:'Isku-dhafan',sourceSelectionRule:'Spread questions across different headings/topics. Do not take consecutive questions from the same paragraph or same heading. Prefer passages separated by at least two headings or at least one full page. Record source pages and topic/heading for each question.',
+        totalMarks,format,diagramCount,partPlan,levels,type:'Isku-dhafan',sourceSelectionRule:'Spread questions across different headings/topics. Do not take consecutive questions from the same paragraph or same heading. Prefer passages separated by at least two headings or at least one full page. Record source pages and topic/heading for each question.',examLanguage,
         sourceTitle:d.title,
         pageRange:{start,end}
       })
@@ -672,6 +690,7 @@ $('generateExam').onclick=async()=>{
     renderQuestions();
 
     const renderPaperQuestions=(withAnswers)=> {
+       const lang=examLanguage||detectExamLanguage(sourceText);
        let lastSection='';
        return normalized.map((q,i)=>{
          const section=q.section||'Questions';
@@ -691,7 +710,7 @@ $('generateExam').onclick=async()=>{
          }
          const options=q.options?.length?`<table class="mcq-options-table"><tbody><tr>${q.options.slice(0,4).map((opt,k)=>`<td><strong>${String.fromCharCode(65+k)}.</strong> ${esc(String(opt).replace(/^[A-D]\.\s*/i,''))}</td>`).join('')}</tr></tbody></table>`:'';
          const safeSvg=q.diagramSvg?sanitizeDiagramSvg(q.diagramSvg):'';
-         const diagram=safeSvg?`<div class="exam-diagram">${safeSvg}</div>`:(q.diagram?`<div class="diagram-note"><strong>Jaantus / sawir:</strong> ${esc(q.diagram)}<div class="diagram-drawing-space"></div></div>`:'');
+         const diagram=safeSvg?`<div class="exam-diagram">${safeSvg}</div>`:(q.diagram&&q.diagram!=='undefined'?`<div class="diagram-note"><strong>${lang==='ar'?'الرسم التوضيحي':lang==='so'?'Jaantus / sawir':'Diagram'}:</strong> ${esc(q.diagram)}</div>`:'');
          const isDirect=/structured|direct/i.test(q.type||'')||/STRUCTURED|DIRECT/i.test(section);
          const answerSpace=(!withAnswers&&isDirect)?`<div class="student-answer-label">Answer:</div><div class="answer-space">${Array.from({length:Math.max(2,Math.min(14,Math.ceil(Number(q.marks||1)*1.4)))},()=>'<div class="answer-line"></div>').join('')}</div>`:'';
          const answer=withAnswers?`<div class="answer-box"><strong>Jawaabta / Marking guide:</strong> ${esc(q.answer||'Not provided')}</div>`:'';
@@ -704,10 +723,11 @@ $('generateExam').onclick=async()=>{
      };
     const instructions= $('examInstructions').value.trim()||'Answer all questions. Read each question carefully.';
     const total=normalized.reduce((sum,q)=>sum+q.marks,0);
-    const header=`<div class="paper-head"><h1>${esc(schoolName)}</h1><h2>${esc(examTitle)}</h2><p>${esc(subject)} · ${esc(className)}</p></div>`;
-    const meta=`<div class="paper-meta"><div><strong>Name:</strong> ________________________</div><div><strong>Date:</strong> ________________________</div><div><strong>Class:</strong> ${esc(className)}</div><div><strong>Total Marks:</strong> ${total}</div></div>`;
-    const examPaper=`${header}${meta}<p><strong>Instructions:</strong> ${esc(instructions)}</p>${renderPaperQuestions(false)}<p><strong>Total: ${total} marks</strong></p>`;
-    const answerPaper=`${header}<h2>ANSWER KEY AND MARKING GUIDE</h2><p><strong>Total Marks:</strong> ${total}</p>${renderPaperQuestions(true)}`;
+    const lang=examLanguage||detectExamLanguage(sourceText);
+    const header=`<div class="paper-head"><img class="exam-logo" src="/letterhead.jpg" alt="GHDD logo"><h1>${esc(schoolName)}</h1><h2>${esc(examTitle)}</h2><p>${esc(subject)} · ${esc(className)}</p></div>`;
+    const meta=`<div class="paper-meta"><div><strong>${examText(lang,'name')}:</strong> ________________________</div><div><strong>${examText(lang,'date')}:</strong> ________________________</div><div><strong>${examText(lang,'class')}:</strong> ${esc(className)}</div><div><strong>${examText(lang,'total')}:</strong> ${total}</div></div>`;
+    const examPaper=`${header}${meta}<p><strong>${examText(lang,'instructions')}:</strong> ${esc(instructions)}</p>${renderPaperQuestions(false)}<p><strong>${examText(lang,'total')}: ${total} marks</strong></p>`;
+    const answerPaper=`${header}<h2>${examText(lang,'answer')}</h2><p><strong>${examText(lang,'total')}:</strong> ${total}</p>${renderPaperQuestions(true)}`;
     $('printRoot').innerHTML=`<div class="paper-tools no-print"><button id="printExamOnly">Daabac imtixaanka (jawaabaha ma muuqdaan)</button><button id="printAnswerKey">Daabac answer key</button></div><div id="studentPaper">${examPaper}</div><div id="keyPaper" style="margin-top:35px;border-top:3px double #333;padding-top:18px">${answerPaper}</div>`;
     out.innerHTML=`<div class="notice"><strong>Imtixaanka oo dhammaystiran ayaa diyaar ah.</strong><br>Wadarta dhibcaha: ${total}/${total}. Su’aalaha si toos ah ayaa loogu daray imtixaanka; looma baahna inaad mid-mid u riixdo.<br>Dib u eeg su’aalaha, kadib dooro daabacaadda imtixaanka ama answer key-ga.</div>
       <div class="paper-tools no-print"><button id="previewPrintExam">🖨️ Daabac imtixaanka</button><button id="previewPrintKey" class="secondary">🔑 Daabac answer key</button><button id="previewPrintBoth" class="secondary">Daabac labadaba</button></div>
