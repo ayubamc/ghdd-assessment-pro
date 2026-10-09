@@ -635,6 +635,8 @@ $('generateExam').onclick=async()=>{
     const d=await api(`/api/books/${encodeURIComponent(id)}/text?start=${start}&end=${end}`,{method:'GET'});
     const selected=(d.pages||[]).filter(p=>p.text&&p.text.trim());
     const sourceText=selected.map(p=>`[BOGGA ${p.page} — QORAALKA BOGGAN]\n${p.text}`).join('\n\n--- DHAMMAADKA BOGGA ---\n\n');
+     const examLanguage=detectExamLanguage(sourceText);
+     partPlan=makePartPlan(effectiveCount,totalMarks,format,diagramCount,examLanguage);
     if(!sourceText.trim())throw new Error('Qoraal lagama helin bogagga la doortay.');
 
     status.textContent='AI ayaa diyaarinaya su’aalaha laga soo qaatay bogagga aad dooratay...';
