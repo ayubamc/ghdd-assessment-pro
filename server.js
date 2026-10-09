@@ -805,6 +805,112 @@ app.post('/api/item-analysis', (req, res) => {
   });
 });
 
+
+app.post('/api/lesson-plan/generate', async (req, res) => {
+  try {
+    const p = req.body || {};
+    const sourceText = String(p.schemeText || '').trim();
+    if (!sourceText) return res.status(400).json({ error: 'Fadlan soo geli Scheme of Work ama ku dheji qoraalkiisa.' });
+    if (sourceText.length < 80) return res.status(400).json({ error: 'Qoraalka Scheme of Work waa gaaban yahay. Hubi in PDF-ga la akhriyey.' });
+    const key = process.env.GEMINI_API_KEY;
+    if (!key) return res.status(503).json({ error: 'GEMINI_API_KEY laguma dejin Railway.' });
+
+    const language = String(p.language || 'auto');
+    const subject = String(p.subject || 'Not specified');
+    const className = String(p.className || 'Not specified');
+    const teacherName = String(p.teacherName || '');
+    const academicYear = String(p.academicYear || '2026-2027');
+    const lessonDuration = Math.min(180, Math.max(20, Number(p.lessonDuration || 40)));
+    const lessonsPerWeek = Math.min(10, Math.max(1, Number(p.lessonsPerWeek || 3)));
+    const termCount = Math.min(4, Math.max(1, Number(p.termCount || 3)));
+    const modelCandidates = [...new Set([process.env.GEMINI_MODEL, 'gemini-3.5-flash-lite', 'gemini-3.1-flash-lite', 'gemini-2.5-flash'].filter(Boolean))];
+    const langInstruction = language === 'auto'
+      ? 'Detect the dominant language of the scheme of work and use that same language consistently for all lesson-plan and lesson-note content. Do not mix languages.'
+      : `Write all generated material in ${language === 'so' ? 'Somali' : language === 'ar' ? 'Arabic' : 'English'} only. Do not mix languages.`;
+
+    const prompt = `
+You are an experienced secondary-school teacher and lesson-planning specialist. Use ONLY the uploaded Scheme of Work as the curriculum source. Do not silently invent chapters or content not supported by the scheme.
+LANGUAGE: ${langInstruction}
+Create a complete lesson-planning package for academic year ${academicYear}.
+School lesson-plan template to follow:
+- Teacher name, class, subject, date, day, unit, lesson title, lesson duration, lesson/session number.
+- Introduction.
+- Lesson objectives beginning "By the end of the lesson, learners should be able to..." with observable verbs.
+- Teaching methods.
+- Learning aids/resources.
+- Evaluation questions.
+- Time management table totaling exactly ${lessonDuration} minutes (opening/previous-lesson review, attendance or settling, explanation/activity, evaluation/homework). Do not include impossible or negative time values.
+- Lesson Note following the lesson plan, including the lesson title, short explanatory summary, headings/key points, examples or activities where the scheme supports them, and a concise final summary.
+Requirements:
+1. Plan every topic/lesson stated in the Scheme of Work across the year, keeping its order and term/week sequence. Do not skip units.
+2. Use ${lessonsPerWeek} lesson sessions per week and ${lessonDuration} minutes per session unless the Scheme of Work specifies otherwise.
+3. Split large topics across appropriate sessions; do not repeat identical objectives or notes.
+4. Include a short, usable lesson note summary for EVERY lesson plan and align the note directly with that lesson's objectives.
+5. Each session needs: week, term, unit, lessonNumber, lessonTitle, date (blank if not stated in scheme), durationMinutes, introduction, objectives (array), teachingMethods (array), learningAids (array), evaluationQuestions (array), timeManagement (array of {stage, minutes}, sum exactly ${lessonDuration}), noteSummary, noteHeadings (array of {heading, content}), homework, sourceTopic.
+6. Avoid claiming that dates are fixed if the scheme gives no dates. Provide week/term placement and leave date blank when unavailable.
+7. Provide a brief yearly overview and any scheme gaps/assumptions separately; do not change the scheme sequence. Term count: ${termCount}.
+8. Keep the content practical, classroom-ready, and aligned to the supplied sample template. The sample lesson plan is a formatting model, not a source for subject facts.
+9. Respond with valid JSON only, no markdown, no text outside JSON.
+JSON shape:
+{"academicYear":"${academicYear}","subject":"${subject}","className":"${className}","teacherName":"${teacherName}","language":"...","yearOverview":"...","assumptions":["..."],"lessons":[{"term":1,"week":1,"unit":"...","lessonNumber":1,"lessonTitle":"...","date":"","durationMinutes":${lessonDuration},"introduction":"...","objectives":["..."],"teachingMethods":["..."],"learningAids":["..."],"evaluationQuestions":["..."],"timeManagement":[{"stage":"...","minutes":5}],"noteSummary":"...","noteHeadings":[{"heading":"...","content":"..."}],"homework":"...","sourceTopic":"..."}]}
+SCHEME OF WORK (source of truth):
+${sourceText.slice(0, 45000)}
+`;
+    let lastError = 'AI generation failed';
+    for (const model of modelCandidates) {
+      try {
+        const r = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${encodeURIComponent(key)}`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            contents: [{ parts: [{ text: prompt }] }],
+            generationConfig: { temperature: 0.2, responseMimeType: 'application/json', maxOutputTokens: 16000 }
+          })
+        });
+        const data = await r.json().catch(() => ({}));
+        if (!r.ok) {
+          lastError = data?.error?.message || `AI service returned ${r.status}`;
+          if ([429, 500, 502, 503].includes(r.status)) continue;
+          return res.status(502).json({ error: `AI: ${lastError}` });
+        }
+        const raw = data?.candidates?.[0]?.content?.parts?.map(x => x.text || '').join('') || '';
+        if (!raw.trim()) { lastError = 'AI jawaab madhan ayuu soo celiyey.'; continue; }
+        let parsed;
+        try { parsed = JSON.parse(raw.replace(/^```(?:json)?/i, '').replace(/```$/,'').trim()); }
+        catch (_) { lastError = 'Jawaabta AI ma ahayn JSON dhammaystiran. Isku day Scheme of Work ka gaaban.'; continue; }
+        if (!Array.isArray(parsed.lessons) || !parsed.lessons.length) { lastError = 'AI ma soo saarin casharro qorshaysan.'; continue; }
+        parsed.lessons = parsed.lessons.map((l, i) => {
+          const tm = Array.isArray(l.timeManagement) ? l.timeManagement : [];
+          const sum = tm.reduce((n, t) => n + Number(t.minutes || 0), 0);
+          if (!tm.length || sum !== lessonDuration) {
+            l.timeManagement = [
+              { stage: 'Review / introduction', minutes: 5 },
+              { stage: 'Attendance / settling', minutes: 3 },
+              { stage: 'Teaching and learning activities', minutes: lessonDuration - 10 },
+              { stage: 'Evaluation and homework', minutes: 2 }
+            ];
+          }
+          l.lessonNumber = Number(l.lessonNumber || i + 1);
+          l.durationMinutes = lessonDuration;
+          l.objectives = Array.isArray(l.objectives) ? l.objectives : [];
+          l.teachingMethods = Array.isArray(l.teachingMethods) ? l.teachingMethods : [];
+          l.learningAids = Array.isArray(l.learningAids) ? l.learningAids : [];
+          l.evaluationQuestions = Array.isArray(l.evaluationQuestions) ? l.evaluationQuestions : [];
+          l.noteHeadings = Array.isArray(l.noteHeadings) ? l.noteHeadings : [];
+          return l;
+        });
+        return res.json(parsed);
+      } catch (e) {
+        lastError = e.message || String(e);
+      }
+    }
+    return res.status(502).json({ error: `AI ma dhammaystirin qorshaha: ${lastError}` });
+  } catch (e) {
+    console.error('Lesson-plan generation failed:', e);
+    return res.status(500).json({ error: e.message || 'Khalad ayaa dhacay.' });
+  }
+});
+
 app.get('*', (req, res) => {
   if (PUBLIC_DIR && fs.existsSync(path.join(PUBLIC_DIR, 'index.html'))) {
     return res.sendFile(path.join(PUBLIC_DIR, 'index.html'));
