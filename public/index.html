@@ -525,13 +525,19 @@ $('generateExam').onclick=async()=>{
   const count=countText===''?null:Number(countText);
   const totalMarks=Number($('genTotalMarks').value)||100;
   const levels=Array.from($('genLevels').selectedOptions).map(o=>o.value);
-
+  const diagramCount=Number($('diagramCount').value);
   if(!id)return alert('Dooro buug.');
   if(!Number.isInteger(start)||!Number.isInteger(end)||start<1||end<start)
     return alert('Hubi bogga bilowga iyo dhammaadka.');
   if(count!==null&&(!Number.isInteger(count)||count<4||count>50))return alert('Qaabka afarta qaybood ah, tirada su’aaluhu waa 4 ilaa 50; ama madhan uga tag.');
   if(!Number.isInteger(totalMarks)||totalMarks<10||totalMarks>300)return alert('Wadarta dhibcuhu waa inay u dhexaysaa 10 ilaa 300.');
+  if(!Number.isInteger(diagramCount)||diagramCount<0||diagramCount>30)return alert('Tirada jaantusyadu waa 0 ilaa 30.');
   if(!levels.length)return alert('Dooro ugu yaraan hal heer Bloom.');
+  const effectiveCount=count===null?Math.min(50,Math.max(10,Math.round(totalMarks*0.44))):count;
+  const format=$('genFormat').value;
+  let partPlan;
+  try{partPlan=makePartPlan(effectiveCount,totalMarks,format,diagramCount);}
+  catch(planError){return alert(planError.message);}
 
   const status=$('generateStatus');
   const out=$('generatedQuestions');
@@ -553,9 +559,8 @@ $('generateExam').onclick=async()=>{
     const generated=await api('/api/generate',{
       method:'POST',
       body:JSON.stringify({
-        sourceText,subject,className,count,questionCount:count,
-        totalMarks,format:$('genFormat').value,diagramMode:$('diagramMode').value,
-        levels,type:'Isku-dhafan',
+        sourceText,subject,className,count:effectiveCount,questionCount:effectiveCount,
+        totalMarks,format,diagramCount,partPlan,levels,type:'Isku-dhafan',
         sourceTitle:d.title,
         pageRange:{start,end}
       })
@@ -563,6 +568,7 @@ $('generateExam').onclick=async()=>{
 
     let qs=generated.questions||[];
      if(!qs.length)throw new Error('AI ma soo celin su’aalo.');
+     if(qs.length<effectiveCount)throw new Error(`AI-gu wuxuu soo celiyey ${qs.length} su’aalood halkii laga rabay ${effectiveCount}. Isku day mar kale ama yaree tirada su’aalaha.`);
      qs=qs.slice(0,effectiveCount).map(q=>cleanMatches(q));
      qs=applyExactMarks(qs,partPlan,totalMarks);
      let diagramsLeft=diagramCount;
