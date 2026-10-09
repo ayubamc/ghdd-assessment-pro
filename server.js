@@ -12,11 +12,14 @@ const app = express();
 
 app.use(express.json({ limit: '15mb' }));
 
-// Find the public folder reliably on Railway.
+// Support both "public" and "Public" directory names.
 const publicCandidates = [
   path.join(__dirname, 'public'),
+  path.join(__dirname, 'Public'),
   path.join(process.cwd(), 'public'),
-  '/app/public'
+  path.join(process.cwd(), 'Public'),
+  '/app/public',
+  '/app/Public'
 ];
 
 const PUBLIC_DIR = publicCandidates.find(dir =>
@@ -24,13 +27,10 @@ const PUBLIC_DIR = publicCandidates.find(dir =>
 );
 
 if (PUBLIC_DIR) {
-  console.log(`Serving web files from: ${PUBLIC_DIR}`);
+  console.log(`Serving frontend from: ${PUBLIC_DIR}`);
   app.use(express.static(PUBLIC_DIR));
 } else {
-  console.error(
-    'PUBLIC DIRECTORY ERROR. Checked:',
-    publicCandidates.join(', ')
-  );
+  console.error('Frontend not found. Checked:', publicCandidates);
 }
 
 const pool = process.env.DATABASE_URL
@@ -43,13 +43,15 @@ const pool = process.env.DATABASE_URL
   : null;
 
 async function db(sql, params = []) {
-  if (!pool) throw new Error('DATABASE_URL is not configured');
+  if (!pool) {
+    throw new Error('DATABASE_URL is not configured');
+  }
   return pool.query(sql, params);
 }
 
 async function initDb() {
   if (!pool) {
-    console.warn('DATABASE_URL is missing. Database features are disabled.');
+    console.warn('DATABASE_URL is missing; database features are disabled.');
     return;
   }
 
@@ -98,15 +100,23 @@ async function initDb() {
     )
   `);
 
-  console.log('Database tables are ready.');
+  console.log('Database tables ready.');
 }
 
-initDb().catch(err => console.error('Database initialization failed:', err));
+initDb().catch(err =>
+  console.error('Database initialization failed:', err.message)
+);
 
-const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || 'change-me';
+const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD;
 
 function auth(req, res, next) {
   if (req.path === '/health') return next();
+
+  if (!ADMIN_PASSWORD) {
+    return res.status(503).json({
+      error: 'ADMIN_PASSWORD is not configured'
+    });
+  }
 
   if ((req.headers['x-admin-password'] || '') !== ADMIN_PASSWORD) {
     return res.status(401).json({ error: 'Unauthorized' });
@@ -126,6 +136,13 @@ app.get('/api/health', (req, res) => {
 });
 
 app.post('/api/login', (req, res) => {
+  if (!ADMIN_PASSWORD) {
+    return res.status(503).json({
+      ok: false,
+      error: 'ADMIN_PASSWORD is not configured'
+    });
+  }
+
   res.json({
     ok: (req.body?.password || '') === ADMIN_PASSWORD
   });
@@ -151,34 +168,40 @@ function qualityCheck(q) {
   const warnings = [];
   let score = 100;
 
-  const text = String(q.question || q.text || '').trim();
+  const question = String(q.question || q.text || '').trim();
 
-  if (text.length < 15) {
+  if (question.length < 15) {
     issues.push('Question is too short');
     score -= 20;
   }
 
-  if (!q.answer || !String(q.answer).trim()) {
+  if (!String(q.answer || '').trim()) {
     issues.push('Missing model answer');
     score -= 25;
   }
 
   if (q.type === 'MCQ') {
-    const opts = Array.isArray(q.options) ? q.options : [];
+    const options = Array.isArray(q.options) ? q.options : [];
 
-    if (opts.length !== 4) {
-      issues.push('MCQ should have exactly four options');
+    if (options.length !== 4) {
+      issues.push('MCQ should have four options');
       score -= 15;
     }
 
-    const answer = String(q.answer || '').trim();
-
-    if (opts.filter(x => String(x).trim() === answer).length !== 1) {
-      issues.push('Check that exactly one option matches the correct answer');
+    if (
+      options.filter(
+        option => String(option).trim() === String(q.answer || '').trim()
+      ).length !== 1
+    ) {
+      issues.push('Verify the single correct MCQ answer');
       score -= 20;
     }
 
-    if (new Set(opts.map(x => String(x).trim().toLowerCase())).size !== opts.length) {
+    if (
+      new Set(options.map(option =>
+        String(option).trim().toLowerCase()
+      )).size !== options.length
+    ) {
       issues.push('Duplicate options detected');
       score -= 15;
     }
@@ -192,10 +215,6 @@ function qualityCheck(q) {
   if (!['Easy', 'Moderate', 'Difficult'].includes(q.difficulty)) {
     warnings.push('Difficulty is not set');
     score -= 5;
-  }
-
-  if (/all of the above|none of the above/i.test(text)) {
-    warnings.push('Review potentially clue-prone wording');
   }
 
   return {
@@ -219,13 +238,14 @@ function similarity(a, b) {
     if (B.has(word)) intersection++;
   }
 
-  return intersection / (A.size + B.size - intersection || 1);
+  return intersection /
+    (A.size + B.size - intersection || 1);
 }
 
 function heuristicGenerate(payload) {
   const lines = String(payload.sourceText || '')
     .split(/\n+/)
-    .map(s => s.trim())
+    .map(line => line.trim())
     .filter(Boolean);
 
   return Array.from({ length: payload.count }, (_, i) => ({
@@ -234,7 +254,7 @@ function heuristicGenerate(payload) {
     question: lines[i]
       ? `Using the source, explain: ${lines[i]}`
       : `Explain an important concept from ${payload.topic || payload.subject || 'the lesson'}.`,
-    answer: 'Teacher must verify and complete the model answer from the source.',
+    answer: 'Teacher must verify and complete the answer using the source.',
     options: null,
     bloom: payload.bloomMix?.[i % (payload.bloomMix.length || 1)] || 'Understand',
     difficulty: payload.difficultyMix?.[i % (payload.difficultyMix.length || 1)] || 'Moderate',
@@ -254,26 +274,26 @@ async function aiGenerate(payload) {
   const model = process.env.GEMINI_MODEL || 'gemini-2.5-flash';
 
   const prompt = `
-You are an expert secondary-school assessment designer.
-Create exactly ${payload.count} questions using ONLY the source below.
-Follow the requested subject, learning outcome, Bloom levels, difficulty,
-question type, and marks. Avoid duplication and ambiguous wording.
-For MCQ, provide four plausible options and one correct answer.
-Return JSON only in this format:
+Create exactly ${payload.count} secondary-school examination questions.
+Use only the supplied source. Follow the topic, learning outcome,
+question type, Bloom levels, difficulty and marks.
+Avoid ambiguous or duplicate questions.
+For MCQs, provide four options and one correct answer.
+Return JSON only:
 {"questions":[{"type":"MCQ","question":"...","answer":"...","options":["A","B","C","D"],"bloom":"Understand","difficulty":"Moderate","marks":1,"unit":"...","topic":"...","learningOutcome":"...","source":"..."}]}
 
 Subject: ${payload.subject || ''}
 Class: ${payload.klass || ''}
-Question type: ${payload.type || ''}
 Unit: ${payload.unit || ''}
 Topic: ${payload.topic || ''}
 Learning outcome: ${payload.learningOutcome || ''}
-Bloom levels: ${(payload.bloomMix || []).join(', ')}
+Question type: ${payload.type || ''}
+Bloom: ${(payload.bloomMix || []).join(', ')}
 Difficulty: ${(payload.difficultyMix || []).join(', ')}
-Marks per question: ${payload.marks || 1}
+Marks: ${payload.marks || 1}
 
 SOURCE:
-${String(payload.sourceText || '').slice(0, 50000)}
+${String(payload.sourceText || '').slice(0, 40000)}
 `;
 
   const response = await fetch(
@@ -288,7 +308,7 @@ ${String(payload.sourceText || '').slice(0, 50000)}
         contents: [{ role: 'user', parts: [{ text: prompt }] }],
         generationConfig: {
           responseMimeType: 'application/json',
-          temperature: 0.25,
+          temperature: 0.2,
           maxOutputTokens: 12000
         }
       })
@@ -305,7 +325,9 @@ ${String(payload.sourceText || '').slice(0, 50000)}
     .map(part => part.text || '')
     .join('');
 
-  return JSON.parse(raw.replace(/^```json|```$/g, '').trim()).questions || [];
+  const parsed = JSON.parse(raw.replace(/^```json|```$/g, '').trim());
+
+  return parsed.questions || [];
 }
 
 app.post('/api/generate', async (req, res) => {
@@ -330,7 +352,7 @@ app.post('/api/generate', async (req, res) => {
       const payload = {
         ...p,
         ...row,
-        count: Number(row.count || 0),
+        count: Math.min(100, Math.max(0, Number(row.count || 0))),
         marks: Number(row.marks || 1),
         bloomMix: row.bloomMix || ['Understand'],
         difficultyMix: row.difficultyMix || ['Moderate']
@@ -365,7 +387,9 @@ app.post('/api/generate', async (req, res) => {
 
     res.json({
       questions: checked,
-      totalMarks: checked.reduce((sum, q) => sum + Number(q.marks || 0), 0),
+      totalMarks: checked.reduce(
+        (sum, q) => sum + Number(q.marks || 0), 0
+      ),
       aiUsed: Boolean(process.env.GEMINI_API_KEY)
     });
   } catch (err) {
@@ -380,7 +404,7 @@ app.post('/api/quality-check', (req, res) => {
 
   const seen = [];
 
-  const checked = questions.map((q, i) => {
+  const checked = questions.map((q, index) => {
     const quality = qualityCheck(q);
     const text = String(q.question || '')
       .toLowerCase()
@@ -391,7 +415,9 @@ app.post('/api/quality-check', (req, res) => {
     );
 
     if (duplicateIndex >= 0) {
-      quality.issues.push(`Very similar to question ${duplicateIndex + 1}`);
+      quality.issues.push(
+        `Very similar to question ${duplicateIndex + 1}`
+      );
       quality.score = Math.max(0, quality.score - 20);
     }
 
@@ -401,7 +427,10 @@ app.post('/api/quality-check', (req, res) => {
   });
 
   const average = checked.length
-    ? Math.round(checked.reduce((sum, q) => sum + q.quality.score, 0) / checked.length)
+    ? Math.round(
+        checked.reduce((sum, q) => sum + q.quality.score, 0) /
+        checked.length
+      )
     : 0;
 
   res.json({
@@ -446,8 +475,10 @@ app.post('/api/assessments', async (req, res) => {
 app.get('/api/assessments', async (req, res) => {
   try {
     const result = await db(
-      'SELECT id,title,subject,klass,total_marks,duration,school,created_at FROM assessments ORDER BY created_at DESC LIMIT 100'
+      `SELECT id,title,subject,klass,total_marks,duration,school,created_at
+       FROM assessments ORDER BY created_at DESC LIMIT 100`
     );
+
     res.json(result.rows);
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -506,6 +537,7 @@ app.get('/api/question-bank', async (req, res) => {
     const result = await db(
       'SELECT * FROM question_bank ORDER BY created_at DESC LIMIT 300'
     );
+
     res.json(result.rows);
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -531,12 +563,18 @@ app.post('/api/item-analysis', (req, res) => {
     const topCut = sorted[Math.max(0, groupSize - 1)];
     const bottomCut = sorted[Math.max(0, sorted.length - groupSize)];
 
-    const top = students.filter(s => Number(s.total || 0) >= (topCut ?? Infinity));
-    const bottom = students.filter(s => Number(s.total || 0) <= (bottomCut ?? -Infinity));
+    const top = students.filter(
+      s => Number(s.total || 0) >= (topCut ?? Infinity)
+    );
+
+    const bottom = students.filter(
+      s => Number(s.total || 0) <= (bottomCut ?? -Infinity)
+    );
 
     const rate = group => group.length
       ? group.reduce(
-          (sum, student) => sum + (Number(student.answers?.[index]) === 1 ? 1 : 0),
+          (sum, student) =>
+            sum + (Number(student.answers?.[index]) === 1 ? 1 : 0),
           0
         ) / group.length
       : 0;
@@ -562,21 +600,20 @@ app.post('/api/item-analysis', (req, res) => {
     items,
     summary: {
       totalQuestions: items.length,
-      good: items.filter(item => item.recommendation === 'Good').length,
-      review: items.filter(item => item.recommendation !== 'Good').length
+      good: items.filter(q => q.recommendation === 'Good').length,
+      review: items.filter(q => q.recommendation !== 'Good').length
     }
   });
 });
 
 app.get('*', (req, res) => {
-  if (PUBLIC_DIR && fs.existsSync(path.join(PUBLIC_DIR, 'index.html'))) {
+  if (PUBLIC_DIR) {
     return res.sendFile(path.join(PUBLIC_DIR, 'index.html'));
   }
 
   res.status(500).type('text').send(
-    'GHDD Assessment Pro is running, but public/index.html is missing. ' +
-    'Check that public/index.html is committed to the GitHub repository ' +
-    'and redeploy the latest commit.'
+    'GHDD Assessment Pro: frontend index.html not found. ' +
+    'Ensure that Public/index.html or public/index.html exists in GitHub.'
   );
 });
 
