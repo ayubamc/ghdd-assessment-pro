@@ -1,3 +1,4 @@
+
 import express from 'express';
 import pg from 'pg';
 import crypto from 'crypto';
@@ -11,11 +12,14 @@ const app = express();
 
 app.use(express.json({ limit: '15mb' }));
 
-// Find the public folder
+// Find the frontend directory
 const publicCandidates = [
   path.join(__dirname, 'public'),
+  path.join(__dirname, 'Public'),
   path.join(process.cwd(), 'public'),
-  '/app/public'
+  path.join(process.cwd(), 'Public'),
+  '/app/public',
+  '/app/Public'
 ];
 
 const PUBLIC_DIR = publicCandidates.find(dir =>
@@ -33,14 +37,25 @@ if (PUBLIC_DIR) {
 }
 
 // PostgreSQL connection
-const pool = process.env.DATABASE_URL
+const databaseUrl = process.env.DATABASE_URL;
+
+const pool = databaseUrl
   ? new Pool({
-      connectionString: process.env.DATABASE_URL,
-      ssl: process.env.DATABASE_URL.includes('railway')
+      connectionString: databaseUrl,
+      ssl: /railway/i.test(databaseUrl)
         ? { rejectUnauthorized: false }
-        : false
+        : false,
+      connectionTimeoutMillis: 10000,
+      idleTimeoutMillis: 30000,
+      max: 10
     })
   : null;
+
+if (pool) {
+  pool.on('error', error => {
+    console.error('Unexpected PostgreSQL pool error:', error.message);
+  });
+}
 
 async function db(sql, params = []) {
   if (!pool) {
@@ -49,7 +64,7 @@ async function db(sql, params = []) {
   return pool.query(sql, params);
 }
 
-// Create database tables
+// Initialize database tables
 async function initDb() {
   if (!pool) {
     console.warn('DATABASE_URL is missing. Database features are disabled.');
@@ -101,7 +116,7 @@ async function initDb() {
     )
   `);
 
-  // Use a fixed integer ID, not the text "main".
+  // IMPORTANT: app_state uses integer ID 1, not the text "main".
   await db(`
     CREATE TABLE IF NOT EXISTS app_state (
       id INTEGER PRIMARY KEY,
@@ -113,18 +128,26 @@ async function initDb() {
   console.log('Database tables initialized.');
 }
 
-const initPromise = initDb().catch(error => {
+const initPromise = initDb();
+
+initPromise.catch(error => {
   console.error('Database initialization failed:', error.message);
 });
 
 // Admin password
 const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || 'change-me';
 
+// API authentication
 function auth(req, res, next) {
-  if (req.path === '/health') return next();
+  // Login and health checks must be reachable without an existing login.
+  if (req.path === '/login' || req.path === '/health') {
+    return next();
+  }
 
   if ((req.headers['x-admin-password'] || '') !== ADMIN_PASSWORD) {
-    return res.status(401).json({ error: 'Unauthorized' });
+    return res.status(401).json({
+      error: 'Unauthorized. Please log in again.'
+    });
   }
 
   next();
@@ -136,26 +159,44 @@ app.use('/api', auth);
 app.get('/api/health', async (req, res) => {
   try {
     await initPromise;
-    if (pool) await db('SELECT 1');
+
+    if (!pool) {
+      return res.status(503).json({
+        ok: false,
+        databaseEnabled: false,
+        error: 'DATABASE_URL is not configured.'
+      });
+    }
+
+    await db('SELECT 1');
 
     res.json({
       ok: true,
       app: 'GHDD Assessment Pro',
-      databaseEnabled: Boolean(pool)
+      databaseEnabled: true
     });
   } catch (error) {
+    console.error('Health check failed:', error.message);
     res.status(500).json({
       ok: false,
-      error: 'Database connection failed'
+      databaseEnabled: Boolean(pool),
+      error: 'Database connection failed.'
     });
   }
 });
 
 // Login
 app.post('/api/login', (req, res) => {
-  res.json({
-    ok: (req.body?.password || '') === ADMIN_PASSWORD
-  });
+  const password = String(req.body?.password || '');
+
+  if (password !== ADMIN_PASSWORD) {
+    return res.status(401).json({
+      ok: false,
+      error: 'Furaha maamulka waa khaldan yahay.'
+    });
+  }
+
+  res.json({ ok: true });
 });
 
 // Read persistent application state
@@ -211,7 +252,7 @@ app.put('/api/state', async (req, res) => {
       });
     }
 
-    // Always use integer ID 1. Never use "main" here.
+    // Always use integer ID 1. Never use "main".
     await db(
       `INSERT INTO app_state (id, data, updated_at)
        VALUES ($1, $2::jsonb, now())
@@ -275,7 +316,9 @@ function qualityCheck(q) {
 
     const answer = String(q.answer || '').trim();
 
-    if (options.filter(option => String(option).trim() === answer).length !== 1) {
+    if (
+      options.filter(option => String(option).trim() === answer).length !== 1
+    ) {
       issues.push('MCQ must have exactly one matching correct option');
       score -= 20;
     }
@@ -300,9 +343,11 @@ function qualityCheck(q) {
     score -= 5;
   }
 
+  const lowerText = text.toLowerCase();
+
   if (
-    text.toLowerCase().includes('all of the above') ||
-    text.toLowerCase().includes('none of the above')
+    lowerText.includes('all of the above') ||
+    lowerText.includes('none of the above')
   ) {
     warnings.push('Avoid clue-prone options such as all/none of the above');
   }
@@ -322,13 +367,15 @@ function qualityCheck(q) {
 
 // Basic question generation fallback
 function heuristicGenerate(payload) {
+  const count = Math.max(0, Math.min(100, Number(payload.count) || 0));
+
   const sourceLines = String(payload.text || '')
     .split(/\n+/)
     .map(line => line.trim())
     .filter(Boolean)
-    .slice(0, Math.max(1, payload.count));
+    .slice(0, count);
 
-  return Array.from({ length: payload.count }, (_, index) => ({
+  return Array.from({ length: count }, (_, index) => ({
     id: uid(),
     type: payload.type || 'Short Answer',
     question: sourceLines[index]
@@ -336,12 +383,15 @@ function heuristicGenerate(payload) {
       : `Explain one important concept from ${
           payload.topic || payload.unit || payload.subject || 'the source'
         }.`,
-    answer: 'Teacher review required: add or confirm the model answer from the source material.',
+    answer:
+      'Teacher review required: add or confirm the model answer from the source material.',
     options:
       payload.type === 'MCQ'
         ? ['Option A', 'Option B', 'Option C', 'Option D']
         : null,
-    bloom: payload.bloomMix?.[index % Math.max(1, payload.bloomMix.length)] || 'Understand',
+    bloom:
+      payload.bloomMix?.[index % Math.max(1, payload.bloomMix.length)] ||
+      'Understand',
     difficulty:
       payload.difficultyMix?.[index % Math.max(1, payload.difficultyMix.length)] ||
       'Moderate',
@@ -450,7 +500,7 @@ app.post('/api/generate', async (req, res) => {
         ...input,
         ...row,
         text: input.sourceText,
-        count: Number(row.count || 0),
+        count: Math.max(0, Math.min(100, Number(row.count) || 0)),
         marks: Number(row.marks || 1),
         bloomMix: row.bloomMix || ['Understand'],
         difficultyMix: row.difficultyMix || ['Moderate']
@@ -474,12 +524,13 @@ app.post('/api/generate', async (req, res) => {
           ...question,
           id: question.id || uid(),
           type: question.type || payload.type,
-          marks: payload.marks,
+          marks: Number(question.marks || payload.marks),
           bloom: question.bloom || payload.bloomMix[0],
           difficulty: question.difficulty || payload.difficultyMix[0],
           unit: question.unit || input.unit || '',
           topic: question.topic || input.topic || '',
-          learningOutcome: question.learningOutcome || input.learningOutcome || '',
+          learningOutcome:
+            question.learningOutcome || input.learningOutcome || '',
           source: question.source || 'User-provided source',
           status: 'Draft'
         });
@@ -502,6 +553,7 @@ app.post('/api/generate', async (req, res) => {
       aiUsed: Boolean(process.env.GEMINI_API_KEY)
     });
   } catch (error) {
+    console.error('Question generation failed:', error.message);
     res.status(500).json({ error: error.message });
   }
 });
@@ -584,7 +636,7 @@ app.post('/api/assessments', async (req, res) => {
         input.title || 'Untitled Exam',
         input.subject || '',
         input.klass || '',
-        input.totalMarks || 0,
+        Number(input.totalMarks || 0),
         input.duration || '',
         input.school || 'Golaha Horumarinta Dugsiyada Dadweynaha (GHDD)',
         JSON.stringify(input.blueprint || {}),
@@ -594,6 +646,7 @@ app.post('/api/assessments', async (req, res) => {
 
     res.json({ ok: true, id });
   } catch (error) {
+    console.error('Assessment save failed:', error.message);
     res.status(500).json({ error: error.message });
   }
 });
@@ -612,6 +665,7 @@ app.get('/api/assessments', async (req, res) => {
 
     res.json(result.rows);
   } catch (error) {
+    console.error('Assessment list failed:', error.message);
     res.status(500).json({ error: error.message });
   }
 });
@@ -632,6 +686,7 @@ app.get('/api/assessments/:id', async (req, res) => {
 
     res.json(result.rows[0]);
   } catch (error) {
+    console.error('Assessment read failed:', error.message);
     res.status(500).json({ error: error.message });
   }
 });
@@ -650,22 +705,32 @@ app.post('/api/question-bank', async (req, res) => {
         question, answer, options, source, status)
        VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15)
        ON CONFLICT (id) DO UPDATE SET
+         subject = EXCLUDED.subject,
+         klass = EXCLUDED.klass,
+         unit = EXCLUDED.unit,
+         topic = EXCLUDED.topic,
+         lo = EXCLUDED.lo,
+         bloom = EXCLUDED.bloom,
+         difficulty = EXCLUDED.difficulty,
+         type = EXCLUDED.type,
+         marks = EXCLUDED.marks,
          question = EXCLUDED.question,
          answer = EXCLUDED.answer,
          options = EXCLUDED.options,
+         source = EXCLUDED.source,
          status = EXCLUDED.status`,
       [
         id,
         question.subject || '',
-        question.klass || '',
+        question.klass || question.className || '',
         question.unit || '',
         question.topic || '',
         question.learningOutcome || '',
         question.bloom || '',
         question.difficulty || '',
         question.type || '',
-        question.marks || 1,
-        question.question || '',
+        Number(question.marks || 1),
+        question.question || question.text || '',
         question.answer || '',
         JSON.stringify(question.options || null),
         question.source || '',
@@ -675,6 +740,7 @@ app.post('/api/question-bank', async (req, res) => {
 
     res.json({ ok: true, id });
   } catch (error) {
+    console.error('Question save failed:', error.message);
     res.status(500).json({ error: error.message });
   }
 });
@@ -690,6 +756,7 @@ app.get('/api/question-bank', async (req, res) => {
 
     res.json(result.rows);
   } catch (error) {
+    console.error('Question list failed:', error.message);
     res.status(500).json({ error: error.message });
   }
 });
@@ -699,23 +766,25 @@ app.post('/api/item-analysis', (req, res) => {
   const { students = [], questions = [] } = req.body || {};
 
   const rows = questions.map((question, index) => {
-    const values = students.map(student =>
+    const difficultyValues = students.map(student =>
       Number(student.answers?.[index]) === 1 ? 1 : 0
     );
 
-    const difficultyIndex = values.length
-      ? values.reduce((sum, value) => sum + value, 0) / values.length
+    const difficultyIndex = difficultyValues.length
+      ? difficultyValues.reduce((sum, value) => sum + value, 0) /
+        difficultyValues.length
       : 0;
 
     const totals = students.map(student => Number(student.total || 0));
     const sorted = [...totals].sort((a, b) => b - a);
 
+    const groupSize = Math.ceil(sorted.length * 0.27);
+
     const topCutoff =
-      sorted[Math.max(0, Math.ceil(sorted.length * 0.27) - 1)] ?? Infinity;
+      sorted[Math.max(0, groupSize - 1)] ?? Infinity;
 
     const bottomCutoff =
-      sorted[Math.max(0, sorted.length - Math.ceil(sorted.length * 0.27))] ??
-      -Infinity;
+      sorted[Math.max(0, sorted.length - groupSize)] ?? -Infinity;
 
     const top = students.filter(
       student => Number(student.total) >= topCutoff
