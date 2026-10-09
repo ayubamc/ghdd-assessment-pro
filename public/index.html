@@ -1,4 +1,3 @@
-
 <!doctype html>
 <html lang="so">
 <head>
@@ -39,7 +38,7 @@ textarea{min-height:88px;resize:vertical}
 .btn{display:inline-flex;align-items:center;justify-content:center;gap:7px;border:0;border-radius:9px;background:var(--navy);color:white;font-weight:700;padding:11px 15px;cursor:pointer;text-decoration:none;margin:6px 5px 0 0}
 .btn.secondary{background:#e8eef7;color:var(--navy)}
 .btn.gold{background:#b78312;color:#fff}
-.btn.danger{background:#b42318;color:#fff}
+.btn.danger{background:#b42318}
 .btn.green{background:var(--green)}
 .muted{color:var(--muted)}
 .notice{background:#fff8e5;border:1px solid #f0d48a;padding:12px;border-radius:10px;color:#6e5107;margin:12px 0}
@@ -129,19 +128,25 @@ footer{text-align:center;padding:25px 12px;color:var(--muted);font-size:13px}
      <div><label for="questionMarks">Dhibcaha su'aasha *</label><input id="questionMarks" type="number" min="1" value="5"></div>
     </div>
     <label for="topic">Mawduuca / Cutubka</label><input id="topic" placeholder="Tusaale: Cutubka 1">
-    <label for="cognitive">Heerka garashada</label><select id="cognitive"><option>Xusuusasho</option><option>Faham</option><option>Ku-dhaqan</option><option>Falanqayn</option><option>Qiimayn</option><option>Abuurid</option></select>
-    <label for="answerGuide">Jawaabta saxda ah / Tilmaamaha sixidda</label><textarea id="answerGuide" placeholder="Ikhtiyaari: geli jawaabta ama tilmaamaha sixidda"></textarea>
-    <button class="btn" id="addQuestion">＋ Ku dar su'aasha</button><button class="btn secondary" id="clearQuestion">Nadiifi foomka</button>
+    <label for="cognitive">Heerka garashada</label>
+    <select id="cognitive"><option>Xusuusasho</option><option>Faham</option><option>Ku-dhaqan</option><option>Falanqayn</option><option>Qiimayn</option><option>Abuurid</option></select>
+    <label for="answerGuide">Jawaabta saxda ah / Tilmaamaha sixidda</label>
+    <textarea id="answerGuide" placeholder="Ikhtiyaari: geli jawaabta ama tilmaamaha sixidda"></textarea>
+    <button class="btn" id="addQuestion">＋ Ku dar su'aasha</button>
+    <button class="btn secondary" id="clearQuestion">Nadiifi foomka</button>
    </div>
 
    <div class="panel">
     <h3>Hordhaca imtixaanka</h3>
     <div id="examPreview" class="empty">Marka aad su'aalo ku darto, halkan ayaa lagu soo bandhigi doonaa.</div>
-    <div class="no-print"><button class="btn green" id="saveExam">Kaydi imtixaanka</button><button class="btn secondary" id="printExam">Soo dejiso / Daabac imtixaanka</button><button class="btn secondary" id="saveToBank">Ku kaydi su'aalaha kaydka</button></div>
+    <div class="no-print">
+     <button class="btn green" id="saveExam">Kaydi imtixaanka</button>
+     <button class="btn secondary" id="printExam">Soo dejiso / Daabac imtixaanka</button>
+     <button class="btn secondary" id="saveToBank">Ku kaydi su'aalaha kaydka</button>
+    </div>
     <div id="examStatus" class="muted" role="status"></div>
    </div>
   </div>
-
   <div class="panel" style="margin-top:16px"><h3>Liiska su'aalaha</h3><div id="questionList" class="empty">Weli su'aalo lama darin.</div></div>
   <div class="panel" style="margin-top:16px"><h3>Imtixaannada la kaydiyey</h3><div id="savedExams" class="empty">Weli imtixaan lama kaydin.</div></div>
  </section>
@@ -194,532 +199,450 @@ footer{text-align:center;padding:25px 12px;color:var(--muted);font-size:13px}
 
 const $ = id => document.getElementById(id);
 const KEY = 'ghdd_assessment_pro_v1';
-let state = {
-  questions: [],
-  blueprints: [],
-  bank: [],
-  exams: [],
-  currentExamId: null
-};
+let state = {questions:[],blueprints:[],bank:[],exams:[],currentExamId:null};
+let syncTimer = null;
 
-function loadState() {
+function loadState(){
   try {
-    const s = JSON.parse(localStorage.getItem(KEY) || 'null');
-    if (s && typeof s === 'object') state = { ...state, ...s };
-  } catch (e) {
+    const saved = JSON.parse(localStorage.getItem(KEY) || 'null');
+    if(saved && typeof saved === 'object') state = {...state,...saved};
+  } catch(e) {
     console.warn('Could not load local data', e);
   }
 }
 
-function adminPassword() {
-  let p = sessionStorage.getItem('ghdd_admin_password') || '';
-  if (!p) {
-    p = prompt('Geli furaha maamulka ee GHDD Assessment Pro (Railway ADMIN_PASSWORD):') || '';
-    if (p) sessionStorage.setItem('ghdd_admin_password', p);
+function adminPassword(){
+  let password = sessionStorage.getItem('ghdd_admin_password') || '';
+  if(!password){
+    password = prompt('Geli furaha maamulka ee GHDD Assessment Pro (Railway ADMIN_PASSWORD):') || '';
+    if(password) sessionStorage.setItem('ghdd_admin_password', password);
   }
-  return p;
+  return password;
 }
 
-let syncTimer = null;
-
-async function syncStateToServer() {
+async function syncStateToServer(){
   const password = adminPassword();
-  if (!password) return;
+  if(!password) return;
 
   try {
     const response = await fetch('/api/state', {
-      method: 'PUT',
-      headers: {
-        'Content-Type': 'application/json',
-        'x-admin-password': password
+      method:'PUT',
+      headers:{
+        'Content-Type':'application/json',
+        'x-admin-password':password
       },
-      body: JSON.stringify({ state })
+      body:JSON.stringify({state})
     });
 
-    if (response.status === 401) {
+    if(response.status === 401){
       sessionStorage.removeItem('ghdd_admin_password');
       alert('Furaha maamulka waa khaldan yahay. Dib u geli furaha saxda ah.');
       return;
     }
 
     const result = await response.json();
+    if(!response.ok) throw new Error(result.error || 'Kaydinta server-ka way fashilantay.');
 
-    if (!response.ok) {
-      throw new Error(result.error || 'Kaydinta server-ka way fashilantay.');
-    }
-
-    if ($('cloudStatus')) $('cloudStatus').textContent = 'Xogtu waxay ku kaydsan tahay PostgreSQL.';
-    if ($('examStatus')) $('examStatus').textContent = 'Imtixaanka waxaa lagu kaydiyey PostgreSQL.';
-  } catch (e) {
+    if($('cloudStatus')) $('cloudStatus').textContent = 'Xogtu waxay ku kaydsan tahay PostgreSQL.';
+    if($('examStatus')) $('examStatus').textContent = 'Imtixaanka waxaa lagu kaydiyey PostgreSQL.';
+  } catch(e) {
     console.warn('PostgreSQL sync failed:', e.message);
-    if ($('cloudStatus')) $('cloudStatus').textContent = 'Server-ka lama xiriirin; xogta ku meel gaarka ah waxay ku jirtaa browser-ka.';
+    if($('cloudStatus')) $('cloudStatus').textContent = 'Server-ka lama xiriirin; xogta ku meel gaarka ah waxay ku jirtaa browser-ka.';
   }
 }
 
-function persist() {
+function persist(){
   try {
     localStorage.setItem(KEY, JSON.stringify(state));
-  } catch (e) {
+  } catch(e) {
     alert('Kaydinta browser-ka way fashilantay. Soo dejiso kaydka JSON.');
   }
 
-  if (syncTimer) clearTimeout(syncTimer);
+  if(syncTimer) clearTimeout(syncTimer);
   syncTimer = setTimeout(syncStateToServer, 500);
 }
 
-async function loadRemoteState() {
+async function loadRemoteState(){
   const password = adminPassword();
-  if (!password) return;
+  if(!password) return;
 
   try {
     const response = await fetch('/api/state', {
-      headers: { 'x-admin-password': password }
+      headers:{'x-admin-password':password}
     });
 
-    if (response.status === 401) {
+    if(response.status === 401){
       sessionStorage.removeItem('ghdd_admin_password');
       alert('Furaha maamulka waa khaldan yahay. Bogga dib u fur oo geli furaha saxda ah.');
       return;
     }
 
     const result = await response.json();
+    if(!response.ok) throw new Error(result.error || 'Xogta server-ka lama soo dejin.');
 
-    if (!response.ok) {
-      throw new Error(result.error || 'Xogta server-ka lama soo dejin.');
-    }
-
-    if (result.state && typeof result.state === 'object') {
-      state = { ...state, ...result.state };
+    if(result.state && typeof result.state === 'object'){
+      state = {...state,...result.state};
       localStorage.setItem(KEY, JSON.stringify(state));
       refreshAll();
-
-      if ($('cloudStatus')) $('cloudStatus').textContent = 'Xogta PostgreSQL waa la soo raray.';
+      if($('cloudStatus')) $('cloudStatus').textContent = 'Xogta PostgreSQL waa la soo raray.';
     } else {
       await syncStateToServer();
     }
-  } catch (e) {
+  } catch(e) {
     console.warn('Could not load PostgreSQL state:', e.message);
-    if ($('cloudStatus')) $('cloudStatus').textContent = 'Xiriirka PostgreSQL lama xaqiijin; eeg Railway Deploy Logs.';
+    if($('cloudStatus')) $('cloudStatus').textContent = 'Xiriirka PostgreSQL lama xaqiijin; eeg Railway Deploy Logs.';
   }
 }
 
-function esc(v) {
-  return String(v ?? '').replace(/[&<>"']/g, c => ({
-    '&': '&amp;',
-    '<': '&lt;',
-    '>': '&gt;',
-    '"': '&quot;',
-    "'": '&#39;'
-  }[c]));
+function esc(value){
+  return String(value ?? '').replace(/[&<>"']/g, char => ({
+    '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'
+  }[char]));
 }
 
-function uid() {
-  return Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
+function uid(){
+  return Date.now().toString(36) + Math.random().toString(36).slice(2,7);
 }
 
-function showTab(id) {
-  document.querySelectorAll('.tab').forEach(t =>
-    t.classList.toggle('active', t.id === id)
-  );
-
-  document.querySelectorAll('.nav button').forEach(b =>
-    b.classList.toggle('active', b.dataset.tab === id)
-  );
-
-  if (id === 'bank') renderBank();
-  if (id === 'analysis') renderAnalysisSummary();
-
-  window.scrollTo({ top: 0, behavior: 'smooth' });
+function showTab(id){
+  document.querySelectorAll('.tab').forEach(tab => tab.classList.toggle('active',tab.id===id));
+  document.querySelectorAll('.nav button').forEach(button => button.classList.toggle('active',button.dataset.tab===id));
+  if(id==='bank') renderBank();
+  if(id==='analysis') renderAnalysisSummary();
+  window.scrollTo({top:0,behavior:'smooth'});
 }
 
-document.querySelectorAll('[data-tab]').forEach(b =>
-  b.addEventListener('click', () => showTab(b.dataset.tab))
-);
+document.querySelectorAll('[data-tab]').forEach(button => button.addEventListener('click',()=>showTab(button.dataset.tab)));
+document.querySelectorAll('[data-go]').forEach(button => button.addEventListener('click',()=>showTab(button.dataset.go)));
 
-document.querySelectorAll('[data-go]').forEach(b =>
-  b.addEventListener('click', () => showTab(b.dataset.go))
-);
-
-function getExamMeta() {
+function getExamMeta(){
   return {
-    name: $('examName').value.trim(),
-    subject: $('subject').value.trim(),
-    className: $('className').value.trim(),
-    totalMarks: Number($('totalMarks').value) || 0,
-    instructions: $('instructions').value.trim()
+    name:$('examName').value.trim(),
+    subject:$('subject').value.trim(),
+    className:$('className').value.trim(),
+    totalMarks:Number($('totalMarks').value)||0,
+    instructions:$('instructions').value.trim()
   };
 }
 
-function addQuestion() {
+function addQuestion(){
   const text = $('questionText').value.trim();
   const marks = Number($('questionMarks').value);
 
-  if (!text) {
+  if(!text){
     alert('Fadlan qor su’aasha.');
     $('questionText').focus();
     return;
   }
 
-  if (!Number.isFinite(marks) || marks <= 0) {
+  if(!Number.isFinite(marks)||marks<=0){
     alert('Dhibcaha su’aashu waa inay ka badan yihiin eber.');
     return;
   }
 
   state.questions.push({
-    id: uid(),
+    id:uid(),
     text,
-    type: $('questionType').value,
+    type:$('questionType').value,
     marks,
-    topic: $('topic').value.trim(),
-    level: $('cognitive').value,
-    answer: $('answerGuide').value.trim()
+    topic:$('topic').value.trim(),
+    level:$('cognitive').value,
+    answer:$('answerGuide').value.trim()
   });
 
   persist();
   renderQuestions();
-
-  $('questionText').value = '';
-  $('answerGuide').value = '';
-  $('topic').value = '';
-  $('questionMarks').value = 5;
+  $('questionText').value='';
+  $('answerGuide').value='';
+  $('topic').value='';
+  $('questionMarks').value=5;
   $('questionText').focus();
 }
 
-$('addQuestion').addEventListener('click', addQuestion);
+$('addQuestion').addEventListener('click',addQuestion);
 
-$('clearQuestion').addEventListener('click', () => {
-  ['questionText', 'answerGuide', 'topic'].forEach(id => $(id).value = '');
-  $('questionMarks').value = 5;
+$('clearQuestion').addEventListener('click',()=>{
+  ['questionText','answerGuide','topic'].forEach(id=>$(id).value='');
+  $('questionMarks').value=5;
 });
 
-function renderQuestions() {
+function renderQuestions(){
   const out = $('questionList');
   const preview = $('examPreview');
 
-  if (!state.questions.length) {
-    out.className = 'empty';
-    out.textContent = 'Weli su’aalo lama darin.';
-    preview.className = 'empty';
-    preview.textContent = 'Marka aad su’aalo ku darto, halkan ayaa lagu soo bandhigi doonaa.';
+  if(!state.questions.length){
+    out.className='empty';
+    out.textContent='Weli su’aalo lama darin.';
+    preview.className='empty';
+    preview.textContent='Marka aad su’aalo ku darto, halkan ayaa lagu soo bandhigi doonaa.';
     return;
   }
 
-  out.className = 'list';
-  out.innerHTML = state.questions.map((q, i) => `
+  out.className='list';
+  out.innerHTML=state.questions.map((q,i)=>`
     <div class="item">
-      <strong>${i + 1}. ${esc(q.text)}</strong>
-      <small>${esc(q.type)} · ${q.marks} dhibcood · ${esc(q.topic || 'Mawduuc lama cayimin')} · ${esc(q.level)}</small>
-      <div class="item-actions no-print">
-        <button class="btn danger" data-del-q="${q.id}">Ka saar</button>
-      </div>
+      <strong>${i+1}. ${esc(q.text)}</strong>
+      <small>${esc(q.type)} · ${q.marks} dhibcood · ${esc(q.topic||'Mawduuc lama cayimin')} · ${esc(q.level)}</small>
+      <div class="item-actions no-print"><button class="btn danger" data-del-q="${q.id}">Ka saar</button></div>
     </div>
   `).join('');
 
-  out.querySelectorAll('[data-del-q]').forEach(b => {
-    b.onclick = () => {
-      state.questions = state.questions.filter(q => q.id !== b.dataset.delQ);
+  out.querySelectorAll('[data-del-q]').forEach(button=>{
+    button.onclick=()=>{
+      state.questions=state.questions.filter(q=>q.id!==button.dataset.delQ);
       persist();
       renderQuestions();
     };
   });
 
-  const meta = getExamMeta();
-  const sum = state.questions.reduce((a, q) => a + q.marks, 0);
+  const meta=getExamMeta();
+  const sum=state.questions.reduce((total,q)=>total+q.marks,0);
 
-  preview.className = '';
-  preview.innerHTML = `
+  preview.className='';
+  preview.innerHTML=`
     <div style="text-align:center">
-      <h2>${esc(meta.name || 'IMTIXAAN')}</h2>
+      <h2>${esc(meta.name||'IMTIXAAN')}</h2>
       <p>${esc(meta.subject)} · ${esc(meta.className)}</p>
     </div>
     <p>${esc(meta.instructions)}</p>
     <hr>
-    ${state.questions.map((q, i) => `
-      <p><b>${i + 1}. ${esc(q.text)}</b>
-      <span style="float:right">(${q.marks} dhibcood)</span></p>
-    `).join('')}
+    ${state.questions.map((q,i)=>`<p><b>${i+1}. ${esc(q.text)}</b> <span style="float:right">(${q.marks} dhibcood)</span></p>`).join('')}
     <hr>
-    <b>Dhibcaha su'aalaha: ${sum} / ${meta.totalMarks || '—'}</b>
+    <b>Dhibcaha su'aalaha: ${sum} / ${meta.totalMarks||'—'}</b>
   `;
 }
 
-['examName', 'subject', 'className', 'totalMarks', 'instructions']
-  .forEach(id => $(id).addEventListener('input', renderQuestions));
+['examName','subject','className','totalMarks','instructions'].forEach(id=>$(id).addEventListener('input',renderQuestions));
 
-function saveExam() {
-  const meta = getExamMeta();
+function saveExam(){
+  const meta=getExamMeta();
 
-  if (!meta.name || !meta.subject || !meta.className) {
+  if(!meta.name||!meta.subject||!meta.className){
     alert('Buuxi magaca imtixaanka, maaddada iyo fasalka.');
     return;
   }
 
-  if (!state.questions.length) {
+  if(!state.questions.length){
     alert('Ku dar ugu yaraan hal su’aal.');
     return;
   }
 
-  const sum = state.questions.reduce((a, q) => a + q.marks, 0);
+  const sum=state.questions.reduce((total,q)=>total+q.marks,0);
 
-  if (
-    meta.totalMarks > 0 &&
-    sum !== meta.totalMarks &&
-    !confirm(`Wadarta dhibcaha su’aaluhu waa ${sum}, halka dhibcaha guud yihiin ${meta.totalMarks}. Ma rabtaa inaad sii kaydiso?`)
-  ) return;
+  if(meta.totalMarks>0&&sum!==meta.totalMarks&&!confirm(`Wadarta dhibcaha su’aaluhu waa ${sum}, halka dhibcaha guud yihiin ${meta.totalMarks}. Ma rabtaa inaad sii kaydiso?`)) return;
 
-  const record = {
-    id: state.currentExamId || uid(),
+  const record={
+    id:state.currentExamId||uid(),
     ...meta,
-    questions: JSON.parse(JSON.stringify(state.questions)),
-    updatedAt: new Date().toISOString()
+    questions:JSON.parse(JSON.stringify(state.questions)),
+    updatedAt:new Date().toISOString()
   };
 
-  const ix = state.exams.findIndex(e => e.id === record.id);
-
-  if (ix >= 0) state.exams[ix] = record;
+  const index=state.exams.findIndex(exam=>exam.id===record.id);
+  if(index>=0) state.exams[index]=record;
   else state.exams.unshift(record);
 
-  state.currentExamId = record.id;
+  state.currentExamId=record.id;
   persist();
   renderSavedExams();
-
-  $('examStatus').textContent = 'Imtixaanka waa la kaydiyey.';
+  $('examStatus').textContent='Imtixaanka waa la kaydinayaa.';
   renderHomeStats();
 }
 
-$('saveExam').addEventListener('click', saveExam);
+$('saveExam').addEventListener('click',saveExam);
 
-function renderSavedExams() {
-  const el = $('savedExams');
+function renderSavedExams(){
+  const element=$('savedExams');
 
-  if (!state.exams.length) {
-    el.className = 'empty';
-    el.textContent = 'Weli imtixaan lama kaydin.';
+  if(!state.exams.length){
+    element.className='empty';
+    element.textContent='Weli imtixaan lama kaydin.';
     return;
   }
 
-  el.className = 'list';
-  el.innerHTML = state.exams.map(e => `
+  element.className='list';
+  element.innerHTML=state.exams.map(exam=>`
     <div class="item">
-      <strong>${esc(e.name)}</strong>
-      <small>${esc(e.subject)} · ${esc(e.className)} · ${e.questions.length} su’aalood</small>
+      <strong>${esc(exam.name)}</strong>
+      <small>${esc(exam.subject)} · ${esc(exam.className)} · ${exam.questions.length} su’aalood</small>
       <div class="item-actions no-print">
-        <button class="btn secondary" data-open-exam="${e.id}">Fur</button>
-        <button class="btn danger" data-del-exam="${e.id}">Tirtir</button>
+        <button class="btn secondary" data-open-exam="${exam.id}">Fur</button>
+        <button class="btn danger" data-del-exam="${exam.id}">Tirtir</button>
       </div>
     </div>
   `).join('');
 
-  el.querySelectorAll('[data-open-exam]').forEach(b => {
-    b.onclick = () => {
-      const e = state.exams.find(x => x.id === b.dataset.openExam);
-      if (!e) return;
+  element.querySelectorAll('[data-open-exam]').forEach(button=>{
+    button.onclick=()=>{
+      const exam=state.exams.find(item=>item.id===button.dataset.openExam);
+      if(!exam) return;
 
-      state.currentExamId = e.id;
-      $('examName').value = e.name;
-      $('subject').value = e.subject;
-      $('className').value = e.className;
-      $('totalMarks').value = e.totalMarks;
-      $('instructions').value = e.instructions;
-      state.questions = JSON.parse(JSON.stringify(e.questions));
-
+      state.currentExamId=exam.id;
+      $('examName').value=exam.name;
+      $('subject').value=exam.subject;
+      $('className').value=exam.className;
+      $('totalMarks').value=exam.totalMarks;
+      $('instructions').value=exam.instructions;
+      state.questions=JSON.parse(JSON.stringify(exam.questions));
       renderQuestions();
       showTab('builder');
     };
   });
 
-  el.querySelectorAll('[data-del-exam]').forEach(b => {
-    b.onclick = () => {
-      if (!confirm('Ma tirtiraysaa imtixaankan?')) return;
-
-      state.exams = state.exams.filter(e => e.id !== b.dataset.delExam);
-
-      if (state.currentExamId === b.dataset.delExam) {
-        state.currentExamId = null;
+  element.querySelectorAll('[data-del-exam]').forEach(button=>{
+    button.onclick=()=>{
+      if(confirm('Ma tirtiraysaa imtixaankan?')){
+        state.exams=state.exams.filter(exam=>exam.id!==button.dataset.delExam);
+        if(state.currentExamId===button.dataset.delExam) state.currentExamId=null;
+        persist();
+        renderSavedExams();
+        renderHomeStats();
       }
-
-      persist();
-      renderSavedExams();
-      renderHomeStats();
     };
   });
 }
 
-function printExam() {
-  if (!state.questions.length) {
+function printExam(){
+  if(!state.questions.length){
     alert('Marka hore ku dar su’aalaha.');
     return;
   }
-
   renderQuestions();
   window.print();
 }
 
-$('printExam').addEventListener('click', printExam);
+$('printExam').addEventListener('click',printExam);
 
-$('saveToBank').addEventListener('click', () => {
-  if (!state.questions.length) {
+$('saveToBank').addEventListener('click',()=>{
+  if(!state.questions.length){
     alert('Ma jiraan su’aalo la kaydin karo.');
     return;
   }
 
-  let n = 0;
+  let count=0;
 
-  state.questions.forEach(q => {
-    if (!state.bank.some(b =>
-      b.text.toLowerCase() === q.text.toLowerCase() &&
-      b.topic === q.topic
-    )) {
+  state.questions.forEach(question=>{
+    if(!state.bank.some(item=>item.text.toLowerCase()===question.text.toLowerCase()&&item.topic===question.topic)){
       state.bank.unshift({
-        ...q,
-        id: uid(),
-        subject: $('subject').value.trim(),
-        className: $('className').value.trim(),
-        savedAt: new Date().toISOString()
+        ...question,
+        id:uid(),
+        subject:$('subject').value.trim(),
+        className:$('className').value.trim(),
+        savedAt:new Date().toISOString()
       });
-      n++;
+      count++;
     }
   });
 
   persist();
   renderBank();
-  alert(`${n} su’aalood ayaa lagu daray kaydka.`);
+  alert(`${count} su’aalood ayaa lagu daray kaydka.`);
 });
 
-$('addBlueprint').addEventListener('click', () => {
-  const topic = $('bpTopic').value.trim();
-  const percent = Number($('bpPercent').value);
-  const count = Number($('bpCount').value);
+$('addBlueprint').addEventListener('click',()=>{
+  const topic=$('bpTopic').value.trim();
+  const percent=Number($('bpPercent').value);
+  const count=Number($('bpCount').value);
 
-  if (!topic) {
-    alert('Geli mawduuca/cutubka.');
-    return;
-  }
-
-  if (percent < 0 || percent > 100 || !Number.isFinite(percent)) {
-    alert('Saamigu waa inuu u dhexeeyaa 0 iyo 100.');
-    return;
-  }
-
-  if (count < 1) {
-    alert('Tirada su’aaluhu waa inay ugu yaraan 1 noqotaa.');
-    return;
-  }
+  if(!topic){alert('Geli mawduuca/cutubka.');return;}
+  if(percent<0||percent>100||!Number.isFinite(percent)){alert('Saamigu waa inuu u dhexeeyaa 0 iyo 100.');return;}
+  if(count<1){alert('Tirada su’aaluhu waa inay ugu yaraan 1 noqotaa.');return;}
 
   state.blueprints.push({
-    id: uid(),
+    id:uid(),
     topic,
     percent,
-    level: $('bpLevel').value,
+    level:$('bpLevel').value,
     count
   });
 
   persist();
-  $('bpTopic').value = '';
+  $('bpTopic').value='';
   renderBlueprint();
 });
 
-$('autoBlueprint').addEventListener('click', () => {
-  const groups = {};
+$('autoBlueprint').addEventListener('click',()=>{
+  const groups={};
 
-  state.questions.forEach(q => {
-    const k = q.topic || 'Mawduuc aan la cayimin';
-    groups[k] = (groups[k] || 0) + q.marks;
+  state.questions.forEach(question=>{
+    const topic=question.topic||'Mawduuc aan la cayimin';
+    groups[topic]=(groups[topic]||0)+question.marks;
   });
 
-  const total = Object.values(groups).reduce((a, n) => a + n, 0);
+  const total=Object.values(groups).reduce((sum,marks)=>sum+marks,0);
 
-  if (!total) {
+  if(!total){
     alert('Marka hore ku dar su’aalo oo u qor mawduucyadooda.');
     return;
   }
 
-  state.blueprints = Object.entries(groups).map(([topic, marks]) => ({
-    id: uid(),
+  state.blueprints=Object.entries(groups).map(([topic,marks])=>({
+    id:uid(),
     topic,
-    percent: Math.round(marks / total * 100),
-    level: 'Isku-dhafan',
-    count: state.questions.filter(q =>
-      (q.topic || 'Mawduuc aan la cayimin') === topic
-    ).length
+    percent:Math.round(marks/total*100),
+    level:'Isku-dhafan',
+    count:state.questions.filter(q=>(q.topic||'Mawduuc aan la cayimin')===topic).length
   }));
 
   persist();
   renderBlueprint();
 });
 
-function renderBlueprint() {
-  const el = $('blueprintList');
-  const sum = state.blueprints.reduce((a, b) => a + b.percent, 0);
+function renderBlueprint(){
+  const element=$('blueprintList');
+  const sum=state.blueprints.reduce((total,item)=>total+item.percent,0);
 
-  $('blueprintSummary').textContent =
-    `Wadarta saamiyada qorshaha: ${sum}% ${
-      sum === 100
-        ? '— qorshuhu wuxuu gaaray 100%.'
-        : sum < 100
-          ? '— weli kama gaarin 100%.'
-          : '— wadarta waxay ka badan tahay 100%.'
-    }`;
+  $('blueprintSummary').textContent=`Wadarta saamiyada qorshaha: ${sum}% ${sum===100?'— qorshuhu wuxuu gaaray 100%.':sum<100?'— weli kama gaarin 100%.':'— wadarta waxay ka badan tahay 100%.'}`;
 
-  if (!state.blueprints.length) {
-    el.className = 'empty';
-    el.textContent = 'Qorshaha aad samayso ayaa halkan ka muuqan doona.';
+  if(!state.blueprints.length){
+    element.className='empty';
+    element.textContent='Qorshaha aad samayso ayaa halkan ka muuqan doona.';
     return;
   }
 
-  el.className = 'table-wrap';
-  el.innerHTML = `
+  element.className='table-wrap';
+  element.innerHTML=`
     <table>
       <thead><tr><th>Mawduuca</th><th>Saami</th><th>Heerka</th><th>Tirada</th><th></th></tr></thead>
       <tbody>
-        ${state.blueprints.map(b => `
+        ${state.blueprints.map(item=>`
           <tr>
-            <td>${esc(b.topic)}</td>
-            <td>${b.percent}%</td>
-            <td>${esc(b.level)}</td>
-            <td>${b.count}</td>
-            <td><button class="btn danger no-print" data-del-bp="${b.id}">Ka saar</button></td>
+            <td>${esc(item.topic)}</td><td>${item.percent}%</td><td>${esc(item.level)}</td><td>${item.count}</td>
+            <td><button class="btn danger no-print" data-del-bp="${item.id}">Ka saar</button></td>
           </tr>
         `).join('')}
       </tbody>
     </table>
   `;
 
-  el.querySelectorAll('[data-del-bp]').forEach(b => {
-    b.onclick = () => {
-      state.blueprints = state.blueprints.filter(x => x.id !== b.dataset.delBp);
+  element.querySelectorAll('[data-del-bp]').forEach(button=>{
+    button.onclick=()=>{
+      state.blueprints=state.blueprints.filter(item=>item.id!==button.dataset.delBp);
       persist();
       renderBlueprint();
     };
   });
 }
 
-$('bankSearch').addEventListener('input', renderBank);
-$('loadBank').addEventListener('click', renderBank);
+$('bankSearch').addEventListener('input',renderBank);
+$('loadBank').addEventListener('click',renderBank);
 
-function renderBank() {
-  const term = ($('bankSearch')?.value || '').trim().toLowerCase();
+function renderBank(){
+  const term=($('bankSearch')?.value||'').trim().toLowerCase();
+  const rows=state.bank.filter(q=>[q.text,q.topic,q.subject,q.className,q.type].join(' ').toLowerCase().includes(term));
+  const element=$('bankList');
 
-  const rows = state.bank.filter(q =>
-    [q.text, q.topic, q.subject, q.className, q.type]
-      .join(' ')
-      .toLowerCase()
-      .includes(term)
-  );
-
-  const el = $('bankList');
-
-  if (!rows.length) {
-    el.className = 'empty';
-    el.textContent = 'Wax su’aalo ah lagama helin kaydka.';
+  if(!rows.length){
+    element.className='empty';
+    element.textContent='Wax su’aalo ah lagama helin kaydka.';
     return;
   }
 
-  el.className = 'list';
-  el.innerHTML = rows.map(q => `
+  element.className='list';
+  element.innerHTML=rows.map(q=>`
     <div class="item">
       <strong>${esc(q.text)}</strong>
-      <small>${esc(q.subject || 'Maaddo lama cayimin')} · ${esc(q.className || 'Fasal lama cayimin')} · ${esc(q.topic || 'Mawduuc lama cayimin')} · ${q.marks} dhibcood</small>
+      <small>${esc(q.subject||'Maaddo lama cayimin')} · ${esc(q.className||'Fasal lama cayimin')} · ${esc(q.topic||'Mawduuc lama cayimin')} · ${q.marks} dhibcood</small>
       <div class="item-actions no-print">
         <button class="btn secondary" data-use-q="${q.id}">Ku dar imtixaanka</button>
         <button class="btn danger" data-del-bank="${q.id}">Tirtir</button>
@@ -727,12 +650,11 @@ function renderBank() {
     </div>
   `).join('');
 
-  el.querySelectorAll('[data-use-q]').forEach(b => {
-    b.onclick = () => {
-      const q = state.bank.find(x => x.id === b.dataset.useQ);
-
-      if (q) {
-        state.questions.push({ ...q, id: uid() });
+  element.querySelectorAll('[data-use-q]').forEach(button=>{
+    button.onclick=()=>{
+      const question=state.bank.find(item=>item.id===button.dataset.useQ);
+      if(question){
+        state.questions.push({...question,id:uid()});
         persist();
         renderQuestions();
         showTab('builder');
@@ -740,9 +662,9 @@ function renderBank() {
     };
   });
 
-  el.querySelectorAll('[data-del-bank]').forEach(b => {
-    b.onclick = () => {
-      state.bank = state.bank.filter(x => x.id !== b.dataset.delBank);
+  element.querySelectorAll('[data-del-bank]').forEach(button=>{
+    button.onclick=()=>{
+      state.bank=state.bank.filter(item=>item.id!==button.dataset.delBank);
       persist();
       renderBank();
       renderHomeStats();
@@ -750,117 +672,98 @@ function renderBank() {
   });
 }
 
-function analyze() {
-  const qs = state.questions;
-  const notes = [];
+function analyze(){
+  const questions=state.questions;
+  const notes=[];
 
-  if (!qs.length) return ['Weli su’aalo lama darin.'];
+  if(!questions.length) return ['Weli su’aalo lama darin.'];
 
-  const total = qs.reduce((a, q) => a + q.marks, 0);
+  const total=questions.reduce((sum,q)=>sum+q.marks,0);
 
-  if (qs.some(q => q.text.length < 15)) {
+  if(questions.some(q=>q.text.length<15)){
     notes.push('Dib u eeg su’aalaha aadka u gaaban; hubi in macnahoodu cad yahay.');
   }
 
-  const seen = new Set();
-  let duplicates = 0;
+  const seen=new Set();
+  let duplicates=0;
 
-  qs.forEach(q => {
-    const t = q.text.toLowerCase().replace(/[^\p{L}\p{N}]+/gu, ' ').trim();
-    if (seen.has(t)) duplicates++;
-    seen.add(t);
+  questions.forEach(question=>{
+    const text=question.text.toLowerCase().replace(/[^\p{L}\p{N}]+/gu,' ').trim();
+    if(seen.has(text)) duplicates++;
+    seen.add(text);
   });
 
-  if (duplicates) {
-    notes.push(`${duplicates} su’aalood ayaa u muuqda kuwo isku mid ah ama soo noqnoqday.`);
-  } else {
-    notes.push('Lama helin su’aalo si buuxda isku mid ah marka qoraalka la barbar dhigo.');
-  }
+  if(duplicates) notes.push(`${duplicates} su’aalood ayaa u muuqda kuwo isku mid ah ama soo noqnoqday.`);
+  else notes.push('Lama helin su’aalo si buuxda isku mid ah marka qoraalka la barbar dhigo.');
 
-  if (qs.some(q => !q.topic)) {
-    notes.push('Su’aalo qaar ma laha mawduuc/cutub; ku dar si qorshaha loo hubiyo.');
-  }
+  if(questions.some(q=>!q.topic)) notes.push('Su’aalo qaar ma laha mawduuc/cutub; ku dar si qorshaha loo hubiyo.');
+  if(questions.some(q=>!q.answer)) notes.push('Su’aalo qaar ma laha jawaab sax ah ama tilmaamo sixid; macallinku ha dib u eego.');
 
-  if (qs.some(q => !q.answer)) {
-    notes.push('Su’aalo qaar ma laha jawaab sax ah ama tilmaamo sixid; macallinku ha dib u eego.');
-  }
+  const meta=getExamMeta();
 
-  const meta = getExamMeta();
-
-  if (meta.totalMarks && total !== meta.totalMarks) {
+  if(meta.totalMarks&&total!==meta.totalMarks){
     notes.push(`Wadarta dhibcaha su’aalaha (${total}) ma waafaqsana dhibcaha guud (${meta.totalMarks}).`);
   } else {
     notes.push(`Wadarta dhibcaha su’aalaha: ${total}.`);
   }
 
-  const levels = {};
-  qs.forEach(q => levels[q.level] = (levels[q.level] || 0) + 1);
-
-  notes.push(
-    'Qaybinta heerarka garashada: ' +
-    Object.entries(levels).map(([k, v]) => `${k} (${v})`).join(', ')
-  );
+  const levels={};
+  questions.forEach(q=>levels[q.level]=(levels[q.level]||0)+1);
+  notes.push('Qaybinta heerarka garashada: '+Object.entries(levels).map(([level,count])=>`${level} (${count})`).join(', '));
 
   return notes;
 }
 
-function renderAnalysisSummary() {
-  const el = $('analysisResult');
-
-  if (el && el.classList.contains('empty')) {
-    el.textContent = 'Riix “Falanqee su’aalaha hadda jira” si aad u hesho talooyinka hubinta tayada.';
+function renderAnalysisSummary(){
+  const element=$('analysisResult');
+  if(element&&element.classList.contains('empty')){
+    element.textContent='Riix “Falanqee su’aalaha hadda jira” si aad u hesho talooyinka hubinta tayada.';
   }
 }
 
-$('runAnalysis').addEventListener('click', () => {
-  const notes = analyze();
-  const el = $('analysisResult');
-
-  el.className = 'list';
-  el.innerHTML = notes.map((n, i) =>
-    `<div class="item">${i + 1}. ${esc(n)}</div>`
-  ).join('');
+$('runAnalysis').addEventListener('click',()=>{
+  const notes=analyze();
+  const element=$('analysisResult');
+  element.className='list';
+  element.innerHTML=notes.map((note,index)=>`<div class="item">${index+1}. ${esc(note)}</div>`).join('');
 });
 
-function renderHomeStats() {
-  $('homeStats').innerHTML = `
+function renderHomeStats(){
+  $('homeStats').innerHTML=`
     <div class="stat"><b>${state.exams.length}</b>Imtixaan</div>
     <div class="stat"><b>${state.bank.length}</b>Su’aalo kaydsan</div>
     <div class="stat"><b>${state.questions.length}</b>Su’aalo hadda jira</div>
   `;
 }
 
-function download(name, data, type = 'application/json') {
-  const blob = new Blob([data], { type });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement('a');
-
-  a.href = url;
-  a.download = name;
-  document.body.appendChild(a);
-  a.click();
-  a.remove();
-
-  setTimeout(() => URL.revokeObjectURL(url), 1000);
+function download(name,data,type='application/json'){
+  const blob=new Blob([data],{type});
+  const url=URL.createObjectURL(blob);
+  const anchor=document.createElement('a');
+  anchor.href=url;
+  anchor.download=name;
+  document.body.appendChild(anchor);
+  anchor.click();
+  anchor.remove();
+  setTimeout(()=>URL.revokeObjectURL(url),1000);
 }
 
-$('exportData').addEventListener('click', () =>
-  download('GHDD_Assessment_Pro_Backup.json', JSON.stringify(state, null, 2))
-);
+$('exportData').addEventListener('click',()=>{
+  download('GHDD_Assessment_Pro_Backup.json',JSON.stringify(state,null,2));
+});
 
-$('downloadBank').addEventListener('click', () =>
-  download('GHDD_Question_Bank.json', JSON.stringify(state.bank, null, 2))
-);
+$('downloadBank').addEventListener('click',()=>{
+  download('GHDD_Question_Bank.json',JSON.stringify(state.bank,null,2));
+});
 
-function importJson(file, handler) {
-  if (!file) return;
+function importJson(file,handler){
+  if(!file) return;
+  const reader=new FileReader();
 
-  const reader = new FileReader();
-
-  reader.onload = () => {
+  reader.onload=()=>{
     try {
       handler(JSON.parse(reader.result));
-    } catch (e) {
+    } catch(e) {
       alert('Faylka JSON lama akhrin karin. Hubi in faylku sax yahay.');
     }
   };
@@ -868,45 +771,42 @@ function importJson(file, handler) {
   reader.readAsText(file);
 }
 
-$('importData').addEventListener('change', e => {
-  importJson(e.target.files[0], d => {
-    if (!d || typeof d !== 'object') throw Error();
+$('importData').addEventListener('change',event=>{
+  importJson(event.target.files[0],data=>{
+    if(!data||typeof data!=='object') throw Error();
 
-    if (!confirm('Soo gelinta xogtu waxay beddeli kartaa xogta hadda jirta. Ma sii wadnaa?')) {
-      return;
-    }
+    if(!confirm('Soo gelinta xogtu waxay beddeli kartaa xogta hadda jirta. Ma sii wadnaa?')) return;
 
-    state = { ...state, ...d };
+    state={...state,...data};
     persist();
     refreshAll();
     alert('Kaydka xogta waa la soo geliyey.');
-    e.target.value = '';
+    event.target.value='';
   });
 });
 
-$('bankFile').addEventListener('change', e => {
-  importJson(e.target.files[0], d => {
-    const arr = Array.isArray(d) ? d : (d && Array.isArray(d.bank) ? d.bank : null);
+$('bankFile').addEventListener('change',event=>{
+  importJson(event.target.files[0],data=>{
+    const rows=Array.isArray(data)?data:(data&&Array.isArray(data.bank)?data.bank:null);
+    if(!rows) throw Error();
 
-    if (!arr) throw Error();
+    let count=0;
 
-    let n = 0;
-
-    arr.forEach(q => {
-      if (q && q.text && !state.bank.some(b => b.text === q.text)) {
-        state.bank.push({ ...q, id: q.id || uid() });
-        n++;
+    rows.forEach(question=>{
+      if(question&&question.text&&!state.bank.some(item=>item.text===question.text)){
+        state.bank.push({...question,id:question.id||uid()});
+        count++;
       }
     });
 
     persist();
     renderBank();
-    alert(`${n} su’aalood ayaa la soo geliyey.`);
-    e.target.value = '';
+    alert(`${count} su’aalood ayaa la soo geliyey.`);
+    event.target.value='';
   });
 });
 
-function refreshAll() {
+function refreshAll(){
   renderQuestions();
   renderSavedExams();
   renderBlueprint();
