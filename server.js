@@ -557,78 +557,158 @@ function qualityCheck(q) {
   };
 }
 
+function extractJson(text) {
+  const raw = String(text || '')
+    .replace(/^\s*```(?:json)?\s*/i, '')
+    .replace(/\s*```\s*$/i, '')
+    .trim();
+
+  try {
+    const parsed = JSON.parse(raw);
+    if (Array.isArray(parsed)) return parsed;
+    if (Array.isArray(parsed.questions)) return parsed.questions;
+  } catch (_) {
+    // Try to isolate the JSON object below.
+  }
+
+  const start = raw.indexOf('{');
+  const end = raw.lastIndexOf('}');
+  if (start >= 0 && end > start) {
+    const parsed = JSON.parse(raw.slice(start, end + 1));
+    if (Array.isArray(parsed)) return parsed;
+    if (Array.isArray(parsed.questions)) return parsed.questions;
+  }
+
+  throw new Error('Jawaabta AI-gu ma ahayn JSON dhammaystiran.');
+}
+
 async function aiGenerate(p) {
   const key = process.env.GEMINI_API_KEY;
-  if (!key) return null;
+  if (!key) {
+    throw new Error('GEMINI_API_KEY laguma dejin Railway Variables.');
+  }
 
   const model = process.env.GEMINI_MODEL || 'gemini-3.8-flash';
   const requestedTotal = Math.max(1, Number(p.totalMarks) || 100);
-  const requestedCount = Math.max(
-    4,
-    Number(p.count) || Math.min(30, Math.max(12, Math.round(requestedTotal / 3)))
+  const requestedCount = Math.min(
+    50,
+    Math.max(1, Number(p.count || p.questionCount) || Math.min(30, Math.max(12, Math.round(requestedTotal / 3))))
   );
+
+  const sourceText = String(p.sourceText || p.text || '').slice(0, 28000);
+  if (!sourceText.trim()) {
+    throw new Error('Qoraalka buugga waa madhan.');
+  }
+
+  const levels = Array.isArray(p.levels) && p.levels.length ? p.levels : blooms;
   const format = p.format || 'four-part';
   const diagramMode = p.diagramMode || 'Auto';
+  const batchSize = 4;
+  const allQuestions = [];
 
-  const prompt = `
-You are an expert secondary-school examination setter. Prepare a rigorous national-exam-style DRAFT using ONLY the supplied source text. Do not invent facts or use outside knowledge. Avoid repetition, vague stems, clues, implausible distractors and ambiguous wording.
-Return valid JSON only, with no markdown or commentary, in this schema:
-{"title":"","instructions":[""],"questions":[{"section":"Part I: Multiple Choice","question":"","type":"MCQ","options":["A. ...","B. ...","C. ...","D. ..."],"answer":"B. ...","marks":1,"bloom":"Understand","difficulty":"Moderate","topic":"","sourcePages":"", "diagram":""}]}
-Requirements:
-- Produce exactly ${requestedCount} questions and total marks must equal ${requestedTotal}.
-- Use four parts with these approximate mark weights, adjusting as needed to reach the exact total: Part I MCQ 25%, Part II Fill in the Blanks 10%, Part III Matching 15%, Part IV Direct/Structured 50%.
-- Use these exact section labels: "Part I: Multiple Choice", "Part II: Fill in the Blanks", "Part III: Matching", "Part IV: Direct/Structured Questions".
-- Ensure all four parts are represented. If format is "two-section", use Part I MCQ and Part II Structured Questions only.
-- Marks must be positive numbers; every question has a model answer/marking guidance.
-- MCQ: exactly four options, only one best answer; answer must identify the correct option.
-- Fill in the Blanks: use a clear blank shown as "__________"; answer states the missing word/phrase.
-- Matching: provide options as an array of right-column items and answer as clear pairs, and make a sensible multi-pair matching question where possible.
-- Direct/Structured questions should include subparts (a), (b), (c) where appropriate, and marking guidance for each part.
-- Diagram mode: ${diagramMode}. If Include, add a simple text-based diagram or a concise diagram instruction only where the source supports it. If Exclude, do not request or include diagrams. If Auto, include only when genuinely useful and supported by the source. Never invent a diagram.
-- Bloom levels: ${JSON.stringify(p.levels || blooms)}.
-- If the source text cannot support the requested number or variety, return as many strong questions as possible and add a concise "limitations" string; never pad with generic questions.
-Subject: ${p.subject || ''}
-Class: ${p.className || p.klass || ''}
-Requested format: ${format}
-Source title: ${p.sourceTitle || ''}
-Page range: ${JSON.stringify(p.pageRange || {})}
-Source text:
-${String(p.sourceText || p.text || '').slice(0, 70000)}
+  for (let offset = 0; offset < requestedCount; offset += batchSize) {
+    const batchCount = Math.min(batchSize, requestedCount - offset);
+
+    const prompt = `
+You are an expert secondary-school exam setter.
+Create exactly ${batchCount} high-quality, distinct exam questions using ONLY the source text below.
+Return ONLY valid JSON, without Markdown, in this exact structure:
+{"questions":[{"section":"Part I: Multiple Choice","question":"...","type":"MCQ","options":["A. ...","B. ...","C. ...","D. ..."],"answer":"B. ...","marks":1,"bloom":"Understand","difficulty":"Moderate","topic":"...","sourcePages":"...","diagram":""}]}
+
+Rules:
+- Produce exactly ${batchCount} questions in this batch.
+- Every question must have a correct model answer or marking guidance.
+- MCQs must have exactly four options and one best answer. Do not mark the correct option in the options.
+- Fill-in-the-blank questions must show "__________" and provide the missing word or phrase in the answer.
+- Matching questions must provide a clear set of matching items and answers.
+- Structured questions may have subparts (a), (b), (c) with marking guidance.
+- Use only these Bloom levels: ${levels.join(', ')}.
+- Requested format: ${format}.
+- If four-part, use these section labels where appropriate: "Part I: Multiple Choice", "Part II: Fill in the Blanks", "Part III: Matching", "Part IV: Direct/Structured Questions".
+- If two-section, use "Part I: Multiple Choice" and "Part II: Direct/Structured Questions".
+- Diagram preference: ${diagramMode}. If Exclude, do not include diagrams. If Include, describe only a diagram supported by the source.
+- Subject: ${p.subject || ''}
+- Class: ${p.className || p.klass || ''}
+- Source title: ${p.sourceTitle || ''}
+- Page range: ${JSON.stringify(p.pageRange || {})}
+- This is batch ${Math.floor(offset / batchSize) + 1}; do not repeat earlier questions.
+- Do not invent information or add any text outside the JSON.
+
+SOURCE TEXT:
+${sourceText}
 `;
 
-  const r = await fetch(
-    `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`,
-    {
-      method: 'POST',
-      headers: {
-        'content-type': 'application/json',
-        'x-goog-api-key': key
-      },
-      body: JSON.stringify({
-        contents: [{ role: 'user', parts: [{ text: prompt }] }],
-        generationConfig: {
-          responseMimeType: 'application/json',
-          temperature: 0.25,
-          maxOutputTokens: 12000
-        }
-      })
+    const response = await fetch(
+      `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent`,
+      {
+        method: 'POST',
+        headers: {
+          'content-type': 'application/json',
+          'x-goog-api-key': key
+        },
+        body: JSON.stringify({
+          contents: [{ role: 'user', parts: [{ text: prompt }] }],
+          generationConfig: {
+            responseMimeType: 'application/json',
+            temperature: 0.2,
+            maxOutputTokens: 8192
+          }
+        })
+      }
+    );
+
+    let data;
+    try {
+      data = await response.json();
+    } catch (_) {
+      throw new Error('Jawaabta adeegga AI lama akhrin karin.');
     }
-  );
 
-  const data = await r.json();
-  if (!r.ok) throw new Error(data?.error?.message || 'AI request failed');
+    if (!response.ok) {
+      throw new Error(data?.error?.message || `Codsiga AI wuu fashilmay (${response.status}).`);
+    }
 
-  const raw = (data.candidates?.[0]?.content?.parts || [])
-    .map(x => x.text || '').join('');
+    const candidate = data?.candidates?.[0];
+    const raw = (candidate?.content?.parts || [])
+      .map(part => part.text || '')
+      .join('');
 
-  return JSON.parse(raw.replace(/^```json|```$/g, '').trim()).questions || [];
+    if (!raw.trim()) {
+      const reason = candidate?.finishReason || data?.promptFeedback?.blockReason || 'Jawaab madhan';
+      throw new Error(`AI jawaab ma soo celin (${reason}).`);
+    }
+
+    if (candidate?.finishReason === 'MAX_TOKENS') {
+      throw new Error('Jawaabta AI waa la jaray. Yaree tirada su’aalaha ama bogagga.');
+    }
+
+    let batchQuestions;
+    try {
+      batchQuestions = extractJson(raw);
+    } catch (parseError) {
+      console.error('AI returned invalid JSON:', parseError.message);
+      throw new Error('AI-gu wuxuu soo celiyey JSON aan dhammaystirnayn. Isku day bogag yar ama tiro su’aalo yar.');
+    }
+
+    if (!Array.isArray(batchQuestions) || !batchQuestions.length) {
+      throw new Error('AI-gu ma soo celin su’aalo batch-kan.');
+    }
+
+    allQuestions.push(...batchQuestions.slice(0, batchCount));
+  }
+
+  if (!allQuestions.length) {
+    throw new Error('AI-gu ma soo celin su’aalo.');
+  }
+
+  return allQuestions.slice(0, requestedCount);
 }
 
 app.post('/api/generate', async (req, res) => {
   try {
     const p = req.body || {};
     if (!String(p.sourceText || '').trim()) {
-      return res.status(400).json({ error: 'Source text is required.' });
+      return res.status(400).json({ error: 'Qoraalka buugga waa madhan.' });
     }
 
     const requestedTotal = Math.min(300, Math.max(1, Number(p.totalMarks) || 100));
@@ -636,34 +716,33 @@ app.post('/api/generate', async (req, res) => {
     const count = rawCount
       ? Math.min(50, Math.max(1, rawCount))
       : Math.min(30, Math.max(12, Math.round(requestedTotal / 3)));
+
     const levels = Array.isArray(p.levels) && p.levels.length ? p.levels : blooms;
-    let questions = [];
+    let questions;
 
     try {
-      const generated = await aiGenerate({ ...p, count, levels });
-      if (Array.isArray(generated)) questions = generated.slice(0, count);
+      questions = await aiGenerate({ ...p, count, levels, totalMarks: requestedTotal });
     } catch (e) {
       console.error('AI generation failed:', e.message);
       return res.status(502).json({
-        error: 'AI-gu ma samayn su’aalaha. Hubi GEMINI_API_KEY iyo adeegga AI.'
+        error: e.message || 'AI-gu ma samayn su’aalaha. Hubi GEMINI_API_KEY iyo GEMINI_MODEL.'
       });
     }
 
-    if (!questions.length) {
-      return res.status(503).json({
-        error: 'AI lama heli karo. Hubi in GEMINI_API_KEY lagu dejiyey Railway.'
-      });
+    if (!Array.isArray(questions) || !questions.length) {
+      return res.status(502).json({ error: 'AI-gu ma soo celin su’aalo.' });
     }
 
-    questions = questions.map(q => ({
+    questions = questions.slice(0, count).map(q => ({
       ...q,
       id: q.id || uid(),
       question: q.question || q.text || '',
       answer: q.answer || q.modelAnswer || '',
       section: q.section || 'Part IV: Direct/Structured Questions',
-      type: q.type || p.type || 'Structured',
+      type: q.type || 'Structured',
       options: Array.isArray(q.options) ? q.options : [],
       marks: Math.max(1, Number(q.marks) || 1),
+      bloom: q.bloom || q.level || 'Understand',
       quality: qualityCheck({
         ...q,
         question: q.question || q.text || '',
@@ -672,30 +751,12 @@ app.post('/api/generate', async (req, res) => {
       status: 'Draft'
     }));
 
-    if (questions.length) {
-      const base = Math.floor(requestedTotal / questions.length);
-      let remainder = requestedTotal - base * questions.length;
-      questions = questions.map(q => {
-        const marks = base + (remainder > 0 ? 1 : 0);
-        if (remainder > 0) remainder--;
-        return { ...q, marks: Math.max(1, marks) };
-      });
-
-      if (questions.length > requestedTotal) {
-        questions = questions.slice(0, requestedTotal);
-        const each = Math.floor(requestedTotal / questions.length);
-        let extra = requestedTotal - each * questions.length;
-        questions = questions.map(q => ({
-          ...q,
-          marks: each + (extra-- > 0 ? 1 : 0)
-        }));
-      }
-    }
+    const totalMarks = questions.reduce((sum, q) => sum + Number(q.marks || 0), 0);
 
     res.json({
       title: String(p.examTitle || p.sourceTitle || 'GHDD Assessment').slice(0, 250),
       questions,
-      totalMarks: questions.reduce((s, q) => s + Number(q.marks || 0), 0),
+      totalMarks,
       requestedTotalMarks: requestedTotal,
       limitations: questions.length < count
         ? `AI-gu wuxuu soo saaray ${questions.length} su'aalood halkii ${count} laga codsaday.`
@@ -703,7 +764,8 @@ app.post('/api/generate', async (req, res) => {
       aiUsed: true
     });
   } catch (e) {
-    res.status(500).json({ error: e.message });
+    console.error('Generate route error:', e.message);
+    res.status(500).json({ error: 'Samaynta imtixaanka way fashilantay.' });
   }
 });
 
