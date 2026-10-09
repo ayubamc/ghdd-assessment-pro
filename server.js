@@ -10,7 +10,6 @@ const { Pool } = pg;
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const app = express();
 
-// PDF-yada waaweyn waxaa lagu diraa qaybo yaryar, ma aha hal JSON weyn.
 app.use(express.json({ limit: '12mb' }));
 
 const publicCandidates = [
@@ -58,11 +57,9 @@ function uid() {
 
 function auth(req, res, next) {
   if (req.path === '/health') return next();
-
   if ((req.headers['x-admin-password'] || '') !== ADMIN_PASSWORD) {
     return res.status(401).json({ error: 'Furaha maamulka waa khaldan yahay.' });
   }
-
   next();
 }
 
@@ -136,7 +133,6 @@ async function initDb() {
     )
   `);
 
-  // PDF-yada waaweyn waxaa lagu kaydiyaa qaybo database-ka ku jira.
   await db(`
     CREATE TABLE IF NOT EXISTS book_pdf_chunks(
       book_id TEXT NOT NULL REFERENCES books(id) ON DELETE CASCADE,
@@ -168,7 +164,6 @@ app.post('/api/login', (req, res) => {
   res.json({ ok: (req.body?.password || '') === ADMIN_PASSWORD });
 });
 
-// App state
 app.get('/api/state', async (req, res) => {
   try {
     await dbReady;
@@ -187,25 +182,21 @@ app.put('/api/state', async (req, res) => {
   try {
     await dbReady;
     const state = req.body?.state;
-
     if (!state || typeof state !== 'object' || Array.isArray(state)) {
       return res.status(400).json({ error: 'Xogta app-ka ma saxna.' });
     }
-
     await db(`
       INSERT INTO app_state(id, data, updated_at)
       VALUES(1, $1, now())
       ON CONFLICT(id)
       DO UPDATE SET data=EXCLUDED.data, updated_at=now()
     `, [JSON.stringify(state)]);
-
     res.json({ ok: true });
   } catch (e) {
     res.status(500).json({ error: 'Xogta lama kaydin.' });
   }
 });
 
-// Liiska buugaagta
 app.get('/api/books', async (req, res) => {
   try {
     await dbReady;
@@ -221,11 +212,9 @@ app.get('/api/books', async (req, res) => {
   }
 });
 
-// Bilaabidda upload-ka PDF weyn
 app.post('/api/books/upload/start', async (req, res) => {
   try {
     await dbReady;
-
     const p = req.body || {};
     const title = String(p.title || '').trim();
     const size = Number(p.size);
@@ -234,17 +223,14 @@ app.post('/api/books/upload/start', async (req, res) => {
     if (!title) {
       return res.status(400).json({ error: 'Magaca buugga waa loo baahan yahay.' });
     }
-
     if (!Number.isFinite(size) || size < 1 || size > MAX_PDF_BYTES) {
       return res.status(413).json({ error: 'PDF-gu waa inuu ka yaraadaa 500 MB.' });
     }
-
     if (!Number.isInteger(pageCount) || pageCount < 1 || pageCount > 3000) {
       return res.status(400).json({ error: 'Bogagga waa inay u dhexeeyaan 1 iyo 3000.' });
     }
 
     const id = uid();
-
     await db(`
       INSERT INTO books(
         id, title, subject, filename, page_count, pdf, pages, text_chars
@@ -260,42 +246,32 @@ app.post('/api/books/upload/start', async (req, res) => {
       JSON.stringify([])
     ]);
 
-    res.json({
-      ok: true,
-      id,
-      chunkSize: CHUNK_BYTES,
-      maxBytes: MAX_PDF_BYTES
-    });
+    res.json({ ok: true, id, chunkSize: CHUNK_BYTES, maxBytes: MAX_PDF_BYTES });
   } catch (e) {
     console.error('Upload start:', e.message);
     res.status(500).json({ error: 'Upload-ka lama bilaabi karin.' });
   }
 });
 
-// Kaydinta qayb kasta oo PDF-ga ah
 app.post('/api/books/:id/chunks/:index', async (req, res) => {
   try {
     await dbReady;
-
     const index = Number(req.params.index);
     const encoded = req.body?.chunkBase64;
 
     if (!Number.isInteger(index) || index < 0 || typeof encoded !== 'string') {
       return res.status(400).json({ error: 'Qaybta PDF-ga ma saxna.' });
     }
-
     if (encoded.length > 6 * 1024 * 1024) {
       return res.status(413).json({ error: 'Qaybta PDF-gu aad bay u weyn tahay.' });
     }
 
     const exists = await db('SELECT id FROM books WHERE id=$1', [req.params.id]);
-
     if (!exists.rows.length) {
       return res.status(404).json({ error: 'Buugga lama helin.' });
     }
 
     const data = Buffer.from(encoded, 'base64');
-
     if (!data.length || data.length > CHUNK_BYTES) {
       return res.status(400).json({ error: 'Cabbirka qaybta ma saxna.' });
     }
@@ -314,11 +290,9 @@ app.post('/api/books/:id/chunks/:index', async (req, res) => {
   }
 });
 
-// Dhammeystirka upload-ka iyo kaydinta qoraalka OCR
 app.post('/api/books/:id/upload/finish', async (req, res) => {
   try {
     await dbReady;
-
     const pages = req.body?.pages;
     if (!Array.isArray(pages)) {
       return res.status(400).json({ error: 'Qoraalka OCR waa loo baahan yahay.' });
@@ -328,7 +302,6 @@ app.post('/api/books/:id/upload/finish', async (req, res) => {
       'SELECT id, page_count FROM books WHERE id=$1',
       [req.params.id]
     );
-
     if (!bookResult.rows.length) {
       return res.status(404).json({ error: 'Buugga lama helin.' });
     }
@@ -348,12 +321,9 @@ app.post('/api/books/:id/upload/finish', async (req, res) => {
     if (!stats.count || stats.first_chunk !== 0) {
       return res.status(400).json({ error: 'Qaybaha PDF-ga oo dhan lama helin.' });
     }
-
     if (bytes > MAX_PDF_BYTES) {
       return res.status(413).json({ error: 'PDF-gu wuxuu dhaafay 500 MB.' });
     }
-
-    // Hubi in aanay jirin qaybo ka maqan.
     if (Number(stats.last_chunk) + 1 !== Number(stats.count)) {
       return res.status(400).json({ error: 'Qaybo PDF ah ayaa maqan. Dib u dir upload-ka.' });
     }
@@ -370,7 +340,6 @@ app.post('/api/books/:id/upload/finish', async (req, res) => {
       );
 
     const chars = cleanPages.reduce((sum, p) => sum + p.text.length, 0);
-
     await db(`
       UPDATE books
       SET pages=$2::jsonb, text_chars=$3
@@ -390,16 +359,13 @@ app.post('/api/books/:id/upload/finish', async (req, res) => {
   }
 });
 
-// PDF-yada waaweyn waxaa browser-ka loogu soo celinayaa qaybo, iyada oo aan la isku darin.
 app.get('/api/books/:id/pdf', async (req, res) => {
   try {
     await dbReady;
-
     const r = await db(
       'SELECT filename, pdf FROM books WHERE id=$1',
       [req.params.id]
     );
-
     if (!r.rows.length) {
       return res.status(404).json({ error: 'Buugga lama helin.' });
     }
@@ -426,7 +392,6 @@ app.get('/api/books/:id/pdf', async (req, res) => {
       }
       return res.end();
     }
-
     return res.end(r.rows[0].pdf);
   } catch (e) {
     console.error('PDF download:', e.message);
@@ -438,10 +403,8 @@ app.get('/api/books/:id/pdf', async (req, res) => {
 app.get('/api/books/:id/text', async (req, res) => {
   try {
     await dbReady;
-
     const start = Math.max(1, Number(req.query.start) || 1);
     const end = Math.max(start, Number(req.query.end) || 100000);
-
     const r = await db(`
       SELECT id, title, page_count, pages
       FROM books WHERE id=$1
@@ -450,9 +413,7 @@ app.get('/api/books/:id/text', async (req, res) => {
     if (!r.rows.length) {
       return res.status(404).json({ error: 'Buugga lama helin.' });
     }
-
     const b = r.rows[0];
-
     res.json({
       id: b.id,
       title: b.title,
@@ -474,7 +435,6 @@ app.delete('/api/books/:id', async (req, res) => {
   }
 });
 
-// Kaydinta iyo soo saarista imtixaannada
 app.post('/api/assessments', async (req, res) => {
   try {
     await dbReady;
@@ -508,7 +468,7 @@ app.get('/api/assessments', async (req, res) => {
     );
     res.json(r.rows);
   } catch (e) {
-    res.status(500).json({ error: 'Imtixaannada lama soo dejin.' });
+    res.status(500).json({ error: e.message });
   }
 });
 
@@ -516,7 +476,7 @@ app.get('/api/assessments/:id', async (req, res) => {
   try {
     await dbReady;
     const r = await db('SELECT * FROM assessments WHERE id=$1', [req.params.id]);
-    if (!r.rows.length) return res.status(404).json({ error: 'Not found' });
+    if (!r.rows.length) return res.status(404).json({ error: 'Imtixaanka lama helin.' });
     res.json(r.rows[0]);
   } catch (e) {
     res.status(500).json({ error: e.message });
@@ -574,12 +534,10 @@ function qualityCheck(q) {
     issues.push('Question is too short');
     score -= 20;
   }
-
   if (!String(q.answer || '').trim()) {
     issues.push('Missing model answer');
     score -= 25;
   }
-
   if (q.type === 'MCQ') {
     const options = Array.isArray(q.options) ? q.options : [];
     if (options.length !== 4) {
@@ -587,7 +545,6 @@ function qualityCheck(q) {
       score -= 15;
     }
   }
-
   if (!blooms.includes(q.bloom)) {
     issues.push('Bloom level not recognized');
     score -= 5;
@@ -604,19 +561,35 @@ async function aiGenerate(p) {
   const key = process.env.GEMINI_API_KEY;
   if (!key) return null;
 
-  const model = process.env.GEMINI_MODEL || 'gemini-2.5-flash';
+  const model = process.env.GEMINI_MODEL || 'gemini-3.8-flash';
+  const requestedTotal = Math.max(1, Number(p.totalMarks) || 100);
+  const requestedCount = Math.max(
+    4,
+    Number(p.count) || Math.min(30, Math.max(12, Math.round(requestedTotal / 3)))
+  );
+  const format = p.format || 'four-part';
+  const diagramMode = p.diagramMode || 'Auto';
+
   const prompt = `
-You are an expert secondary-school assessment designer.
-Create exactly ${p.count} questions from ONLY the supplied source text.
-Do not invent facts. Avoid repetition and ambiguity.
-Use Bloom levels: ${JSON.stringify(p.levels || blooms)}.
-For MCQ, give four options and exactly one correct answer.
-Include a model answer and marks for every question.
-Return JSON only:
-{"questions":[{"question":"","answer":"","type":"","options":[],"bloom":"","difficulty":"","marks":1,"topic":"","sourcePages":""}]}
+You are an expert secondary-school examination setter. Prepare a rigorous national-exam-style DRAFT using ONLY the supplied source text. Do not invent facts or use outside knowledge. Avoid repetition, vague stems, clues, implausible distractors and ambiguous wording.
+Return valid JSON only, with no markdown or commentary, in this schema:
+{"title":"","instructions":[""],"questions":[{"section":"Part I: Multiple Choice","question":"","type":"MCQ","options":["A. ...","B. ...","C. ...","D. ..."],"answer":"B. ...","marks":1,"bloom":"Understand","difficulty":"Moderate","topic":"","sourcePages":"", "diagram":""}]}
+Requirements:
+- Produce exactly ${requestedCount} questions and total marks must equal ${requestedTotal}.
+- Use four parts with these approximate mark weights, adjusting as needed to reach the exact total: Part I MCQ 25%, Part II Fill in the Blanks 10%, Part III Matching 15%, Part IV Direct/Structured 50%.
+- Use these exact section labels: "Part I: Multiple Choice", "Part II: Fill in the Blanks", "Part III: Matching", "Part IV: Direct/Structured Questions".
+- Ensure all four parts are represented. If format is "two-section", use Part I MCQ and Part II Structured Questions only.
+- Marks must be positive numbers; every question has a model answer/marking guidance.
+- MCQ: exactly four options, only one best answer; answer must identify the correct option.
+- Fill in the Blanks: use a clear blank shown as "__________"; answer states the missing word/phrase.
+- Matching: provide options as an array of right-column items and answer as clear pairs, and make a sensible multi-pair matching question where possible.
+- Direct/Structured questions should include subparts (a), (b), (c) where appropriate, and marking guidance for each part.
+- Diagram mode: ${diagramMode}. If Include, add a simple text-based diagram or a concise diagram instruction only where the source supports it. If Exclude, do not request or include diagrams. If Auto, include only when genuinely useful and supported by the source. Never invent a diagram.
+- Bloom levels: ${JSON.stringify(p.levels || blooms)}.
+- If the source text cannot support the requested number or variety, return as many strong questions as possible and add a concise "limitations" string; never pad with generic questions.
 Subject: ${p.subject || ''}
 Class: ${p.className || p.klass || ''}
-Question type: ${p.type || ''}
+Requested format: ${format}
 Source title: ${p.sourceTitle || ''}
 Page range: ${JSON.stringify(p.pageRange || {})}
 Source text:
@@ -658,7 +631,11 @@ app.post('/api/generate', async (req, res) => {
       return res.status(400).json({ error: 'Source text is required.' });
     }
 
-    const count = Math.min(50, Math.max(1, Number(p.count || p.questionCount || 10)));
+    const requestedTotal = Math.min(300, Math.max(1, Number(p.totalMarks) || 100));
+    const rawCount = Number(p.count || p.questionCount || 0);
+    const count = rawCount
+      ? Math.min(50, Math.max(1, rawCount))
+      : Math.min(30, Math.max(12, Math.round(requestedTotal / 3)));
     const levels = Array.isArray(p.levels) && p.levels.length ? p.levels : blooms;
     let questions = [];
 
@@ -678,19 +655,51 @@ app.post('/api/generate', async (req, res) => {
       });
     }
 
-    questions = questions.map((q, i) => ({
+    questions = questions.map(q => ({
       ...q,
       id: q.id || uid(),
       question: q.question || q.text || '',
       answer: q.answer || q.modelAnswer || '',
-      marks: Number(q.marks) || 1,
-      quality: qualityCheck(q),
+      section: q.section || 'Part IV: Direct/Structured Questions',
+      type: q.type || p.type || 'Structured',
+      options: Array.isArray(q.options) ? q.options : [],
+      marks: Math.max(1, Number(q.marks) || 1),
+      quality: qualityCheck({
+        ...q,
+        question: q.question || q.text || '',
+        answer: q.answer || q.modelAnswer || ''
+      }),
       status: 'Draft'
     }));
 
+    if (questions.length) {
+      const base = Math.floor(requestedTotal / questions.length);
+      let remainder = requestedTotal - base * questions.length;
+      questions = questions.map(q => {
+        const marks = base + (remainder > 0 ? 1 : 0);
+        if (remainder > 0) remainder--;
+        return { ...q, marks: Math.max(1, marks) };
+      });
+
+      if (questions.length > requestedTotal) {
+        questions = questions.slice(0, requestedTotal);
+        const each = Math.floor(requestedTotal / questions.length);
+        let extra = requestedTotal - each * questions.length;
+        questions = questions.map(q => ({
+          ...q,
+          marks: each + (extra-- > 0 ? 1 : 0)
+        }));
+      }
+    }
+
     res.json({
+      title: String(p.examTitle || p.sourceTitle || 'GHDD Assessment').slice(0, 250),
       questions,
       totalMarks: questions.reduce((s, q) => s + Number(q.marks || 0), 0),
+      requestedTotalMarks: requestedTotal,
+      limitations: questions.length < count
+        ? `AI-gu wuxuu soo saaray ${questions.length} su'aalood halkii ${count} laga codsaday.`
+        : '',
       aiUsed: true
     });
   } catch (e) {
@@ -716,7 +725,10 @@ app.post('/api/item-analysis', (req, res) => {
   const { students = [], questions = [] } = req.body || {};
   const items = questions.map((q, index) => {
     const values = students.map(s => Number(s.answers?.[index]) === 1 ? 1 : 0);
-    const p = values.length ? values.reduce((a, b) => a + b, 0) / values.length : 0;
+    const p = values.length
+      ? values.reduce((a, b) => a + b, 0) / values.length
+      : 0;
+
     return {
       number: index + 1,
       question: q.question,
@@ -725,10 +737,7 @@ app.post('/api/item-analysis', (req, res) => {
     };
   });
 
-  res.json({
-    items,
-    summary: { totalQuestions: items.length }
-  });
+  res.json({ items, summary: { totalQuestions: items.length } });
 });
 
 app.get('*', (req, res) => {
