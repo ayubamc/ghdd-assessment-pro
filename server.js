@@ -607,7 +607,7 @@ async function aiGenerate(p) {
   const model = process.env.GEMINI_MODEL || 'gemini-2.5-flash';
   const prompt = `
 You are an expert secondary-school assessment designer.
-LANGUAGE RULE (mandatory): Identify the main language of the supplied textbook text and write EVERY student-facing exam element in that same language. If the source is English, write the exam in English. If the source is Arabic, write the exam in Arabic. If the source is Somali, write the exam in Somali. Do not mix Somali helper notes into an English or Arabic paper. The user's interface language is irrelevant; the textbook language controls the exam language.
+LANGUAGE RULE (mandatory): Use the user-selected exam language: ${p.examLanguage || 'en'}. Codes: en=English, so=Somali, ar=Arabic. If p.examLanguage is 'auto', use the main language of the supplied textbook text. Write ALL student-facing headings, questions, options, instructions, matching terms, diagram labels and answer key in that language only. Do not mix languages.
 Create exactly ${p.count} questions using ONLY the supplied source text. Do not invent facts or repeat questions.
 Use Bloom levels: ${JSON.stringify(p.levels || blooms)}.
 Required ordered section plan: ${JSON.stringify(p.partPlan || [])}. Follow the exact section order and counts.
