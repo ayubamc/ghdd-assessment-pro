@@ -609,14 +609,16 @@ async function aiGenerate(p) {
 You are an expert secondary-school assessment designer.
 Create exactly ${p.count} questions using ONLY the supplied source text. Do not invent facts or repeat questions.
 Use Bloom levels: ${JSON.stringify(p.levels || blooms)}.
-Required ordered section plan: ${JSON.stringify(p.partPlan || [])}. Return the exact number for each section in the exact order, using the exact section label and type from the plan.
-MCQ: exactly four plausible options and one correct answer.
+Required ordered section plan: ${JSON.stringify(p.partPlan || [])}. Follow the exact section order and counts.
+SOURCE DISTRIBUTION RULE: ${p.sourceSelectionRule || 'Spread questions across different headings/topics; do not take consecutive questions from the same paragraph or heading. Prefer passages separated by at least two headings or at least one full page.'}
+Do not create consecutive questions from the same paragraph or heading. Spread questions across the selected page range and distinct topics. Every question must include sourcePages and topic/heading.
+MCQ: exactly four options A, B, C, D and one correct answer.
 Fill in the Blanks: one clear blank and a clear answer.
-Matching: return matches as [{"question":"prompt/term","answer":"correct answer"}]. The options array must contain every correct matching answer plus exactly ONE additional plausible distractor. Do not reveal correct matches in the student paper.
-Structured: use clear subparts and a concise model answer/marking guide.
-Return exactly ${Number(p.diagramCount || 0)} diagram descriptions across Structured questions. If diagramCount is 0, all diagram fields must be empty strings.
+Matching: return matches as [{"question":"prompt/term","answer":"correct answer"}]. options must contain all correct matching answers plus exactly ONE plausible distractor.
+Structured/direct questions: include clear subparts and a model answer/marking guide. Questions should be suitable for written answers.
+Create exactly ${Number(p.diagramCount || 0)} diagrams across Structured questions. If diagramCount is 0, diagram and diagramSvg must be empty for every question. If greater than zero, each requested diagram must include a standalone simple SVG in diagramSvg, with viewBox="0 0 640 300", width="100%", height="auto", visible labels and basic shapes/lines. No scripts, external links, images, foreignObject, or CSS imports. Each diagram must directly support its question and be based on the source. Do not invent scientific labels or unsupported details.
 Return JSON only:
-{"questions":[{"question":"","answer":"","type":"","section":"","options":[],"matches":[{"question":"","answer":""}],"diagram":"","bloom":"","difficulty":"","marks":1,"topic":"","sourcePages":""}]}
+{"questions":[{"question":"","answer":"","type":"","section":"","options":[],"matches":[{"question":"","answer":""}],"diagram":"","diagramSvg":"","bloom":"","difficulty":"","marks":1,"topic":"","sourcePages":""}]}
 Subject: ${p.subject || ''}
 Class: ${p.className || p.klass || ''}
 Source title: ${p.sourceTitle || ''}
