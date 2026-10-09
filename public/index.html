@@ -60,7 +60,65 @@ footer{text-align:center;color:#65738a;padding:22px;font-size:13px}
   body:not(.print-mode) .tab{display:none!important}
   body:not(.print-mode) #builder.active{display:block!important}
 }
-.matching-table{width:100%;border-collapse:collapse;margin:8px 0 16px;font-size:14px}.matching-table th,.matching-table td{border:1px solid #555;padding:7px;vertical-align:top}.matching-table th{background:#edf3fb;text-align:center}.matching-table td:first-child{text-align:center;width:45px}.matching-options{display:grid;gap:4px}.diagram-note{border:1px dashed #7c8ba1;padding:8px;margin:8px 0}
+
+
+/* Print-ready examination boxes inspired by the user's sample paper */
+.paper-question{margin:10px 0 14px;break-inside:avoid;page-break-inside:avoid}
+.question-line,.mcq-question-row{display:flex;align-items:flex-start;gap:7px;border:1px solid #333;padding:8px 9px;margin:0;line-height:1.35}
+.question-number{font-weight:700;white-space:nowrap}
+.question-text{flex:1;min-width:0}
+.marks{white-space:nowrap;font-weight:700;font-size:.94em}
+.mcq-options-table{width:100%;table-layout:fixed;border-collapse:collapse;margin:0 0 12px}
+.mcq-options-table td{width:25%;border:1px solid #333;padding:7px 6px;vertical-align:top;overflow-wrap:anywhere;line-height:1.35}
+.mcq-box .mcq-question-row{border-bottom:0}
+.mcq-box .mcq-options-table{border-top:0}
+.matching-table{width:100%;border-collapse:collapse;table-layout:fixed;margin:8px 0 14px;font-size:13px}
+.matching-table th,.matching-table td{border:1px solid #333;padding:7px;vertical-align:top;overflow-wrap:anywhere;line-height:1.35}
+.matching-table th{font-weight:700;text-align:left}
+.matching-table th:first-child,.matching-table td.match-no{width:12%;text-align:center}
+.matching-table th:nth-child(2){width:28%}
+.matching-table th:nth-child(3){width:18%;text-align:center}
+.matching-table th:nth-child(4){width:42%}
+.match-answer{text-align:center;font-weight:600}
+.matching-options{display:grid;gap:7px}
+.matching-options>div{padding-bottom:4px;border-bottom:1px dotted #aaa}
+.matching-key{border:1px solid #777;padding:8px}
+.structured-box{border:1px solid #333;padding:0 0 8px}
+.structured-box .mcq-question-row{border:0;border-bottom:1px solid #333}
+.structured-box .diagram-note,.structured-box .answer-box{margin:8px}
+.answer-box{border:1px solid #777;padding:8px;margin:8px 0}
+@media print{
+ .paper-question{break-inside:avoid;page-break-inside:avoid}
+ .mcq-options-table td,.matching-table th,.matching-table td{border:1px solid #222}
+}
+
+
+/* Print-ready examination boxes inspired by the supplied examples */
+.paper-question{margin:10px 0 14px;break-inside:avoid;page-break-inside:avoid}
+.question-line,.mcq-question-row{display:flex;align-items:flex-start;gap:7px;border:1px solid #333;padding:8px 9px;margin:0;line-height:1.35}
+.question-number{font-weight:700;white-space:nowrap}
+.question-text{flex:1;min-width:0}
+.marks{white-space:nowrap;font-weight:700;font-size:.94em}
+.mcq-options-table{width:100%;table-layout:fixed;border-collapse:collapse;margin:0 0 12px}
+.mcq-options-table td{width:25%;border:1px solid #333;padding:7px 6px;vertical-align:top;overflow-wrap:anywhere;line-height:1.35}
+.mcq-box .mcq-question-row{border-bottom:0}
+.matching-table{width:100%;border-collapse:collapse;table-layout:fixed;margin:8px 0 14px;font-size:13px}
+.matching-table th,.matching-table td{border:1px solid #333;padding:7px;vertical-align:top;overflow-wrap:anywhere;line-height:1.35}
+.matching-table th{font-weight:700;text-align:left}
+.matching-table th:first-child,.matching-table td.match-no{width:12%;text-align:center}
+.matching-table th:nth-child(2){width:28%}
+.matching-table th:nth-child(3){width:18%;text-align:center}
+.matching-table th:nth-child(4){width:42%}
+.match-answer{text-align:center;font-weight:600}
+.matching-options{display:grid;gap:7px}
+.matching-options>div{padding-bottom:4px;border-bottom:1px dotted #aaa}
+.matching-key{border:1px solid #777;padding:8px}
+.structured-box{border:1px solid #333;padding:0 0 8px}
+.structured-box .mcq-question-row{border:0;border-bottom:1px solid #333}
+.structured-box .diagram-note,.structured-box .answer-box{margin:8px}
+.answer-box{border:1px solid #777;padding:8px;margin:8px 0}
+@media print{.paper-question{break-inside:avoid;page-break-inside:avoid}.mcq-options-table td,.matching-table th,.matching-table td{border:1px solid #222}}
+
 </style>
 </head>
 <body>
@@ -612,18 +670,22 @@ $('generateExam').onclick=async()=>{
            const pairs=Array.isArray(q.matches)?q.matches:[];
            const choices=Array.isArray(q.options)?q.options:[];
            const rows=pairs.map((pair,j)=>{
-             const answerCell=withAnswers?esc(pair.answer||''):'________________';
-             const choiceCell=j===0?`<td rowspan="${Math.max(1,pairs.length)}"><div class="matching-options">${choices.map((c,k)=>`<div><b>${String.fromCharCode(65+k)}.</b> ${esc(String(c).replace(/^[A-Z]\.\s*/i,''))}</div>`).join('')}</div></td>`:'';
-             return `<tr><td>${j+1}</td><td>${esc(pair.question||'')}</td><td>${answerCell}</td>${choiceCell}</tr>`;
+             const answerCell=withAnswers?esc(pair.answer||''):'____________';
+             const choiceCell=j===0?`<td rowspan="${Math.max(1,pairs.length)}" class="matching-choice-cell"><div class="matching-options">${choices.map((c,k)=>`<div><b>${String.fromCharCode(65+k)}.</b> ${esc(String(c).replace(/^[A-Z]\.\s*/i,''))}</div>`).join('')}</div></td>`:'';
+             return `<tr><td class="match-no">${j+1}</td><td>${esc(pair.question||'')}</td><td class="match-answer">${answerCell}</td>${choiceCell}</tr>`;
            }).join('');
-           const correct=withAnswers?`<p><strong>Correct matches:</strong> ${pairs.map((p,j)=>`${j+1}. ${esc(p.question)} — ${esc(p.answer)}`).join('; ')}</p>`:'';
-           const warning=choices.length===pairs.length+1?'':'<p class="muted"><em>Hubi in doorashooyinka jawaabuhu hal ka badan yihiin tirada su’aalaha.</em></p>';
-           return `${sectionHtml}<div class="paper-question"><p><strong>${i+1}. ${esc(q.text||'Isku-aadi su’aalaha iyo jawaabahooda.')}</strong> <span>(${q.marks} marks)</span></p><div class="table-wrap"><table class="matching-table"><thead><tr><th>S/N</th><th>Su’aalaha</th><th>Jawaabta ardaygu qoro</th><th>Doorashooyinka jawaabaha</th></tr></thead><tbody>${rows}</tbody></table></div>${correct}${warning}</div>`;
+           const correct=withAnswers?`<p class="matching-key"><strong>Jawaabaha saxda ah:</strong> ${pairs.map((p,j)=>`${j+1}. ${esc(p.question)} — ${esc(p.answer)}`).join('; ')}</p>`:'';
+           const warning=choices.length===pairs.length+1?'':'<p class="muted"><em>Hubi: doorashooyinka jawaabuhu waa inay hal ka badan yihiin tirada su’aalaha.</em></p>';
+           return `${sectionHtml}<div class="paper-question"><p class="question-line"><strong>${i+1}. ${esc(q.text||'Isku-aadi su’aalaha iyo jawaabahooda.')}</strong><span class="marks">(${q.marks} marks)</span></p><div class="table-wrap"><table class="matching-table"><thead><tr><th>Lambarka</th><th>Qaybta A: Erayga / Su’aasha</th><th>Xarafka Jawaabta</th><th>Qaybta B: Jawaabaha / Sharaxaadda</th></tr></thead><tbody>${rows}</tbody></table></div>${correct}${warning}</div>`;
          }
-         const options=q.options?.length?`<ol type="A">${q.options.map(opt=>`<li>${esc(String(opt).replace(/^[A-D]\.\s*/i,''))}</li>`).join('')}</ol>`:'';
-         const diagram=q.diagram?`<p class="diagram-note"><strong>Jaantus / sawir:</strong> ${esc(q.diagram)}</p>`:'';
-         const answer=withAnswers?`<p><strong>Answer / Marking guide:</strong> ${esc(q.answer||'Not provided')}</p>`:'';
-         return `${sectionHtml}<div class="paper-question"><p><strong>${i+1}. ${esc(q.text)}</strong> <span>(${q.marks} marks)</span></p>${options}${diagram}${answer}</div>`;
+         const options=q.options?.length?`<table class="mcq-options-table"><tbody><tr>${q.options.slice(0,4).map((opt,k)=>`<td><strong>${String.fromCharCode(65+k)}.</strong> ${esc(String(opt).replace(/^[A-D]\.\s*/i,''))}</td>`).join('')}</tr></tbody></table>`:'';
+         const diagram=q.diagram?`<div class="diagram-note"><strong>Jaantus / sawir:</strong> ${esc(q.diagram)}</div>`:'';
+         const answer=withAnswers?`<div class="answer-box"><strong>Jawaabta / Marking guide:</strong> ${esc(q.answer||'Not provided')}</div>`:'';
+         const questionLine=`<div class="mcq-question-row"><span class="question-number">${i+1}.</span><span class="question-text">${esc(q.text)}</span><span class="marks">(${q.marks} marks)</span></div>`;
+         if(q.type==='MCQ'||q.type==='Multiple Choice'||q.type==='Multiple Choice Questions'){
+           return `${sectionHtml}<div class="paper-question mcq-box">${questionLine}${options}${answer}</div>`;
+         }
+         return `${sectionHtml}<div class="paper-question structured-box">${questionLine}${diagram}${answer}</div>`;
        }).join('');
      };
     const instructions= $('examInstructions').value.trim()||'Answer all questions. Read each question carefully.';
