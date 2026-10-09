@@ -45,6 +45,7 @@ textarea{min-height:90px}
 #printRoot h1,#printRoot h2,#printRoot h3{color:#111}
 .paper-head{text-align:center;border-bottom:2px solid #111;padding-bottom:12px;margin-bottom:18px}
 .paper-meta{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin:15px 0}
+.answer-space{margin:8px 0 16px;break-inside:avoid}.answer-line{height:25px;border-bottom:1px solid #777}.student-answer-label{font-size:12px;color:#555;margin-top:8px}.exam-diagram{margin:10px 0;text-align:center;break-inside:avoid}.exam-diagram svg{max-width:100%;height:auto;max-height:330px}.diagram-drawing-space{height:110px;border:1px dashed #888;margin:8px 0}
 .paper-question{margin:16px 0;break-inside:avoid}
 .paper-question p{margin:5px 0}
 .paper-section{font-weight:bold;margin-top:22px;border-bottom:1px solid #555;padding-bottom:4px}
@@ -536,6 +537,16 @@ async function loadBooks(){
 $('refreshBooks').onclick=loadBooks;
 
 
+function sanitizeDiagramSvg(svg){
+  if(!svg||typeof svg!=='string')return '';
+  let s=svg.replace(/<script[\s\S]*?<\/script>/gi,'')
+    .replace(/<\/?(?:foreignObject|iframe|object|embed|image|use)\b[^>]*>/gi,'')
+    .replace(/\son\w+\s*=\s*(?:"[^"]*"|'[^']*'|[^\s>]+)/gi,'')
+    .replace(/\s(?:href|xlink:href)\s*=\s*(?:"[^"]*"|'[^']*'|[^\s>]+)/gi,'')
+    .replace(/url\s*\([^)]*\)/gi,'none');
+  return /<svg\b/i.test(s)?s:'';
+}
+
 function makePartPlan(totalCount,totalMarks,format,diagramCount){
   const specs = format==='two-section'
     ? [
@@ -605,7 +616,7 @@ $('generateExam').onclick=async()=>{
   try{
     const d=await api(`/api/books/${encodeURIComponent(id)}/text?start=${start}&end=${end}`,{method:'GET'});
     const selected=(d.pages||[]).filter(p=>p.text&&p.text.trim());
-    const sourceText=selected.map(p=>`[Bogga ${p.page}]\n${p.text}`).join('\n\n');
+    const sourceText=selected.map(p=>`[BOGGA ${p.page} — QORAALKA BOGGAN]\n${p.text}`).join('\n\n--- DHAMMAADKA BOGGA ---\n\n');
     if(!sourceText.trim())throw new Error('Qoraal lagama helin bogagga la doortay.');
 
     status.textContent='AI ayaa diyaarinaya su’aalaha laga soo qaatay bogagga aad dooratay...';
@@ -618,7 +629,7 @@ $('generateExam').onclick=async()=>{
       method:'POST',
       body:JSON.stringify({
         sourceText,subject,className,count:effectiveCount,questionCount:effectiveCount,
-        totalMarks,format,diagramCount,partPlan,levels,type:'Isku-dhafan',
+        totalMarks,format,diagramCount,partPlan,levels,type:'Isku-dhafan',sourceSelectionRule:'Spread questions across different headings/topics. Do not take consecutive questions from the same paragraph or same heading. Prefer passages separated by at least two headings or at least one full page. Record source pages and topic/heading for each question.',
         sourceTitle:d.title,
         pageRange:{start,end}
       })
@@ -650,7 +661,7 @@ $('generateExam').onclick=async()=>{
       section:q.section||'',
       options:Array.isArray(q.options)?q.options:[],
       matches:Array.isArray(q.matches)?q.matches:[],
-      diagram:q.diagram||'',
+      diagram:q.diagram||'',diagramSvg:q.diagramSvg||'',
       sourcePages:q.sourcePages||''
     }));
     // The generated questions are added automatically; no per-question "add" step is required.
@@ -679,13 +690,16 @@ $('generateExam').onclick=async()=>{
            return `${sectionHtml}<div class="paper-question"><p class="question-line"><strong>${i+1}. ${esc(q.text||'Isku-aadi su’aalaha iyo jawaabahooda.')}</strong><span class="marks">(${q.marks} marks)</span></p><div class="table-wrap"><table class="matching-table"><thead><tr><th>Lambarka</th><th>Qaybta A: Erayga / Su’aasha</th><th>Xarafka Jawaabta</th><th>Qaybta B: Jawaabaha / Sharaxaadda</th></tr></thead><tbody>${rows}</tbody></table></div>${correct}${warning}</div>`;
          }
          const options=q.options?.length?`<table class="mcq-options-table"><tbody><tr>${q.options.slice(0,4).map((opt,k)=>`<td><strong>${String.fromCharCode(65+k)}.</strong> ${esc(String(opt).replace(/^[A-D]\.\s*/i,''))}</td>`).join('')}</tr></tbody></table>`:'';
-         const diagram=q.diagram?`<div class="diagram-note"><strong>Jaantus / sawir:</strong> ${esc(q.diagram)}</div>`:'';
+         const safeSvg=q.diagramSvg?sanitizeDiagramSvg(q.diagramSvg):'';
+         const diagram=safeSvg?`<div class="exam-diagram">${safeSvg}</div>`:(q.diagram?`<div class="diagram-note"><strong>Jaantus / sawir:</strong> ${esc(q.diagram)}<div class="diagram-drawing-space"></div></div>`:'');
+         const isDirect=/structured|direct/i.test(q.type||'')||/STRUCTURED|DIRECT/i.test(section);
+         const answerSpace=(!withAnswers&&isDirect)?`<div class="student-answer-label">Answer:</div><div class="answer-space">${Array.from({length:Math.max(2,Math.min(14,Math.ceil(Number(q.marks||1)*1.4)))},()=>'<div class="answer-line"></div>').join('')}</div>`:'';
          const answer=withAnswers?`<div class="answer-box"><strong>Jawaabta / Marking guide:</strong> ${esc(q.answer||'Not provided')}</div>`:'';
          const questionLine=`<div class="mcq-question-row"><span class="question-number">${i+1}.</span><span class="question-text">${esc(q.text)}</span><span class="marks">(${q.marks} marks)</span></div>`;
          if(q.type==='MCQ'||q.type==='Multiple Choice'||q.type==='Multiple Choice Questions'){
            return `${sectionHtml}<div class="paper-question mcq-box">${questionLine}${options}${answer}</div>`;
          }
-         return `${sectionHtml}<div class="paper-question structured-box">${questionLine}${diagram}${answer}</div>`;
+         return `${sectionHtml}<div class="paper-question structured-box">${questionLine}${diagram}${answerSpace}${answer}</div>`;
        }).join('');
      };
     const instructions= $('examInstructions').value.trim()||'Answer all questions. Read each question carefully.';
