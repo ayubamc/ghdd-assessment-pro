@@ -1,12 +1,218 @@
-<!doctype html><html lang="so"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>GHDD Assessment Pro</title><link rel="stylesheet" href="style.css"></head><body>
-<header><img src="letterhead.jpg"><div><h1>GHDD DIGITAL ASSESSMENT</h1><p>Exam Quality & Academic Assessment System</p></div></header>
-<nav><button class="on" data-tab="dashboard">🏠 Dashboard</button><button data-tab="builder">📝 Exam Builder</button><button data-tab="blueprint">📊 Blueprint</button><button data-tab="bank">📚 Question Bank</button><button data-tab="analysis">📈 Item Analysis</button></nav>
-<main>
-<section id="dashboard" class="tab on"><div class="hero"><h2>Imtixaan tayo leh, qorshaysan, la hubiyey.</h2><p>Nidaamku wuxuu isku daraa Exam Blueprint, Learning Outcomes, Bloom's Taxonomy, difficulty balance, AI generation, quality checking, question bank iyo post-exam item analysis.</p></div><div class="grid cards"><div><b>1</b><span>Blueprint</span></div><div><b>2</b><span>Generate</span></div><div><b>3</b><span>Quality Check</span></div><div><b>4</b><span>Approve & Save</span></div></div><h3>Imtixaannadii hore</h3><div id="recent"></div></section>
-<section id="builder" class="tab"><h2>📝 Exam Builder</h2><div class="panel"><div class="grid two"><label>Exam title<input id="title" value="Term Examination"></label><label>Subject<input id="subject" placeholder="Mathematics"></label><label>Class<select id="klass"><option>Form 1</option><option>Form 2</option><option>Form 3</option><option>Form 4</option></select></label><label>Total marks<input id="total" type="number" value="100"></label><label>Duration<input id="duration" value="2 hours"></label><label>Academic year<input id="year" value="2026-2027"></label></div><label>Source lesson / textbook text<textarea id="source" placeholder="Ku dheji qoraalka casharka ama cutubka halkan..."></textarea></label><div class="grid three"><label>Unit<input id="unit" placeholder="Unit 1"></label><label>Topic<input id="topic" placeholder="Topic"></label><label>Learning Outcome<input id="lo" placeholder="Students should be able to..."></label></div></div>
-<div class="panel"><h3>Question Blueprint</h3><table><thead><tr><th>Type</th><th>Count</th><th>Marks</th><th>Bloom</th><th>Difficulty</th></tr></thead><tbody id="plan"><tr><td>MCQ</td><td><input class="cnt" value="20"></td><td><input class="mk" value="1"></td><td><input class="bl" value="Remember,Understand,Apply"></td><td><input class="df" value="Easy,Moderate"></td></tr><tr><td>Short Answer</td><td><input class="cnt" value="5"></td><td><input class="mk" value="2"></td><td><input class="bl" value="Understand,Apply"></td><td><input class="df" value="Moderate"></td></tr><tr><td>Structured</td><td><input class="cnt" value="5"></td><td><input class="mk" value="5"></td><td><input class="bl" value="Apply,Analyze,Evaluate"></td><td><input class="df" value="Moderate,Difficult"></td></tr></tbody></table><button id="generate" class="primary">⚡ Generate & Quality Check</button><span id="status"></span></div>
-<div class="panel"><div class="toolbar"><h3>Generated Questions</h3><button id="saveExam">💾 Save Exam</button><button id="runQuality">🔍 Re-check Quality</button><button onclick="window.print()">🖨️ Print</button></div><div id="qualitySummary"></div><div id="questions"></div></div></section>
-<section id="blueprint" class="tab"><h2>📊 Exam Blueprint / Table of Specifications</h2><div class="panel"><p>Blueprint-ku waa wadnaha nidaamka: wuxuu xaqiijinayaa in content, learning outcomes, Bloom iyo marks ay is waafaqaan.</p><div id="blueprintTable"></div><button class="primary" onclick="makeBlueprint()">Generate Blueprint Summary</button></div></section>
-<section id="bank" class="tab"><h2>📚 Question Bank</h2><div class="panel"><p>Su'aalaha la ansixiyey waxaa loo kaydin karaa si imtixaanada dambe looga isticmaalo.</p><button class="primary" onclick="loadBank()">Load Question Bank</button><div id="bankOut"></div></div></section>
-<section id="analysis" class="tab"><h2>📈 Post-Exam Item Analysis</h2><div class="panel"><p>Geli xogta ardayda marka imtixaanku dhammaado si loo ogaado su'aalaha fudud, adag iyo kuwa discrimination-koodu liito.</p><textarea id="students" placeholder='Tusaale JSON: [{"total":80,"answers":[1,1,0,1]}]'></textarea><textarea id="analysisQs" placeholder='Tusaale JSON: [{"question":"Question 1"},{"question":"Question 2"}]'></textarea><button class="primary" onclick="analyze()">📈 Analyze Items</button><div id="analysisOut"></div></div></section>
-</main><footer>Golaha Horumarinta Dugsiyada Dadweynaha (GHDD) • Mogadishu-Somalia • Digital Assessment & Exam Quality System</footer><script src="app.js"></script></body></html>
+
+<!DOCTYPE html>
+<html lang="so">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="theme-color" content="#123b75">
+  <meta name="description" content="GHDD Assessment Pro - Nidaamka diyaarinta iyo tayaynta imtixaannada dugsiyada dadweynaha.">
+  <title>GHDD Assessment Pro</title>
+  <link rel="stylesheet" href="./style.css">
+</head>
+<body>
+
+  <header class="app-header">
+    <img
+      src="./letterhead.jpg"
+      alt="GHDD"
+      class="school-logo"
+      onerror="this.style.display='none'"
+    >
+    <div class="header-text">
+      <h1>GHDD Assessment Pro</h1>
+      <p>Golaha Horumarinta Dugsiyada Dadweynaha</p>
+      <p>Nidaamka Diyaarinta iyo Tayaynta Imtixaannada</p>
+    </div>
+  </header>
+
+  <nav class="main-nav" aria-label="Navigation">
+    <button type="button" class="on" data-tab="dashboard">
+      Dashboard
+    </button>
+    <button type="button" data-tab="builder">
+      Samee Imtixaan
+    </button>
+    <button type="button" data-tab="blueprint">
+      Exam Blueprint
+    </button>
+    <button type="button" data-tab="bank">
+      Question Bank
+    </button>
+    <button type="button" data-tab="analysis">
+      Natiijooyinka
+    </button>
+  </nav>
+
+  <main class="app-main">
+
+    <section id="dashboard" class="tab on">
+      <h2>Ku soo dhowow GHDD Assessment Pro</h2>
+      <p>
+        Halkaan waxaad ku diyaarin kartaa imtixaanno,
+        ku kaydin kartaa su'aalaha, kuna qiimayn kartaa tayada imtixaanka.
+      </p>
+
+      <div class="dashboard-cards">
+        <article class="panel">
+          <h3>Diyaarinta Imtixaanka</h3>
+          <p>Samee imtixaan cusub oo leh su'aalo habaysan.</p>
+          <button type="button" data-tab="builder">
+            Bilow
+          </button>
+        </article>
+
+        <article class="panel">
+          <h3>Exam Blueprint</h3>
+          <p>Qorshee qaybinta su'aalaha iyo dhibcaha.</p>
+          <button type="button" data-tab="blueprint">
+            Fur Blueprint
+          </button>
+        </article>
+
+        <article class="panel">
+          <h3>Kaydka Su'aalaha</h3>
+          <p>Maamul su'aalaha imtixaannada.</p>
+          <button type="button" data-tab="bank">
+            Fur Question Bank
+          </button>
+        </article>
+
+        <article class="panel">
+          <h3>Falanqaynta Imtixaanka</h3>
+          <p>Qiimee heerka iyo tayada su'aalaha.</p>
+          <button type="button" data-tab="analysis">
+            Fur Falanqaynta
+          </button>
+        </article>
+      </div>
+    </section>
+
+    <section id="builder" class="tab">
+      <h2>Samee Imtixaan Cusub</h2>
+
+      <div class="panel">
+        <h3>Macluumaadka Imtixaanka</h3>
+
+        <label for="exam-title">Magaca imtixaanka</label>
+        <input id="exam-title" type="text" placeholder="Tusaale: Imtixaanka Dhexe">
+
+        <label for="exam-subject">Maadada</label>
+        <input id="exam-subject" type="text" placeholder="Geli maadada">
+
+        <label for="exam-class">Fasalka</label>
+        <input id="exam-class" type="text" placeholder="Tusaale: Form Two">
+
+        <label for="exam-duration">Muddada imtixaanka</label>
+        <input id="exam-duration" type="text" placeholder="Tusaale: 2 saacadood">
+
+        <label for="source-text">Casharka ama qoraalka laga diyaarinayo su'aalaha</label>
+        <textarea
+          id="source-text"
+          rows="8"
+          placeholder="Halkaan geli casharka ama qoraalka..."
+        ></textarea>
+
+        <p>
+          Fadlan hubi in su'aalaha iyo jawaabahoodu waafaqsan yihiin
+          casharka la dhigay iyo manhajka la ansixiyey.
+        </p>
+
+        <button type="button" id="generate-questions">
+          Diyaari Su'aalaha
+        </button>
+      </div>
+
+      <div id="generated-questions" class="panel">
+        <h3>Su'aalaha la diyaariyey</h3>
+        <div id="questions-list">
+          Su'aalaha la diyaariyey halkaan ayay ka muuqan doonaan.
+        </div>
+      </div>
+    </section>
+
+    <section id="blueprint" class="tab">
+      <h2>Exam Blueprint</h2>
+      <div class="panel">
+        <h3>Qorshaha Imtixaanka</h3>
+        <p>
+          Qaybi su'aalaha iyadoo la tixgelinayo ujeeddooyinka waxbarashada,
+          mawduucyada, heerarka fahamka iyo dhibcaha.
+        </p>
+        <div id="blueprint-content">
+          Qorshaha imtixaanka halkaan ayuu ka muuqan doonaa.
+        </div>
+      </div>
+    </section>
+
+    <section id="bank" class="tab">
+      <h2>Question Bank — Kaydka Su'aalaha</h2>
+      <div class="panel">
+        <p>
+          Su'aalaha la kaydiyey halkaan ayaa lagu soo bandhigi doonaa.
+        </p>
+        <div id="question-bank-content">
+          Kaydka su'aalaha ayaa halkaan ka muuqan doona.
+        </div>
+      </div>
+    </section>
+
+    <section id="analysis" class="tab">
+      <h2>Falanqaynta iyo Tayada Imtixaanka</h2>
+      <div class="panel">
+        <p>
+          Falanqee dhibcaha, adkaanta su'aalaha iyo awoodda ay su'aaluhu
+          u kala saarayaan heerarka waxqabadka ardayda.
+        </p>
+        <div id="analysis-content">
+          Natiijooyinka falanqaynta ayaa halkaan ka muuqan doona.
+        </div>
+      </div>
+    </section>
+
+  </main>
+
+  <footer class="app-footer">
+    <p>
+      GHDD Assessment Pro |
+      Golaha Horumarinta Dugsiyada Dadweynaha
+    </p>
+    <p>Tayada imtixaanku waa saldhigga tayada waxbarashada.</p>
+  </footer>
+
+  <script src="./app.js" defer></script>
+
+  <script>
+    document.addEventListener('DOMContentLoaded', function () {
+      const tabs = document.querySelectorAll('[data-tab]');
+      const sections = document.querySelectorAll('main .tab');
+
+      tabs.forEach(function (button) {
+        button.addEventListener('click', function () {
+          const target = button.getAttribute('data-tab');
+          const section = document.getElementById(target);
+
+          if (!section) return;
+
+          sections.forEach(function (item) {
+            item.classList.remove('on');
+          });
+
+          document.querySelectorAll('.main-nav [data-tab]')
+            .forEach(function (item) {
+              item.classList.remove('on');
+            });
+
+          section.classList.add('on');
+
+          document.querySelectorAll(
+            '.main-nav [data-tab="' + target + '"]'
+          ).forEach(function (item) {
+            item.classList.add('on');
+          });
+        });
+      });
+    });
+  </script>
+
+</body>
+</html>
