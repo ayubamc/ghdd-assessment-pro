@@ -231,6 +231,7 @@ PDF weyn wuxuu u baahan karaa xusuus badan, waqti dheeraad ah iyo kayd PostgreSQ
 <h2>Diyaari imtixaan</h2>
 <label for="examName">Magaca imtixaanka</label>
 <input id="examName" placeholder="Imtixaanka dhexe">
+<div class="form-group"><label for="examLanguage">Luqadda imtixaanka / Exam language</label><select id="examLanguage" name="examLanguage"><option value="en" selected>English</option><option value="so">Soomaali</option><option value="ar">العربية</option><option value="auto">Raac luqadda buugga (Auto)</option></select><small>Dooro luqadda warqadda imtixaanka oo dhan.</small></div>
 <label for="subject">Maaddada</label>
 <input id="subject" placeholder="Physics">
 <label for="className">Fasalka</label>
@@ -555,6 +556,17 @@ function examText(lang,key){
   return (labels[lang]||labels.en)[key]||key;
 }
 
+
+function localizeExamSections(questions, lang){
+  const sectionMap={
+    en:{'QAYBTA I — SU’AALAHA DOORASHADA':'PART I — MULTIPLE CHOICE QUESTIONS','QAYBTA II — MEELAHA BANNAAN':'PART II — FILL IN THE BLANKS','QAYBTA III — ISKU-AADINTA':'PART III — MATCHING','QAYBTA IV — SU’AALAHA TOOSKA AH / QAABAYSAN':'PART IV — DIRECT / STRUCTURED QUESTIONS'},
+    so:{'PART I — MULTIPLE CHOICE QUESTIONS':'QAYBTA I — SU’AALAHA DOORASHADA','PART II — FILL IN THE BLANKS':'QAYBTA II — MEELAHA BANNAAN','PART III — MATCHING':'QAYBTA III — ISKU-AADINTA','PART IV — DIRECT / STRUCTURED QUESTIONS':'QAYBTA IV — SU’AALAHA TOOSKA AH / QAABAYSAN'},
+    ar:{'PART I — MULTIPLE CHOICE QUESTIONS':'القسم الأول — أسئلة الاختيار من متعدد','PART II — FILL IN THE BLANKS':'القسم الثاني — أكمل الفراغات','PART III — MATCHING':'القسم الثالث — المطابقة','PART IV — DIRECT / STRUCTURED QUESTIONS':'القسم الرابع — الأسئلة المباشرة / المنظمة'}
+  };
+  const map=sectionMap[lang]||sectionMap.en;
+  return (questions||[]).map(q=>({...q,section:map[q.section]||q.section}));
+}
+
 function sanitizeDiagramSvg(svg){
   if(!svg||typeof svg!=='string')return '';
   let s=svg.replace(/<script[\s\S]*?<\/script>/gi,'')
@@ -635,7 +647,9 @@ $('generateExam').onclick=async()=>{
     const d=await api(`/api/books/${encodeURIComponent(id)}/text?start=${start}&end=${end}`,{method:'GET'});
     const selected=(d.pages||[]).filter(p=>p.text&&p.text.trim());
     const sourceText=selected.map(p=>`[BOGGA ${p.page} — QORAALKA BOGGAN]\n${p.text}`).join('\n\n--- DHAMMAADKA BOGGA ---\n\n');
-     const examLanguage=detectExamLanguage(sourceText);
+     const detectedLanguage=detectExamLanguage(sourceText);
+     const chosenExamLanguage=(document.getElementById('examLanguage')?.value||'en');
+     const examLanguage=chosenExamLanguage==='auto'?detectedLanguage:chosenExamLanguage;
      partPlan=makePartPlan(effectiveCount,totalMarks,format,diagramCount,examLanguage);
     if(!sourceText.trim())throw new Error('Qoraal lagama helin bogagga la doortay.');
 
