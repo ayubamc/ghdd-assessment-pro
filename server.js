@@ -10,6 +10,7 @@ const { Pool } = pg;
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const app = express();
 
+// PDF-yada waaweyn waxaa lagu diraa qaybo yaryar, ma aha hal JSON weyn.
 app.use(express.json({ limit: '12mb' }));
 
 const publicCandidates = [
@@ -57,9 +58,11 @@ function uid() {
 
 function auth(req, res, next) {
   if (req.path === '/health') return next();
+
   if ((req.headers['x-admin-password'] || '') !== ADMIN_PASSWORD) {
     return res.status(401).json({ error: 'Furaha maamulka waa khaldan yahay.' });
   }
+
   next();
 }
 
@@ -133,6 +136,7 @@ async function initDb() {
     )
   `);
 
+  // PDF-yada waaweyn waxaa lagu kaydiyaa qaybo database-ka ku jira.
   await db(`
     CREATE TABLE IF NOT EXISTS book_pdf_chunks(
       book_id TEXT NOT NULL REFERENCES books(id) ON DELETE CASCADE,
@@ -164,6 +168,7 @@ app.post('/api/login', (req, res) => {
   res.json({ ok: (req.body?.password || '') === ADMIN_PASSWORD });
 });
 
+// App state
 app.get('/api/state', async (req, res) => {
   try {
     await dbReady;
@@ -182,21 +187,25 @@ app.put('/api/state', async (req, res) => {
   try {
     await dbReady;
     const state = req.body?.state;
+
     if (!state || typeof state !== 'object' || Array.isArray(state)) {
       return res.status(400).json({ error: 'Xogta app-ka ma saxna.' });
     }
+
     await db(`
       INSERT INTO app_state(id, data, updated_at)
       VALUES(1, $1, now())
       ON CONFLICT(id)
       DO UPDATE SET data=EXCLUDED.data, updated_at=now()
     `, [JSON.stringify(state)]);
+
     res.json({ ok: true });
   } catch (e) {
     res.status(500).json({ error: 'Xogta lama kaydin.' });
   }
 });
 
+// Liiska buugaagta
 app.get('/api/books', async (req, res) => {
   try {
     await dbReady;
@@ -212,9 +221,11 @@ app.get('/api/books', async (req, res) => {
   }
 });
 
+// Bilaabidda upload-ka PDF weyn
 app.post('/api/books/upload/start', async (req, res) => {
   try {
     await dbReady;
+
     const p = req.body || {};
     const title = String(p.title || '').trim();
     const size = Number(p.size);
@@ -223,14 +234,17 @@ app.post('/api/books/upload/start', async (req, res) => {
     if (!title) {
       return res.status(400).json({ error: 'Magaca buugga waa loo baahan yahay.' });
     }
+
     if (!Number.isFinite(size) || size < 1 || size > MAX_PDF_BYTES) {
       return res.status(413).json({ error: 'PDF-gu waa inuu ka yaraadaa 500 MB.' });
     }
+
     if (!Number.isInteger(pageCount) || pageCount < 1 || pageCount > 3000) {
       return res.status(400).json({ error: 'Bogagga waa inay u dhexeeyaan 1 iyo 3000.' });
     }
 
     const id = uid();
+
     await db(`
       INSERT INTO books(
         id, title, subject, filename, page_count, pdf, pages, text_chars
@@ -246,32 +260,42 @@ app.post('/api/books/upload/start', async (req, res) => {
       JSON.stringify([])
     ]);
 
-    res.json({ ok: true, id, chunkSize: CHUNK_BYTES, maxBytes: MAX_PDF_BYTES });
+    res.json({
+      ok: true,
+      id,
+      chunkSize: CHUNK_BYTES,
+      maxBytes: MAX_PDF_BYTES
+    });
   } catch (e) {
     console.error('Upload start:', e.message);
     res.status(500).json({ error: 'Upload-ka lama bilaabi karin.' });
   }
 });
 
+// Kaydinta qayb kasta oo PDF-ga ah
 app.post('/api/books/:id/chunks/:index', async (req, res) => {
   try {
     await dbReady;
+
     const index = Number(req.params.index);
     const encoded = req.body?.chunkBase64;
 
     if (!Number.isInteger(index) || index < 0 || typeof encoded !== 'string') {
       return res.status(400).json({ error: 'Qaybta PDF-ga ma saxna.' });
     }
+
     if (encoded.length > 6 * 1024 * 1024) {
       return res.status(413).json({ error: 'Qaybta PDF-gu aad bay u weyn tahay.' });
     }
 
     const exists = await db('SELECT id FROM books WHERE id=$1', [req.params.id]);
+
     if (!exists.rows.length) {
       return res.status(404).json({ error: 'Buugga lama helin.' });
     }
 
     const data = Buffer.from(encoded, 'base64');
+
     if (!data.length || data.length > CHUNK_BYTES) {
       return res.status(400).json({ error: 'Cabbirka qaybta ma saxna.' });
     }
@@ -290,9 +314,11 @@ app.post('/api/books/:id/chunks/:index', async (req, res) => {
   }
 });
 
+// Dhammeystirka upload-ka iyo kaydinta qoraalka OCR
 app.post('/api/books/:id/upload/finish', async (req, res) => {
   try {
     await dbReady;
+
     const pages = req.body?.pages;
     if (!Array.isArray(pages)) {
       return res.status(400).json({ error: 'Qoraalka OCR waa loo baahan yahay.' });
@@ -302,6 +328,7 @@ app.post('/api/books/:id/upload/finish', async (req, res) => {
       'SELECT id, page_count FROM books WHERE id=$1',
       [req.params.id]
     );
+
     if (!bookResult.rows.length) {
       return res.status(404).json({ error: 'Buugga lama helin.' });
     }
@@ -321,9 +348,12 @@ app.post('/api/books/:id/upload/finish', async (req, res) => {
     if (!stats.count || stats.first_chunk !== 0) {
       return res.status(400).json({ error: 'Qaybaha PDF-ga oo dhan lama helin.' });
     }
+
     if (bytes > MAX_PDF_BYTES) {
       return res.status(413).json({ error: 'PDF-gu wuxuu dhaafay 500 MB.' });
     }
+
+    // Hubi in aanay jirin qaybo ka maqan.
     if (Number(stats.last_chunk) + 1 !== Number(stats.count)) {
       return res.status(400).json({ error: 'Qaybo PDF ah ayaa maqan. Dib u dir upload-ka.' });
     }
@@ -340,6 +370,7 @@ app.post('/api/books/:id/upload/finish', async (req, res) => {
       );
 
     const chars = cleanPages.reduce((sum, p) => sum + p.text.length, 0);
+
     await db(`
       UPDATE books
       SET pages=$2::jsonb, text_chars=$3
@@ -359,13 +390,16 @@ app.post('/api/books/:id/upload/finish', async (req, res) => {
   }
 });
 
+// PDF-yada waaweyn waxaa browser-ka loogu soo celinayaa qaybo, iyada oo aan la isku darin.
 app.get('/api/books/:id/pdf', async (req, res) => {
   try {
     await dbReady;
+
     const r = await db(
       'SELECT filename, pdf FROM books WHERE id=$1',
       [req.params.id]
     );
+
     if (!r.rows.length) {
       return res.status(404).json({ error: 'Buugga lama helin.' });
     }
@@ -392,6 +426,7 @@ app.get('/api/books/:id/pdf', async (req, res) => {
       }
       return res.end();
     }
+
     return res.end(r.rows[0].pdf);
   } catch (e) {
     console.error('PDF download:', e.message);
@@ -403,8 +438,10 @@ app.get('/api/books/:id/pdf', async (req, res) => {
 app.get('/api/books/:id/text', async (req, res) => {
   try {
     await dbReady;
+
     const start = Math.max(1, Number(req.query.start) || 1);
     const end = Math.max(start, Number(req.query.end) || 100000);
+
     const r = await db(`
       SELECT id, title, page_count, pages
       FROM books WHERE id=$1
@@ -413,7 +450,9 @@ app.get('/api/books/:id/text', async (req, res) => {
     if (!r.rows.length) {
       return res.status(404).json({ error: 'Buugga lama helin.' });
     }
+
     const b = r.rows[0];
+
     res.json({
       id: b.id,
       title: b.title,
@@ -435,6 +474,7 @@ app.delete('/api/books/:id', async (req, res) => {
   }
 });
 
+// Kaydinta iyo soo saarista imtixaannada
 app.post('/api/assessments', async (req, res) => {
   try {
     await dbReady;
@@ -468,7 +508,7 @@ app.get('/api/assessments', async (req, res) => {
     );
     res.json(r.rows);
   } catch (e) {
-    res.status(500).json({ error: e.message });
+    res.status(500).json({ error: 'Imtixaannada lama soo dejin.' });
   }
 });
 
@@ -476,7 +516,7 @@ app.get('/api/assessments/:id', async (req, res) => {
   try {
     await dbReady;
     const r = await db('SELECT * FROM assessments WHERE id=$1', [req.params.id]);
-    if (!r.rows.length) return res.status(404).json({ error: 'Imtixaanka lama helin.' });
+    if (!r.rows.length) return res.status(404).json({ error: 'Not found' });
     res.json(r.rows[0]);
   } catch (e) {
     res.status(500).json({ error: e.message });
@@ -534,10 +574,12 @@ function qualityCheck(q) {
     issues.push('Question is too short');
     score -= 20;
   }
+
   if (!String(q.answer || '').trim()) {
     issues.push('Missing model answer');
     score -= 25;
   }
+
   if (q.type === 'MCQ') {
     const options = Array.isArray(q.options) ? q.options : [];
     if (options.length !== 4) {
@@ -545,6 +587,7 @@ function qualityCheck(q) {
       score -= 15;
     }
   }
+
   if (!blooms.includes(q.bloom)) {
     issues.push('Bloom level not recognized');
     score -= 5;
@@ -557,215 +600,108 @@ function qualityCheck(q) {
   };
 }
 
-function extractJson(text) {
-  const raw = String(text || '')
-    .replace(/^\s*```(?:json)?\s*/i, '')
-    .replace(/\s*```\s*$/i, '')
-    .trim();
-
-  try {
-    const parsed = JSON.parse(raw);
-    if (Array.isArray(parsed)) return parsed;
-    if (Array.isArray(parsed.questions)) return parsed.questions;
-  } catch (_) {
-    // Try to isolate the JSON object below.
-  }
-
-  const start = raw.indexOf('{');
-  const end = raw.lastIndexOf('}');
-  if (start >= 0 && end > start) {
-    const parsed = JSON.parse(raw.slice(start, end + 1));
-    if (Array.isArray(parsed)) return parsed;
-    if (Array.isArray(parsed.questions)) return parsed.questions;
-  }
-
-  throw new Error('Jawaabta AI-gu ma ahayn JSON dhammaystiran.');
-}
-
 async function aiGenerate(p) {
   const key = process.env.GEMINI_API_KEY;
-  if (!key) {
-    throw new Error('GEMINI_API_KEY laguma dejin Railway Variables.');
-  }
+  if (!key) return null;
 
-  const model = process.env.GEMINI_MODEL || 'gemini-3.8-flash';
-  const requestedTotal = Math.max(1, Number(p.totalMarks) || 100);
-  const requestedCount = Math.min(
-    50,
-    Math.max(1, Number(p.count || p.questionCount) || Math.min(30, Math.max(12, Math.round(requestedTotal / 3))))
-  );
-
-  const sourceText = String(p.sourceText || p.text || '').slice(0, 28000);
-  if (!sourceText.trim()) {
-    throw new Error('Qoraalka buugga waa madhan.');
-  }
-
-  const levels = Array.isArray(p.levels) && p.levels.length ? p.levels : blooms;
-  const format = p.format || 'four-part';
-  const diagramMode = p.diagramMode || 'Auto';
-  const batchSize = 4;
-  const allQuestions = [];
-
-  for (let offset = 0; offset < requestedCount; offset += batchSize) {
-    const batchCount = Math.min(batchSize, requestedCount - offset);
-
-    const prompt = `
-You are an expert secondary-school exam setter.
-Create exactly ${batchCount} high-quality, distinct exam questions using ONLY the source text below.
-Return ONLY valid JSON, without Markdown, in this exact structure:
-{"questions":[{"section":"Part I: Multiple Choice","question":"...","type":"MCQ","options":["A. ...","B. ...","C. ...","D. ..."],"answer":"B. ...","marks":1,"bloom":"Understand","difficulty":"Moderate","topic":"...","sourcePages":"...","diagram":""}]}
-
-Rules:
-- Produce exactly ${batchCount} questions in this batch.
-- Every question must have a correct model answer or marking guidance.
-- MCQs must have exactly four options and one best answer. Do not mark the correct option in the options.
-- Fill-in-the-blank questions must show "__________" and provide the missing word or phrase in the answer.
-- Matching questions must provide a clear set of matching items and answers.
-- Structured questions may have subparts (a), (b), (c) with marking guidance.
-- Use only these Bloom levels: ${levels.join(', ')}.
-- Requested format: ${format}.
-- If four-part, use these section labels where appropriate: "Part I: Multiple Choice", "Part II: Fill in the Blanks", "Part III: Matching", "Part IV: Direct/Structured Questions".
-- If two-section, use "Part I: Multiple Choice" and "Part II: Direct/Structured Questions".
-- Diagram preference: ${diagramMode}. If Exclude, do not include diagrams. If Include, describe only a diagram supported by the source.
-- Subject: ${p.subject || ''}
-- Class: ${p.className || p.klass || ''}
-- Source title: ${p.sourceTitle || ''}
-- Page range: ${JSON.stringify(p.pageRange || {})}
-- This is batch ${Math.floor(offset / batchSize) + 1}; do not repeat earlier questions.
-- Do not invent information or add any text outside the JSON.
-
-SOURCE TEXT:
-${sourceText}
+  const model = process.env.GEMINI_MODEL || 'gemini-2.5-flash';
+  const prompt = `
+You are an expert secondary-school assessment designer.
+Create exactly ${p.count} questions using ONLY the supplied source text. Do not invent facts or repeat questions.
+Use Bloom levels: ${JSON.stringify(p.levels || blooms)}.
+Required ordered section plan: ${JSON.stringify(p.partPlan || [])}. Return the exact number for each section in the exact order, using the exact section label and type from the plan.
+MCQ: exactly four plausible options and one correct answer.
+Fill in the Blanks: one clear blank and a clear answer.
+Matching: return matches as [{"question":"prompt/term","answer":"correct answer"}]. The options array must contain every correct matching answer plus exactly ONE additional plausible distractor. Do not reveal correct matches in the student paper.
+Structured: use clear subparts and a concise model answer/marking guide.
+Return exactly ${Number(p.diagramCount || 0)} diagram descriptions across Structured questions. If diagramCount is 0, all diagram fields must be empty strings.
+Return JSON only:
+{"questions":[{"question":"","answer":"","type":"","section":"","options":[],"matches":[{"question":"","answer":""}],"diagram":"","bloom":"","difficulty":"","marks":1,"topic":"","sourcePages":""}]}
+Subject: ${p.subject || ''}
+Class: ${p.className || p.klass || ''}
+Source title: ${p.sourceTitle || ''}
+Page range: ${JSON.stringify(p.pageRange || {})}
+Source text:
+${String(p.sourceText || p.text || '').slice(0, 70000)}
 `;
 
-    const response = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent`,
-      {
-        method: 'POST',
-        headers: {
-          'content-type': 'application/json',
-          'x-goog-api-key': key
-        },
-        body: JSON.stringify({
-          contents: [{ role: 'user', parts: [{ text: prompt }] }],
-          generationConfig: {
-            responseMimeType: 'application/json',
-            temperature: 0.2,
-            maxOutputTokens: 8192
-          }
-        })
-      }
-    );
-
-    let data;
-    try {
-      data = await response.json();
-    } catch (_) {
-      throw new Error('Jawaabta adeegga AI lama akhrin karin.');
+  const r = await fetch(
+    `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`,
+    {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+        'x-goog-api-key': key
+      },
+      body: JSON.stringify({
+        contents: [{ role: 'user', parts: [{ text: prompt }] }],
+        generationConfig: {
+          responseMimeType: 'application/json',
+          temperature: 0.25,
+          maxOutputTokens: 12000
+        }
+      })
     }
+  );
 
-    if (!response.ok) {
-      throw new Error(data?.error?.message || `Codsiga AI wuu fashilmay (${response.status}).`);
-    }
+  const data = await r.json();
+  if (!r.ok) throw new Error(data?.error?.message || 'AI request failed');
 
-    const candidate = data?.candidates?.[0];
-    const raw = (candidate?.content?.parts || [])
-      .map(part => part.text || '')
-      .join('');
+  const raw = (data.candidates?.[0]?.content?.parts || [])
+    .map(x => x.text || '').join('');
 
-    if (!raw.trim()) {
-      const reason = candidate?.finishReason || data?.promptFeedback?.blockReason || 'Jawaab madhan';
-      throw new Error(`AI jawaab ma soo celin (${reason}).`);
-    }
-
-    if (candidate?.finishReason === 'MAX_TOKENS') {
-      throw new Error('Jawaabta AI waa la jaray. Yaree tirada su’aalaha ama bogagga.');
-    }
-
-    let batchQuestions;
-    try {
-      batchQuestions = extractJson(raw);
-    } catch (parseError) {
-      console.error('AI returned invalid JSON:', parseError.message);
-      throw new Error('AI-gu wuxuu soo celiyey JSON aan dhammaystirnayn. Isku day bogag yar ama tiro su’aalo yar.');
-    }
-
-    if (!Array.isArray(batchQuestions) || !batchQuestions.length) {
-      throw new Error('AI-gu ma soo celin su’aalo batch-kan.');
-    }
-
-    allQuestions.push(...batchQuestions.slice(0, batchCount));
-  }
-
-  if (!allQuestions.length) {
-    throw new Error('AI-gu ma soo celin su’aalo.');
-  }
-
-  return allQuestions.slice(0, requestedCount);
+  return JSON.parse(raw.replace(/^```json|```$/g, '').trim()).questions || [];
 }
 
 app.post('/api/generate', async (req, res) => {
   try {
     const p = req.body || {};
     if (!String(p.sourceText || '').trim()) {
-      return res.status(400).json({ error: 'Qoraalka buugga waa madhan.' });
+      return res.status(400).json({ error: 'Source text is required.' });
     }
 
-    const requestedTotal = Math.min(300, Math.max(1, Number(p.totalMarks) || 100));
-    const rawCount = Number(p.count || p.questionCount || 0);
-    const count = rawCount
-      ? Math.min(50, Math.max(1, rawCount))
-      : Math.min(30, Math.max(12, Math.round(requestedTotal / 3)));
-
+    const count = Math.min(50, Math.max(1, Number(p.count || p.questionCount || 10)));
     const levels = Array.isArray(p.levels) && p.levels.length ? p.levels : blooms;
-    let questions;
+    let questions = [];
 
     try {
-      questions = await aiGenerate({ ...p, count, levels, totalMarks: requestedTotal });
+      const generated = await aiGenerate({ ...p, count, levels, partPlan: Array.isArray(p.partPlan) ? p.partPlan : [] });
+      if (Array.isArray(generated)) questions = generated.slice(0, count);
     } catch (e) {
       console.error('AI generation failed:', e.message);
       return res.status(502).json({
-        error: e.message || 'AI-gu ma samayn su’aalaha. Hubi GEMINI_API_KEY iyo GEMINI_MODEL.'
+        error: 'AI-gu ma samayn su’aalaha. Hubi GEMINI_API_KEY iyo adeegga AI.'
       });
     }
 
-    if (!Array.isArray(questions) || !questions.length) {
-      return res.status(502).json({ error: 'AI-gu ma soo celin su’aalo.' });
+    if (!questions.length) {
+      return res.status(503).json({
+        error: 'AI lama heli karo. Hubi in GEMINI_API_KEY lagu dejiyey Railway.'
+      });
     }
 
-    questions = questions.slice(0, count).map(q => ({
+    questions = questions.map((q, i) => ({
       ...q,
       id: q.id || uid(),
       question: q.question || q.text || '',
       answer: q.answer || q.modelAnswer || '',
-      section: q.section || 'Part IV: Direct/Structured Questions',
-      type: q.type || 'Structured',
+      section: q.section || '',
+      type: q.type || '',
       options: Array.isArray(q.options) ? q.options : [],
-      marks: Math.max(1, Number(q.marks) || 1),
-      bloom: q.bloom || q.level || 'Understand',
-      quality: qualityCheck({
-        ...q,
-        question: q.question || q.text || '',
-        answer: q.answer || q.modelAnswer || ''
-      }),
+      matches: Array.isArray(q.matches) ? q.matches : [],
+      diagram: q.diagram || '',
+      marks: Number(q.marks) || 1,
+      quality: qualityCheck(q),
       status: 'Draft'
     }));
 
-    const totalMarks = questions.reduce((sum, q) => sum + Number(q.marks || 0), 0);
-
     res.json({
-      title: String(p.examTitle || p.sourceTitle || 'GHDD Assessment').slice(0, 250),
       questions,
-      totalMarks,
-      requestedTotalMarks: requestedTotal,
-      limitations: questions.length < count
-        ? `AI-gu wuxuu soo saaray ${questions.length} su'aalood halkii ${count} laga codsaday.`
-        : '',
+      totalMarks: questions.reduce((s, q) => s + Number(q.marks || 0), 0),
       aiUsed: true
     });
   } catch (e) {
-    console.error('Generate route error:', e.message);
-    res.status(500).json({ error: 'Samaynta imtixaanka way fashilantay.' });
+    res.status(500).json({ error: e.message });
   }
 });
 
@@ -787,10 +723,7 @@ app.post('/api/item-analysis', (req, res) => {
   const { students = [], questions = [] } = req.body || {};
   const items = questions.map((q, index) => {
     const values = students.map(s => Number(s.answers?.[index]) === 1 ? 1 : 0);
-    const p = values.length
-      ? values.reduce((a, b) => a + b, 0) / values.length
-      : 0;
-
+    const p = values.length ? values.reduce((a, b) => a + b, 0) / values.length : 0;
     return {
       number: index + 1,
       question: q.question,
@@ -799,7 +732,10 @@ app.post('/api/item-analysis', (req, res) => {
     };
   });
 
-  res.json({ items, summary: { totalQuestions: items.length } });
+  res.json({
+    items,
+    summary: { totalQuestions: items.length }
+  });
 });
 
 app.get('*', (req, res) => {
