@@ -338,13 +338,27 @@ PDF weyn wuxuu u baahan karaa xusuus badan, waqti dheeraad ah iyo kayd PostgreSQ
       <div><label for="lpPerWeek">Lessons per week</label><input id="lpPerWeek" type="number" min="1" max="10" value="3"></div>
       <div><label for="lpTerms">Terms per year</label><select id="lpTerms"><option value="3" selected>3 terms</option><option value="2">2 terms</option><option value="4">4 terms</option></select></div>
     </div>
-    <label for="schemeFile">Upload Scheme of Work (PDF, TXT, CSV)</label>
-    <input id="schemeFile" type="file" accept=".pdf,.txt,.csv,application/pdf,text/plain,text/csv">
-    <p id="schemeFileStatus" class="muted">Weli Scheme of Work lama dooran.</p>
-    <label for="schemeText">Scheme of Work text (halkan waad ku dhejin kartaa ama wax ka beddeli kartaa)</label>
-    <textarea id="schemeText" style="min-height:180px" placeholder="Unit, week, topic, sub-topic, objectives, term..."></textarea>
+    <h3>1. Scheme of Work — wuxuu hagayaa qorshaha sannadka</h3>
+    <p class="muted">Ka dooro Scheme of Work-ga hore OCR loogu sameeyey. AI-gu wuxuu ka raacayaa kala-horraynta topics-ka, term-ka, week-ga iyo jadwalka sannadka. Uma baahnid inaad PDF-ga mar kale soo geliso.</p>
+    <div class="grid">
+      <div><label for="lpSchemeBook">Buugga / Scheme of Work</label><select id="lpSchemeBook"><option value="">Buugaagta waa la soo rarayaa...</option></select></div>
+      <div><label>Bogagga Scheme of Work</label><div class="grid" style="grid-template-columns:1fr 1fr;gap:8px"><input id="lpSchemeStart" type="number" min="1" value="1" aria-label="Bogga Scheme bilowga"><input id="lpSchemeEnd" type="number" min="1" value="30" aria-label="Bogga Scheme dhammaadka"></div></div>
+    </div>
+    <div class="paper-tools"><button id="loadSchemeOCR" class="secondary">📅 Soo qaado Scheme of Work OCR</button></div>
+    <label for="schemeText">Qoraalka Scheme of Work (source of truth for sequence)</label>
+    <textarea id="schemeText" style="min-height:140px" placeholder="Qoraalka Scheme of Work ayaa halkan imanaya..."></textarea>
+    <hr>
+    <h3>2. Buugga maaddada — wuxuu hagayaa objectives, content iyo Lesson Note</h3>
+    <p class="muted">Dooro buugga maaddada ee OCR-ga lagu kaydiyey. AI-gu wuxuu ka soo qaadanayaa sharaxaadda casharka, objectives-ka, tusaalooyinka, summary-ga iyo qoraalka Lesson Note. Waa la dooran karaa buug ka duwan Scheme of Work-ga.</p>
+    <div class="grid">
+      <div><label for="lpTextbookBook">Buugga maaddada (OCR)</label><select id="lpTextbookBook"><option value="">Buugaagta waa la soo rarayaa...</option></select></div>
+      <div><label>Bogagga buugga maaddada</label><div class="grid" style="grid-template-columns:1fr 1fr;gap:8px"><input id="lpTextbookStart" type="number" min="1" value="1" aria-label="Bogga buugga bilowga"><input id="lpTextbookEnd" type="number" min="1" value="100" aria-label="Bogga buugga dhammaadka"></div></div>
+    </div>
+    <div class="paper-tools"><button id="loadTextbookOCR" class="secondary">📖 Soo qaado qoraalka buugga OCR</button><button id="refreshLessonBooks" class="secondary">🔄 Soo cusboonaysii buugaagta</button></div>
+    <p id="schemeFileStatus" class="muted">Marka hore soo qaado Scheme of Work iyo qoraalka buugga maaddada.</p>
+    <label for="textbookText">Qoraalka OCR ee buugga maaddada</label>
+    <textarea id="textbookText" style="min-height:180px" placeholder="Qoraalka OCR ee buugga maaddada ayaa halkan imanaya..."></textarea>
     <div class="paper-tools">
-      <button id="readScheme" class="secondary">📄 Akhri faylka</button>
       <button id="generateLessonYear">✨ Samee Lesson Plans + Lesson Notes sannadka oo dhan</button>
     </div>
     <p id="lpStatus" class="muted" role="status"></p>
@@ -352,9 +366,9 @@ PDF weyn wuxuu u baahan karaa xusuus badan, waqti dheeraad ah iyo kayd PostgreSQ
   <div class="panel">
     <h3>Waxa la soo saarayo</h3>
     <ul>
-      <li>Qorshaha sannadka: term, week, unit, lesson title iyo lesson/session number.</li>
-      <li>Lesson plan: introduction, objectives, teaching methods, learning aids, evaluation iyo time management.</li>
-      <li>Lesson note: summary, headings/key points iyo homework, oo ku xiran objectives-ka.</li>
+      <li>Scheme of Work: wuxuu go'aamiyaa kala-horraynta casharrada, topics-ka, term-ka iyo week-ga.</li>
+      <li>Buugga OCR: wuxuu bixiyaa objectives-ka casharka, sharaxaadda, tusaalooyinka, summary-ga iyo Lesson Note.</li>
+      <li>Lesson Plan: introduction, objectives, teaching methods, learning aids, evaluation iyo time management.</li>
       <li>Jadwalka waqtiga casharka oo wadartiisu la mid tahay muddada aad gelisay.</li>
     </ul>
   </div>
@@ -425,6 +439,7 @@ function showTab(id){
   document.querySelectorAll('.tab').forEach(x=>x.classList.toggle('active',x.id===id));
   document.querySelectorAll('nav button').forEach(x=>x.classList.toggle('active',x.dataset.tab===id));
   if(id==='books') loadBooks();
+  if(id==='lessonplan') loadLessonBookOptions();
   if(id==='bank') renderBank();
   window.scrollTo({top:0,behavior:'smooth'});
 }
@@ -958,51 +973,68 @@ $('downloadBackup').onclick=()=>{
 };
 
 
-// Lesson Plan + Lesson Note feature
+// Lesson Plan + Lesson Note: Scheme of Work controls sequence; OCR textbook supplies lesson content.
 let generatedLessonPackage = null;
 const lpEsc = value => String(value ?? '').replace(/[&<>"']/g, ch => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[ch]));
 const lpEl = id => document.getElementById(id);
+let lessonBooks = [];
 
-lpEl('readScheme').onclick = async () => {
-  const file = lpEl('schemeFile').files?.[0];
-  if (!file) return alert('Marka hore dooro Scheme of Work PDF, TXT ama CSV.');
-  const status = lpEl('schemeFileStatus');
+async function loadLessonBookOptions() {
+  const selectors=['lpSchemeBook','lpTextbookBook'].map(lpEl).filter(Boolean);
+  if(!selectors.length) return;
+  selectors.forEach(s=>s.innerHTML='<option value="">Buugaagta waa la soo rarayaa...</option>');
   try {
-    status.textContent = 'Faylka ayaa la akhrinayaa...';
-    if (/\.pdf$/i.test(file.name) || file.type === 'application/pdf') {
-      if (!window.pdfjsLib) throw new Error('PDF.js lama helin. Hubi internetka ama ku dheji qoraalka sanduuqa.');
-      pdfjsLib.GlobalWorkerOptions.workerSrc='https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
-      const pdf = await pdfjsLib.getDocument({data: await file.arrayBuffer()}).promise;
-      const chunks = [];
-      let worker = null;
-      for (let n=1; n<=pdf.numPages; n++) {
-        const page=await pdf.getPage(n);
-        const content=await page.getTextContent();
-        let text=content.items.map(x=>x.str||'').join(' ').trim();
-        if(text.length<25 && window.Tesseract){
-          if(!worker) worker=await Tesseract.createWorker('eng');
-          const viewport=page.getViewport({scale:1.35});
-          const canvas=document.createElement('canvas');
-          canvas.width=Math.ceil(viewport.width);canvas.height=Math.ceil(viewport.height);
-          await page.render({canvasContext:canvas.getContext('2d'),viewport}).promise;
-          const result=await worker.recognize(canvas);
-          text=(result.data.text||'').trim();
-          canvas.width=canvas.height=1;
-        }
-        chunks.push(`\n[Page ${n}]\n${text}`);
-        status.textContent=`Akhrinta Scheme of Work: bogga ${n}/${pdf.numPages}`;
-      }
-      if(worker) await worker.terminate();
-      lpEl('schemeText').value=chunks.join('\n').trim();
-    } else {
-      lpEl('schemeText').value=await file.text();
+    const d=await api('/api/books',{method:'GET'});
+    lessonBooks=d.books||[];
+    const options='<option value="">Dooro buug...</option>'+lessonBooks.map(b=>
+      `<option value="${lpEsc(b.id)}" data-pages="${Number(b.page_count)||1}" data-subject="${lpEsc(b.subject||'')}">${lpEsc(b.title)} — ${Number(b.page_count)||'?'} bog — ${Number(b.text_chars||0).toLocaleString()} xaraf OCR</option>`
+    ).join('');
+    selectors.forEach(s=>s.innerHTML=lessonBooks.length?options:'<option value="">Weli buug OCR lagu kaydiyey ma jiro</option>');
+    if(!lessonBooks.length) lpEl('schemeFileStatus').textContent='Marka hore tab-ka Buugaagta PDF/OCR ka soo geli oo dhammee OCR-ga buugga Scheme of Work iyo buugga maaddada.';
+    for (const [selectId,startId,endId] of [['lpSchemeBook','lpSchemeStart','lpSchemeEnd'],['lpTextbookBook','lpTextbookStart','lpTextbookEnd']]) {
+      const select=lpEl(selectId);
+      select.onchange=()=>{
+        const option=select.selectedOptions[0], pages=Number(option?.dataset.pages)||1;
+        lpEl(startId).max=pages;lpEl(endId).max=pages;lpEl(endId).value=pages;
+        if(!lpEl('lpSubject').value.trim() && option?.dataset.subject) lpEl('lpSubject').value=option.dataset.subject;
+      };
     }
-    status.textContent=`Waa la akhriyey: ${file.name}. Qoraalka waa la geliyey sanduuqa; hubi ka hor samaynta.`;
   } catch(e) {
-    status.textContent='Akhrinta faylka way fashilantay: '+e.message;
-    alert('Scheme of Work: '+e.message);
+    selectors.forEach(s=>s.innerHTML='<option value="">Buugaagta lama soo dejin</option>');
+    lpEl('schemeFileStatus').textContent='Khalad: '+e.message;
   }
-};
+}
+lpEl('refreshLessonBooks').onclick=loadLessonBookOptions;
+
+async function loadSavedOCRText(kind) {
+  const isScheme=kind==='scheme';
+  const selectId=isScheme?'lpSchemeBook':'lpTextbookBook';
+  const startId=isScheme?'lpSchemeStart':'lpTextbookStart';
+  const endId=isScheme?'lpSchemeEnd':'lpTextbookEnd';
+  const targetId=isScheme?'schemeText':'textbookText';
+  const buttonId=isScheme?'loadSchemeOCR':'loadTextbookOCR';
+  const id=lpEl(selectId).value;
+  if(!id) return alert(isScheme?'Fadlan dooro Scheme of Work-ga OCR lagu kaydiyey.':'Fadlan dooro buugga maaddada ee OCR lagu kaydiyey.');
+  const start=Math.max(1,Number(lpEl(startId).value)||1);
+  const end=Math.max(start,Number(lpEl(endId).value)||start);
+  const book=lessonBooks.find(b=>String(b.id)===String(id));
+  const maxPages=Number(book?.page_count)||end;
+  if(start>maxPages||end>maxPages) return alert(`Bogagga buuggan waxay u dhexeeyaan 1 iyo ${maxPages}.`);
+  const status=lpEl('schemeFileStatus'), btn=lpEl(buttonId);
+  btn.disabled=true;status.textContent=`Qoraalka OCR ee ${isScheme?'Scheme of Work':'buugga maaddada'} ayaa la soo qaadanayaa...`;
+  try{
+    const data=await api(`/api/books/${encodeURIComponent(id)}/text?start=${start}&end=${end}`,{method:'GET'});
+    const pages=Array.isArray(data.pages)?data.pages:[];
+    const text=pages.map(p=>`[Page ${p.page}]\n${String(p.text||'').trim()}`).filter(x=>x.trim()).join('\n\n');
+    if(text.trim().length<80) throw new Error('Bogagga la doortay qoraal OCR oo ku filan kuma jiraan. Hubi bogagga ama mar kale OCR mari buugga.');
+    lpEl(targetId).value=`BOOK: ${data.title||book?.title||''}\nPAGES: ${start}-${end}\n\n${text}`;
+    status.textContent=`Guul: ${pages.length} bog oo OCR ah ayaa laga soo qaaday ${isScheme?'Scheme of Work':'buugga maaddada'} “${data.title||book?.title||''}”.`;
+    if(!lpEl('lpSubject').value.trim() && book?.subject) lpEl('lpSubject').value=book.subject;
+  }catch(e){status.textContent='Khalad: '+e.message;alert('Qoraalka OCR: '+e.message);}
+  finally{btn.disabled=false;}
+}
+lpEl('loadSchemeOCR').onclick=()=>loadSavedOCRText('scheme');
+lpEl('loadTextbookOCR').onclick=()=>loadSavedOCRText('textbook');
 
 function lpList(items) {
   return Array.isArray(items) && items.length ? `<ul>${items.map(x=>`<li>${lpEsc(x)}</li>`).join('')}</ul>` : '<p>—</p>';
@@ -1010,7 +1042,7 @@ function lpList(items) {
 function renderLessonPackage(pkg) {
   const output=lpEl('lessonPlanOutput');
   const lessons=pkg.lessons||[];
-  let content=`<div class="notice"><b>Waxaa la sameeyey ${lessons.length} cashar.</b> Dib u eeg qorshaha iyo qoraallada casharrada. Hubi in dhammaan mawduucyada Scheme of Work lagu daboolay.</div>
+  let content=`<div class="notice"><b>Waxaa la sameeyey ${lessons.length} cashar.</b> Dib u eeg qorshaha iyo qoraallada casharrada. Hubi in mawduucyada ku jira bogagga OCR ee aad dooratay la daboolay.</div>
     <h2>${lpEsc(pkg.subject||'')} — ${lpEsc(pkg.className||'')}</h2>
     <p><b>Academic year:</b> ${lpEsc(pkg.academicYear||'')} &nbsp; <b>Teacher:</b> ${lpEsc(pkg.teacherName||'')}</p>
     <h3>Year overview</h3><p>${lpEsc(pkg.yearOverview||'')}</p>`;
@@ -1057,15 +1089,18 @@ function renderLessonPackage(pkg) {
 
 lpEl('generateLessonYear').onclick=async()=>{
   const schemeText=lpEl('schemeText').value.trim();
-  if(schemeText.length<80) return alert('Marka hore upload-garee Scheme of Work oo riix “Akhri faylka”, ama qoraalka ku dheji sanduuqa.');
+  const textbookText=lpEl('textbookText').value.trim();
+  if(schemeText.length<80) return alert('Marka hore soo qaado Scheme of Work OCR-ga.');
+  if(textbookText.length<80) return alert('Marka hore soo qaado qoraalka buugga maaddada OCR-ga.');
   const btn=lpEl('generateLessonYear');
   const status=lpEl('lpStatus');
-  btn.disabled=true;status.textContent='AI-gu wuxuu diyaarinayaa qorshaha sannadka iyo lesson notes. Ha xirin bogga...';
+  btn.disabled=true;status.textContent='AI-gu wuxuu Scheme of Work uga raacayaa kala-horraynta sannadka, wuxuuna buugga OCR uga diyaarinayaa objectives, cashar iyo Lesson Note. Ha xirin bogga...';
   try {
     const response=await fetch('/api/lesson-plan/generate',{
       method:'POST',headers:{'Content-Type':'application/json',...headers()},
       body:JSON.stringify({
         schemeText,
+        textbookText,
         subject:lpEl('lpSubject').value.trim(),
         className:lpEl('lpClass').value.trim(),
         teacherName:lpEl('lpTeacher').value.trim(),
