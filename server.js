@@ -809,9 +809,10 @@ app.post('/api/item-analysis', (req, res) => {
 app.post('/api/lesson-plan/generate', async (req, res) => {
   try {
     const p = req.body || {};
-    const sourceText = String(p.schemeText || '').trim();
-    if (!sourceText) return res.status(400).json({ error: 'Fadlan soo geli Scheme of Work ama ku dheji qoraalkiisa.' });
-    if (sourceText.length < 80) return res.status(400).json({ error: 'Qoraalka Scheme of Work waa gaaban yahay. Hubi in PDF-ga la akhriyey.' });
+    const schemeText = String(p.schemeText || '').trim();
+    const textbookText = String(p.textbookText || '').trim();
+    if (!schemeText || schemeText.length < 80) return res.status(400).json({ error: 'Fadlan soo qaado Scheme of Work OCR oo dhammaystiran; isagaa go’aaminaya kala-horraynta casharrada sannadka.' });
+    if (!textbookText || textbookText.length < 80) return res.status(400).json({ error: 'Fadlan soo qaado qoraalka buugga maaddada OCR; isagaa laga diyaarinayaa objectives, sharaxaadda iyo Lesson Note.' });
     const key = process.env.GEMINI_API_KEY;
     if (!key) return res.status(503).json({ error: 'GEMINI_API_KEY laguma dejin Railway.' });
 
@@ -829,7 +830,9 @@ app.post('/api/lesson-plan/generate', async (req, res) => {
       : `Write all generated material in ${language === 'so' ? 'Somali' : language === 'ar' ? 'Arabic' : 'English'} only. Do not mix languages.`;
 
     const prompt = `
-You are an experienced secondary-school teacher and lesson-planning specialist. Use ONLY the uploaded Scheme of Work as the curriculum source. Do not silently invent chapters or content not supported by the scheme.
+You are an experienced secondary-school teacher and lesson-planning specialist. You have TWO distinct source documents and MUST NOT confuse their roles.
+SOURCE A — SCHEME OF WORK: The sole authority for the yearly curriculum sequence, topic order, unit, term, week, coverage and lesson scheduling. Follow its order exactly. Do not move topics around or add topics that are not in it.
+SOURCE B — OCR TEXTBOOK: The source for subject-matter explanations, lesson-specific learning objectives, key facts, definitions, examples, activities, worked examples where present, summaries and Lesson Notes. Use this textbook to develop the teaching content for each Scheme of Work topic. Match textbook material to the relevant Scheme of Work topic. Do not pretend that material is in the textbook if the OCR text does not support it; flag missing or unreadable content in assumptions.
 LANGUAGE: ${langInstruction}
 Create a complete lesson-planning package for academic year ${academicYear}.
 School lesson-plan template to follow:
@@ -853,8 +856,11 @@ Requirements:
 9. Respond with valid JSON only, no markdown, no text outside JSON.
 JSON shape:
 {"academicYear":"${academicYear}","subject":"${subject}","className":"${className}","teacherName":"${teacherName}","language":"...","yearOverview":"...","assumptions":["..."],"lessons":[{"term":1,"week":1,"unit":"...","lessonNumber":1,"lessonTitle":"...","date":"","durationMinutes":${lessonDuration},"introduction":"...","objectives":["..."],"teachingMethods":["..."],"learningAids":["..."],"evaluationQuestions":["..."],"timeManagement":[{"stage":"...","minutes":5}],"noteSummary":"...","noteHeadings":[{"heading":"...","content":"..."}],"homework":"...","sourceTopic":"..."}]}
-SCHEME OF WORK (source of truth):
-${sourceText.slice(0, 45000)}
+SCHEME OF WORK — SOURCE OF TRUTH FOR SEQUENCE, TERM, WEEK AND TOPIC ORDER:
+${schemeText.slice(0, 30000)}
+
+OCR TEXTBOOK — SOURCE FOR OBJECTIVES, TEACHING CONTENT, EXPLANATIONS, EXAMPLES, SUMMARIES AND LESSON NOTES:
+${textbookText.slice(0, 55000)}
 `;
     let lastError = 'AI generation failed';
     for (const model of modelCandidates) {
