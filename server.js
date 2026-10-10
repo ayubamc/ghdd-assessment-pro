@@ -52,6 +52,159 @@ const MAX_PDF_BYTES = 500 * 1024 * 1024;
 const CHUNK_BYTES = 4 * 1024 * 1024;
 const blooms = ['Remember', 'Understand', 'Apply', 'Analyze', 'Evaluate', 'Create'];
 
+// ───────────────────────── Language, Bloom-confidentiality and objective helpers ─────────────────────────
+const LANGUAGE_NAMES = { en: 'ENGLISH', so: 'AF-SOOMAALI (SOMALI)', ar: 'ARABIC (العربية)' };
+const LANGUAGE_LABELS = { en: 'English', so: 'Af-Soomaali', ar: 'العربية' };
+const QUALITY_RULES = {
+  en: ['Every question is linked to a learning objective', 'Source traceability (pages)', 'No duplicate questions', 'Marks sum exactly', 'Cognitive-level alignment (teacher only)'],
+  so: ['Su’aal kasta waxay ku xiran tahay ujeeddo waxbarasho', 'Raad-raaca isha (bogagga)', 'Su’aalo ku celcelis ma jiraan', 'Wadarta dhibcaha waa sax', 'Waafaqsanaanta heerka garaadka (macallinka oo keliya)'],
+  ar: ['كل سؤال مرتبط بهدف تعلم', 'إمكانية تتبع المصدر (الصفحات)', 'لا توجد أسئلة مكررة', 'مجموع الدرجات صحيح', 'مواءمة المستوى المعرفي (للمعلم فقط)']
+};
+const EN_WORDS = new Set('the of and is are was were to in which what that for with by from as on an this these those following correct true false not be can it its or at has have how why when where who between describe explain state define give name list'.split(' '));
+const SO_WORDS = new Set(['waa','iyo','ee','ka','la','oo','ku','si','ah','leh','yihiin','waxaa','kuwa','ma','sida','markii','maxay','halkee','ugu','kala','lagu','loo','soo','ayaa','baa','ayuu','uu','ay','jawaab','jawaabta','suaal','suaasha','suaalaha','sheeg','sharax','qeex','dooro','waxa','waxay','tusaale','maxaa','kuwee','midka','saxda','qaybta','ardayga','ujeeddada','sababta','mid','kale','dhammaan','haddii','laakiin','ama','wuxuu','waxaan','ayey','dhex','sidee','muxuu','intee','waxbarasho']);
+
+function normalizeLang(code) { return ['en', 'so', 'ar'].includes(code) ? code : 'en'; }
+
+function detectTextLanguage(text) {
+  const t = String(text || '');
+  const arabic = (t.match(/[\u0600-\u06FF]/g) || []).length;
+  const latin = (t.match(/[A-Za-z]/g) || []).length;
+  if (!arabic && !latin) return 'unknown';
+  if (arabic >= 3 && arabic >= latin) return 'ar';
+  const words = (t.toLowerCase().match(/[\p{L}]+(?:['’ʼ][\p{L}]+)?/gu) || []).map(w => w.replace(/['’ʼ]/g, ''));
+  let en = 0, so = 0;
+  for (const w of words) { if (EN_WORDS.has(w)) en++; if (SO_WORDS.has(w)) so++; }
+  if (en + so < 2) return 'unknown';
+  return so > en ? 'so' : 'en';
+}
+
+function questionStrings(q) {
+  const out = [q.question, q.text, q.answer, q.topic, q.objective];
+  (Array.isArray(q.options) ? q.options : []).forEach(o => out.push(o));
+  (Array.isArray(q.matches) ? q.matches : []).forEach(m => { out.push(m?.question, m?.answer); });
+  return out.filter(x => typeof x === 'string' && x.trim());
+}
+function questionLanguageMismatch(q, target) {
+  return questionStrings(q).some(s => { const d = detectTextLanguage(s); return d !== 'unknown' && d !== target; });
+}
+
+// Bloom labels are teacher-only metadata. Remove any label the AI may have leaked into student-facing text.
+const BLOOM_WORDS = 'Remember|Understand|Apply|Analy[sz]e|Evaluate|Create|Xusuusasho|Faham|Ku-dhaqan|Falanqayn|Qiimayn|Abuurid|تذكر|تذكّر|فهم|تطبيق|تحليل|تقويم|تقييم|إبداع|ابتكار';
+const BLOOM_TAG_RE = new RegExp(`\\s*[\\(\\[\\{]\\s*(?:Bloom[^\\)\\]\\}:\\-–]*[:\\-–]\\s*)?(?:${BLOOM_WORDS})\\s*[\\)\\]\\}]`, 'giu');
+const BLOOM_LINE_RE = /\s*(?:\(|\[)?\s*(?:Bloom(?:['’]s)?(?:\s+(?:level|taxonomy|heerka|نوع|مستوى))?|Heerka Bloom|مستوى بلوم)\s*[:\-–]\s*[^\n)\]]{0,40}(?:\)|\])?/giu;
+function stripBloomLabels(text) {
+  if (typeof text !== 'string') return text;
+  return text.replace(BLOOM_LINE_RE, '').replace(BLOOM_TAG_RE, '').replace(/\s{2,}/g, ' ').trim();
+}
+function stripBloomFromQuestion(q) {
+  for (const k of ['question', 'text', 'answer', 'topic', 'objective']) if (typeof q[k] === 'string') q[k] = stripBloomLabels(q[k]);
+  if (Array.isArray(q.options)) q.options = q.options.map(o => stripBloomLabels(String(o)));
+  if (Array.isArray(q.matches)) q.matches = q.matches.map(m => (m && typeof m === 'object') ? { ...m, question: stripBloomLabels(String(m.question || '')), answer: stripBloomLabels(String(m.answer || '')) } : m);
+  return q;
+}
+
+// Learning-objective helpers: objectives drive the blueprint and every generated question.
+function tokenSet(s) { return new Set((String(s || '').toLowerCase().match(/[\p{L}\p{N}]+/gu) || []).filter(w => w.length >= 3)); }
+function overlapScore(a, b) {
+  if (!a.size || !b.size) return 0;
+  let n = 0; for (const x of a) if (b.has(x)) n++;
+  return n / Math.min(a.size, b.size);
+}
+function blueprintObjectives(bp) {
+  const out = [];
+  for (const c of (Array.isArray(bp?.coverage) ? bp.coverage : [])) {
+    for (const o of (Array.isArray(c.learningOutcomes) ? c.learningOutcomes : [])) {
+      const t = typeof o === 'string' ? o : (o?.text || o?.objective || '');
+      if (String(t).trim()) out.push({ text: String(t).trim(), topic: c.topic || c.unit || '' });
+    }
+  }
+  return out;
+}
+function linkQuestionsToObjectives(questions, bp) {
+  const objs = blueprintObjectives(bp);
+  if (!objs.length) return { total: 0, covered: 0, percent: 0, linkedQuestions: 0, uncovered: [] };
+  const sets = objs.map(o => tokenSet(o.text));
+  const covered = new Set();
+  let linked = 0;
+  for (const q of questions) {
+    const own = tokenSet(q.objective);
+    let best = -1, bestScore = 0;
+    sets.forEach((st, i) => { const sc = overlapScore(own, st); if (sc > bestScore) { bestScore = sc; best = i; } });
+    if (best >= 0 && bestScore >= 0.6) {
+      q.objective = objs[best].text;   // snap to the exact blueprint wording
+      covered.add(best); linked++;
+    }
+  }
+  return {
+    total: objs.length, covered: covered.size,
+    percent: Math.round(covered.size / objs.length * 100),
+    linkedQuestions: linked,
+    uncovered: objs.filter((_, i) => !covered.has(i)).slice(0, 20).map(o => o.text)
+  };
+}
+
+async function callGeminiJson(prompt, { maxTokens = 9000, temperature = 0.1 } = {}) {
+  const key = process.env.GEMINI_API_KEY;
+  if (!key) throw new Error('GEMINI_API_KEY is missing');
+  const models = [...new Set([process.env.GEMINI_MODEL || 'gemini-2.5-flash', 'gemini-3.5-flash-lite', 'gemini-2.5-flash'])];
+  let lastError = '';
+  for (const model of models) {
+    try {
+      const r = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`, {
+        method: 'POST', headers: { 'content-type': 'application/json', 'x-goog-api-key': key },
+        body: JSON.stringify({ contents: [{ role: 'user', parts: [{ text: prompt }] }], generationConfig: { responseMimeType: 'application/json', temperature, maxOutputTokens: maxTokens } })
+      });
+      const data = await r.json();
+      if (!r.ok) { lastError = data?.error?.message || `AI request failed (${r.status})`; continue; }
+      const raw = (data.candidates?.[0]?.content?.parts || []).map(x => x.text || '').join('').replace(/^```json|```$/g, '').trim();
+      return JSON.parse(raw);
+    } catch (e) { lastError = e.message; }
+  }
+  throw new Error(lastError || 'AI request failed');
+}
+
+// If any question still contains another language, ask the AI to rewrite only those questions in the selected language.
+async function enforceQuestionLanguage(questions, targetCode) {
+  const target = normalizeLang(targetCode);
+  const bad = questions.map((q, i) => ({ q, i })).filter(({ q }) => questionLanguageMismatch(q, target));
+  if (!bad.length) return { fixed: 0, remaining: 0 };
+  const subset = bad.map(({ q, i }) => ({ index: i, question: q.question || '', answer: q.answer || '', options: q.options || [], matches: q.matches || [], topic: q.topic || '', objective: q.objective || '', diagramSvg: q.diagramSvg || '' }));
+  const prompt = `You are a professional translator and exam editor. Rewrite EVERY string value of the exam questions below into ${LANGUAGE_NAMES[target]} only. Keep the meaning, the correct answer, the number and ORDER of options and matches, option letters A-D, numbers, formulas, SI symbols and proper names exactly consistent. For MCQ keep the answer consistent with the translated options. For matching, each match "answer" must equal the translated option text exactly. If diagramSvg is not empty, translate only the visible text labels inside <text> elements and keep the SVG otherwise unchanged. Do not mention Bloom or cognitive levels. Return valid JSON only: {"questions":[{"index":0,"question":"","answer":"","options":[],"matches":[{"question":"","answer":""}],"topic":"","objective":"","diagramSvg":""}]}\nQUESTIONS:\n${JSON.stringify(subset)}`;
+  try {
+    const out = await callGeminiJson(prompt, { maxTokens: 12000, temperature: 0.1 });
+    for (const f of (Array.isArray(out.questions) ? out.questions : [])) {
+      const t = questions[Number(f.index)];
+      if (!t) continue;
+      for (const k of ['question', 'answer', 'topic', 'objective']) if (typeof f[k] === 'string' && f[k].trim()) t[k] = f[k];
+      if (Array.isArray(f.options) && f.options.length === (t.options || []).length) t.options = f.options.map(String);
+      if (Array.isArray(f.matches) && f.matches.length === (t.matches || []).length) t.matches = f.matches.map(m => ({ question: String(m?.question || ''), answer: String(m?.answer || '') }));
+      if (typeof f.diagramSvg === 'string' && /<svg\b/i.test(f.diagramSvg)) t.diagramSvg = f.diagramSvg;
+    }
+  } catch (e) { console.warn('Language enforcement pass failed:', e.message); }
+  const remaining = questions.filter(q => questionLanguageMismatch(q, target)).length;
+  return { fixed: bad.length - remaining, remaining };
+}
+
+async function enforceBlueprintLanguage(bp, targetCode) {
+  const target = normalizeLang(targetCode);
+  const strs = row => [row.unit, row.topic, ...(row.learningOutcomes || [])].filter(x => typeof x === 'string' && x.trim());
+  const mismatch = row => strs(row).some(x => { const d = detectTextLanguage(x); return d !== 'unknown' && d !== target; });
+  const bad = bp.coverage.map((row, i) => ({ row, i })).filter(({ row }) => mismatch(row));
+  if (!bad.length) return;
+  const subset = bad.map(({ row, i }) => ({ index: i, unit: row.unit || '', topic: row.topic || '', learningOutcomes: row.learningOutcomes || [] }));
+  const prompt = `Translate every string value below into ${LANGUAGE_NAMES[target]} only. Keep the same number and order of learningOutcomes, and keep each outcome a measurable objective starting with an observable action verb in the target language. Return valid JSON only: {"coverage":[{"index":0,"unit":"","topic":"","learningOutcomes":[""]}]}\n${JSON.stringify(subset)}`;
+  try {
+    const out = await callGeminiJson(prompt, { maxTokens: 6000, temperature: 0.1 });
+    for (const f of (Array.isArray(out.coverage) ? out.coverage : [])) {
+      const row = bp.coverage[Number(f.index)];
+      if (!row) continue;
+      if (typeof f.unit === 'string' && f.unit.trim()) row.unit = f.unit;
+      if (typeof f.topic === 'string' && f.topic.trim()) row.topic = f.topic;
+      if (Array.isArray(f.learningOutcomes) && f.learningOutcomes.length === (row.learningOutcomes || []).length) row.learningOutcomes = f.learningOutcomes.map(String);
+    }
+  } catch (e) { console.warn('Blueprint language pass failed:', e.message); }
+}
+
 function uid() {
   return crypto.randomUUID();
 }
@@ -637,6 +790,11 @@ function qualityCheck(q) {
     score -= 5;
   }
 
+  if (!String(q.objective || '').trim()) {
+    issues.push('Question is not linked to a learning objective');
+    score -= 10;
+  }
+
   return {
     score: Math.max(0, score),
     status: score >= 90 ? 'Excellent' : score >= 75 ? 'Review recommended' : 'Needs revision',
@@ -649,13 +807,14 @@ async function aiGenerate(p) {
   if (!key) return null;
 
   const model = process.env.GEMINI_MODEL || 'gemini-2.5-flash';
-  const targetLanguage = ({ en: 'ENGLISH', so: 'AF-SOOMAALI (SOMALI)', ar: 'ARABIC (العربية)' })[p.examLanguage] || 'ENGLISH';
+  const targetLanguage = LANGUAGE_NAMES[normalizeLang(p.examLanguage)];
   const prompt = `
 You are an expert secondary-school assessment designer and professional translator.
 NON-NEGOTIABLE OUTPUT LANGUAGE: ${targetLanguage}. The user explicitly selected this language. The textbook may be in a different language; translate the educational content accurately into the selected output language. NEVER use the textbook language as the exam language unless it is the selected language. Do not mix English, Somali and Arabic.
 LANGUAGE COVERAGE: Write every student-visible and teacher-visible text field in ${targetLanguage}: exam question text, all subquestions, all MCQ options, fill-in prompts and answers, matching items, matching descriptions/options, matching question instructions, topic names, section titles, answer key, marking guide, explanations, diagram labels, and any generated captions. Translate generic labels such as “Answer”, “Question”, “Column A/B”, “Instructions”, “Correct answer”, and “Marking guide”. Keep only standard scientific symbols, equations, SI unit symbols, proper names, and abbreviations that should not be translated. If source facts are technical terms, use the correct equivalent in the selected language; a short parenthetical original term may be used only when necessary for scientific clarity.
 Create exactly ${p.count} questions using ONLY facts and concepts supported by the supplied source text. Translate supported source content into the selected language; do not invent facts or repeat questions.
-Use Bloom levels: ${JSON.stringify(p.levels || blooms)}. Bloom labels are internal metadata only; do not place English Bloom labels in the student paper.
+OBJECTIVE-FIRST DESIGN (MOST IMPORTANT RULE): the learning objectives (learningOutcomes) in the blueprint below are exactly what this exam must measure. Before writing each question, choose ONE objective from the blueprint topic it belongs to, then write a question that directly measures that objective. The action verb of the objective decides what the student must do (define/state → recall; identify/classify → recognise; explain/describe → explanation; calculate/solve → computation; compare/analyse → comparison or analysis; justify/evaluate → reasoned judgement). Copy the chosen objective text, in ${targetLanguage}, into the question's \"objective\" field. Rules: (1) every question maps to exactly one objective; (2) spread questions across as many DIFFERENT objectives as the question count allows, and do not assess an objective a second time until every objective of that topic has been assessed once; (3) do not write questions on trivia, side facts, dates or examples unless an objective requires them; (4) the question must be answerable from the source text and must not test anything outside its objective; (5) if the blueprint has no objectives, first derive measurable objectives from the source text and use them the same way.
+Use Bloom levels: ${JSON.stringify(p.levels || blooms)}. Choose each question's \"bloom\" value so it matches the objective's action verb; keep it ONLY in the JSON \"bloom\" field. BLOOM CONFIDENTIALITY: never write the word Bloom or any cognitive-level label or tag (Remember, Understand, Apply, Analyze, Evaluate, Create, or their translations) in question text, options, matching items, topics, section titles, instructions, answers or marking guides. The student must never be able to see the cognitive level.
 Required ordered section plan: ${JSON.stringify(p.partPlan || [])}. Follow the exact section order and counts; translate every displayed section title into ${targetLanguage}.
 AI-GENERATED TOPIC BLUEPRINT (use for coverage only; translate all displayed topics/outcomes into ${targetLanguage}): ${JSON.stringify(p.blueprint || {})}. Distribute questions across the blueprint topics and source pages; preserve marks and question counts per topic as closely as possible.
 SOURCE DISTRIBUTION RULE: ${p.sourceSelectionRule || 'Spread questions across different headings/topics; do not take consecutive questions from the same paragraph or heading. Prefer passages separated by at least two headings or at least one full page.'}
@@ -667,7 +826,7 @@ Structured/direct questions: include clear subparts in ${targetLanguage} and a t
 DIAGRAM RULE: Requested number of diagrams is ${Number(p.diagramCount || 0)}. Create exactly this number of diagrams across Structured questions. If it is 0, every diagram and diagramSvg field must be empty. If greater than 0, create actual, visible, accurate SVG diagrams in diagramSvg—not instructions, not placeholders, and never the word "undefined". Use standalone SVG with viewBox="0 0 640 300", width="100%", height="auto", all visible labels in ${targetLanguage}, basic shapes/lines only. No scripts, external links, images, foreignObject, or CSS imports. Diagrams must be based only on supplied source content and relevant to the question.
 FINAL LANGUAGE CHECK BEFORE RETURNING: review every string that could appear on either paper. Rewrite any stray phrase in another language into ${targetLanguage}. JSON keys may remain English for the app, but their values must follow the language rules above. Return valid JSON only.
 Return JSON only:
-{"questions":[{"question":"","answer":"","type":"","section":"","options":[],"matches":[{"question":"","answer":""}],"diagram":"","diagramSvg":"","bloom":"","difficulty":"","marks":1,"topic":"","sourcePages":""}]}
+{"questions":[{"question":"","answer":"","type":"","section":"","options":[],"matches":[{"question":"","answer":""}],"diagram":"","diagramSvg":"","objective":"","bloom":"","difficulty":"","marks":1,"topic":"","sourcePages":""}]}
 Subject: ${p.subject || ''}
 Class: ${p.className || p.klass || ''}
 Source title: ${p.sourceTitle || ''}
@@ -702,6 +861,9 @@ ${String(p.sourceText || p.text || '').slice(0, 70000)}
     .map(x => x.text || '').join('');
 
   const questions = JSON.parse(raw.replace(/^```json|```$/g, '').trim()).questions || [];
+  // Bloom is teacher-only: strip any leaked label, then make sure the whole paper is in the selected language.
+  questions.forEach(stripBloomFromQuestion);
+  const languageReport = await enforceQuestionLanguage(questions, p.examLanguage);
   const requestedDiagrams = Math.max(0, Math.min(30, Number(p.diagramCount || 0)));
   // Never expose "undefined" or text-only placeholders as diagrams.
   for (const q of questions) {
@@ -731,6 +893,7 @@ ${String(p.sourceText || p.text || '').slice(0, 70000)}
   } else {
     for (const q of questions) { q.diagramSvg = ''; q.diagram = ''; }
   }
+  questions.languageReport = languageReport;
   return questions;
 }
 
@@ -739,7 +902,7 @@ async function aiGenerateDiagram(p, question, index) {
   const key = process.env.GEMINI_API_KEY;
   if (!key) throw new Error('GEMINI_API_KEY is missing; cannot create requested diagrams.');
   const model = process.env.GEMINI_MODEL || 'gemini-3.5-flash-lite';
-  const lang = p.examLanguage === 'ar' ? 'Arabic' : p.examLanguage === 'so' ? 'Somali' : 'the same language as the source textbook';
+  const lang = p.examLanguage === 'ar' ? 'Arabic' : p.examLanguage === 'so' ? 'Somali' : 'English';
   const prompt = `Create one accurate, student-exam-ready educational diagram as SVG for this question. Diagram labels must be in ${lang}. Use only source-supported information; if the source does not support exact details, make a clearly schematic diagram and avoid invented labels.
 Question: ${String(question.question || question.text || '')}
 Topic: ${String(question.topic || '')}
@@ -780,7 +943,7 @@ app.post('/api/blueprint', async (req, res) => {
     const totalQuestions = Math.max(4, Math.min(50, Number(p.count || p.questionCount) || defaultCount));
     const lang = p.examLanguage || 'en';
     const languageName = lang === 'so' ? 'Somali (Af-Soomaali)' : lang === 'ar' ? 'Arabic (العربية)' : 'English';
-    const prompt = `You are an expert secondary-school assessment designer. Create an EXAM BLUEPRINT / TABLE OF SPECIFICATIONS before the questions are generated. Use ONLY topics, headings, facts and learning outcomes supported by the supplied OCR text. Do not invent units or learning outcomes.\nMANDATORY OUTPUT LANGUAGE: ${languageName}. Translate all displayed blueprint fields including unit, topic, learning outcomes, notes and section names into this language, even when the OCR source uses another language. Do not mix languages; only JSON keys and scientific symbols may remain unchanged. Subject: ${p.subject || ''}. Class: ${p.className || ''}. Source book: ${p.sourceTitle || ''}. Selected pages: ${JSON.stringify(p.pageRange || {})}. Total marks: ${totalMarks}. Total questions: ${totalQuestions}. Format: ${p.format || 'four-part'}.\nUse Bloom levels ${JSON.stringify(p.levels || blooms)}. Spread topics across distinct headings and pages; do not base adjacent questions on the same paragraph. Determine topic/unit, measurable learning outcomes, source pages, Bloom distribution, planned question count and marks per topic. Counts must add to exactly ${totalQuestions}; marks must add to exactly ${totalMarks}. Section counts should match this section plan: ${JSON.stringify(p.partPlan || [])}. Return valid JSON only. Set the language field to exactly English, Somali, or Arabic according to the selected language. Schema: {"subject":"","language":"","totalMarks":${totalMarks},"totalQuestions":${totalQuestions},"coverage":[{"unit":"","topic":"","learningOutcomes":[""],"sourcePages":"","bloomDistribution":{"Remember":0,"Understand":0,"Apply":0,"Analyze":0,"Evaluate":0,"Create":0},"questionCount":0,"marks":0}],"sectionDistribution":[{"section":"","questionCount":0,"marks":0}],"qualityRules":["source traceability","no duplicate questions","marks sum exactly","Bloom alignment"],"notes":[]}.\nOCR SOURCE TEXT:\n${sourceText.slice(0,70000)}`;
+    const prompt = `You are an expert secondary-school assessment designer. Create an EXAM BLUEPRINT / TABLE OF SPECIFICATIONS before the questions are generated. Use ONLY topics, headings, facts and learning outcomes supported by the supplied OCR text. Do not invent units or learning outcomes.\nMANDATORY OUTPUT LANGUAGE: ${languageName}. Translate all displayed blueprint fields including unit, topic, learning outcomes, notes and section names into this language, even when the OCR source uses another language. Do not mix languages; only JSON keys and scientific symbols may remain unchanged. Subject: ${p.subject || ''}. Class: ${p.className || ''}. Source book: ${p.sourceTitle || ''}. Selected pages: ${JSON.stringify(p.pageRange || {})}. Total marks: ${totalMarks}. Total questions: ${totalQuestions}. Format: ${p.format || 'four-part'}.\nOBJECTIVE-FIRST BLUEPRINT (MOST IMPORTANT): the blueprint is built around learning objectives. If the source text itself states objectives (for example headings such as Objectives, Learning outcomes, Learning objectives, \"By the end of this unit/lesson students should be able to\", \"After studying this chapter you should...\"), use those objectives first and translate them faithfully into ${languageName}. Otherwise derive 2 to 5 measurable objectives per topic from the headings and content that are really present. Each objective is ONE testable statement that starts with an observable action verb (define, state, identify, describe, explain, calculate, compare, classify, interpret, justify...) and can be answered from the supplied source text. learningOutcomes must contain only such objectives, never vague aims like \"understand the topic\". Give every topic a questionCount big enough to assess its objectives (at least one question per objective when the total number of questions allows). The Bloom distribution of a topic must follow the action verbs of its objectives. Bloom levels are teacher-only information inside this blueprint and must never appear in student-facing text.\nUse Bloom levels ${JSON.stringify(p.levels || blooms)}. Spread topics across distinct headings and pages; do not base adjacent questions on the same paragraph. Determine topic/unit, measurable learning outcomes, source pages, Bloom distribution, planned question count and marks per topic. Counts must add to exactly ${totalQuestions}; marks must add to exactly ${totalMarks}. Section counts should match this section plan: ${JSON.stringify(p.partPlan || [])}. Return valid JSON only. Set the language field to exactly English, Somali, or Arabic according to the selected language. Schema: {"subject":"","language":"","totalMarks":${totalMarks},"totalQuestions":${totalQuestions},"coverage":[{"unit":"","topic":"","learningOutcomes":[""],"sourcePages":"","bloomDistribution":{"Remember":0,"Understand":0,"Apply":0,"Analyze":0,"Evaluate":0,"Create":0},"questionCount":0,"marks":0}],"sectionDistribution":[{"section":"","questionCount":0,"marks":0}],"qualityRules":["source traceability","no duplicate questions","marks sum exactly","Bloom alignment"],"notes":[]}.\nOCR SOURCE TEXT:\n${sourceText.slice(0,70000)}`;
 
     const models = [...new Set([process.env.GEMINI_MODEL || 'gemini-2.5-flash', 'gemini-3.5-flash-lite', 'gemini-2.5-flash'])];
     let blueprint = null, lastError = '';
@@ -818,7 +981,14 @@ app.post('/api/blueprint', async (req, res) => {
     blueprint.totalMarks=totalMarks;
     blueprint.totalQuestions=totalQuestions;
     blueprint.subject=blueprint.subject||p.subject||'';
-    blueprint.language=blueprint.language||languageName;
+    blueprint.language=LANGUAGE_LABELS[normalizeLang(lang)];
+    blueprint.qualityRules=QUALITY_RULES[normalizeLang(lang)];
+    blueprint.coverage.forEach(row => {
+      row.learningOutcomes = (Array.isArray(row.learningOutcomes) ? row.learningOutcomes : [])
+        .map(o => typeof o === 'string' ? o : (o?.text || o?.objective || ''))
+        .map(o => stripBloomLabels(String(o)).trim()).filter(Boolean);
+    });
+    await enforceBlueprintLanguage(blueprint, lang);
     if (Array.isArray(p.partPlan) && p.partPlan.length) {
       blueprint.sectionDistribution=p.partPlan.map(x=>({section:x.section,type:x.type,questionCount:Number(x.count)||0,marks:Number(x.targetMarks)||0}));
     }
@@ -841,10 +1011,11 @@ app.post('/api/generate', async (req, res) => {
     const count = Math.min(50, Math.max(1, Number(p.count || p.questionCount || 10)));
     const levels = Array.isArray(p.levels) && p.levels.length ? p.levels : blooms;
     let questions = [];
+    let languageReport = null;
 
     try {
       const generated = await aiGenerate({ ...p, count, levels, partPlan: Array.isArray(p.partPlan) ? p.partPlan : [] });
-      if (Array.isArray(generated)) questions = generated.slice(0, count);
+      if (Array.isArray(generated)) { languageReport = generated.languageReport || null; questions = generated.slice(0, count); }
     } catch (e) {
       console.error('AI generation failed:', e.message);
       return res.status(502).json({
@@ -869,13 +1040,18 @@ app.post('/api/generate', async (req, res) => {
       matches: Array.isArray(q.matches) ? q.matches : [],
       diagram: q.diagram || '',
       marks: Number(q.marks) || 1,
-      quality: qualityCheck(q),
       status: 'Draft'
     }));
+
+    // Snap each question to a blueprint objective, then score quality (objective link is part of the score).
+    const objectiveCoverage = linkQuestionsToObjectives(questions, p.blueprint);
+    questions = questions.map(q => ({ ...q, quality: qualityCheck(q) }));
 
     res.json({
       questions,
       totalMarks: questions.reduce((s, q) => s + Number(q.marks || 0), 0),
+      objectiveCoverage,
+      languageCheck: languageReport || { fixed: 0, remaining: 0 },
       aiUsed: true
     });
   } catch (e) {
