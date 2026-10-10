@@ -143,6 +143,58 @@ function linkQuestionsToObjectives(questions, bp) {
   };
 }
 
+// Gemini sometimes stops mid-JSON (token limit). Salvage every COMPLETE question object instead of failing the whole exam.
+function parseQuestionsJson(raw) {
+  const text = String(raw || '').replace(/^\s*```json\s*|```\s*$/g, '').trim();
+  try {
+    const j = JSON.parse(text);
+    return { questions: Array.isArray(j.questions) ? j.questions : [], truncated: false };
+  } catch (_) { /* fall through to salvage */ }
+  const key = text.indexOf('"questions"');
+  const start = text.indexOf('[', key < 0 ? 0 : key);
+  if (start < 0) throw new Error('AI returned no question list');
+  const out = [];
+  let depth = 0, inStr = false, esc = false, objStart = -1;
+  for (let i = start + 1; i < text.length; i++) {
+    const c = text[i];
+    if (inStr) { if (esc) esc = false; else if (c === '\\') esc = true; else if (c === '"') inStr = false; continue; }
+    if (c === '"') { inStr = true; continue; }
+    if (c === '{') { if (depth === 0) objStart = i; depth++; }
+    else if (c === '}') {
+      depth--;
+      if (depth === 0 && objStart >= 0) { try { out.push(JSON.parse(text.slice(objStart, i + 1))); } catch (_) {} objStart = -1; }
+    } else if (c === ']' && depth === 0) break;
+  }
+  if (!out.length) throw new Error('AI returned unreadable JSON');
+  return { questions: out, truncated: true };
+}
+function remainingPlan(plan, done) {
+  let skip = done;
+  return (Array.isArray(plan) ? plan : []).map(x => { const c = Number(x.count) || 0; const used = Math.min(c, skip); skip -= used; return { ...x, count: c - used }; }).filter(x => x.count > 0);
+}
+async function requestQuestionBatch(prompt) {
+  const key = process.env.GEMINI_API_KEY;
+  const models = [...new Set([process.env.GEMINI_MODEL || 'gemini-2.5-flash', 'gemini-3.5-flash-lite', 'gemini-2.5-flash'])];
+  let lastError = '';
+  for (const model of models) {
+    for (let attempt = 0; attempt < 2; attempt++) {
+      try {
+        const r = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`, {
+          method: 'POST', headers: { 'content-type': 'application/json', 'x-goog-api-key': key },
+          body: JSON.stringify({ contents: [{ role: 'user', parts: [{ text: prompt }] }], generationConfig: { responseMimeType: 'application/json', temperature: 0.25, maxOutputTokens: 32000 } })
+        });
+        const data = await r.json();
+        if (!r.ok) { lastError = data?.error?.message || `AI request failed (${r.status})`; if ([429, 500, 502, 503, 504].includes(r.status)) continue; break; }
+        const raw = (data.candidates?.[0]?.content?.parts || []).map(x => x.text || '').join('');
+        const parsed = parseQuestionsJson(raw);
+        if (parsed.questions.length) return parsed.questions;
+        lastError = 'AI returned no questions';
+      } catch (e) { lastError = e.message; }
+    }
+  }
+  throw new Error(lastError || 'AI request failed');
+}
+
 async function callGeminiJson(prompt, { maxTokens = 9000, temperature = 0.1 } = {}) {
   const key = process.env.GEMINI_API_KEY;
   if (!key) throw new Error('GEMINI_API_KEY is missing');
@@ -808,15 +860,15 @@ async function aiGenerate(p) {
 
   const model = process.env.GEMINI_MODEL || 'gemini-2.5-flash';
   const targetLanguage = LANGUAGE_NAMES[normalizeLang(p.examLanguage)];
-  const prompt = `
+  const buildPrompt = (count, partPlan, avoid = []) => `
 You are an expert secondary-school assessment designer and professional translator.
 NON-NEGOTIABLE OUTPUT LANGUAGE: ${targetLanguage}. The user explicitly selected this language. The textbook may be in a different language; translate the educational content accurately into the selected output language. NEVER use the textbook language as the exam language unless it is the selected language. Do not mix English, Somali and Arabic.
 LANGUAGE COVERAGE: Write every student-visible and teacher-visible text field in ${targetLanguage}: exam question text, all subquestions, all MCQ options, fill-in prompts and answers, matching items, matching descriptions/options, matching question instructions, topic names, section titles, answer key, marking guide, explanations, diagram labels, and any generated captions. Translate generic labels such as “Answer”, “Question”, “Column A/B”, “Instructions”, “Correct answer”, and “Marking guide”. Keep only standard scientific symbols, equations, SI unit symbols, proper names, and abbreviations that should not be translated. If source facts are technical terms, use the correct equivalent in the selected language; a short parenthetical original term may be used only when necessary for scientific clarity.
-Create exactly ${p.count} questions using ONLY facts and concepts supported by the supplied source text. Translate supported source content into the selected language; do not invent facts or repeat questions.
+Create exactly ${count} questions using ONLY facts and concepts supported by the supplied source text. Translate supported source content into the selected language; do not invent facts or repeat questions.
 OBJECTIVE-FIRST DESIGN (MOST IMPORTANT RULE): the learning objectives (learningOutcomes) in the blueprint below are exactly what this exam must measure. Before writing each question, choose ONE objective from the blueprint topic it belongs to, then write a question that directly measures that objective. The action verb of the objective decides what the student must do (define/state → recall; identify/classify → recognise; explain/describe → explanation; calculate/solve → computation; compare/analyse → comparison or analysis; justify/evaluate → reasoned judgement). Copy the chosen objective text, in ${targetLanguage}, into the question's \"objective\" field. Rules: (1) every question maps to exactly one objective; (2) spread questions across as many DIFFERENT objectives as the question count allows, and do not assess an objective a second time until every objective of that topic has been assessed once; (3) do not write questions on trivia, side facts, dates or examples unless an objective requires them; (4) the question must be answerable from the source text and must not test anything outside its objective; (5) if the blueprint has no objectives, first derive measurable objectives from the source text and use them the same way.
 Use Bloom levels: ${JSON.stringify(p.levels || blooms)}. Choose each question's \"bloom\" value so it matches the objective's action verb; keep it ONLY in the JSON \"bloom\" field. BLOOM CONFIDENTIALITY: never write the word Bloom or any cognitive-level label or tag (Remember, Understand, Apply, Analyze, Evaluate, Create, or their translations) in question text, options, matching items, topics, section titles, instructions, answers or marking guides. The student must never be able to see the cognitive level.
-Required ordered section plan: ${JSON.stringify(p.partPlan || [])}. Follow the exact section order and counts; translate every displayed section title into ${targetLanguage}.
-AI-GENERATED TOPIC BLUEPRINT (use for coverage only; translate all displayed topics/outcomes into ${targetLanguage}): ${JSON.stringify(p.blueprint || {})}. Distribute questions across the blueprint topics and source pages; preserve marks and question counts per topic as closely as possible.
+Required ordered section plan: ${JSON.stringify(partPlan || [])}. Follow the exact section order and counts; translate every displayed section title into ${targetLanguage}.
+AI-GENERATED TOPIC BLUEPRINT (use for coverage only; translate all displayed topics/outcomes into ${targetLanguage}): ${JSON.stringify(p.blueprint || {})}. Distribute questions across the blueprint topics and source pages; preserve marks and question counts per topic as closely as possible.${avoid.length ? `\nALREADY WRITTEN (continue the exam from the next question; do NOT repeat or paraphrase these, and prefer learning objectives not used yet): ${JSON.stringify(avoid)}` : ''}
 SOURCE DISTRIBUTION RULE: ${p.sourceSelectionRule || 'Spread questions across different headings/topics; do not take consecutive questions from the same paragraph or heading. Prefer passages separated by at least two headings or at least one full page.'}
 Do not create consecutive questions from the same paragraph or heading. Spread questions across the selected page range and distinct topics. Every question must include sourcePages and topic/heading. topic/heading text must be in ${targetLanguage}; sourcePages may use page numbers.
 MCQ: exactly four options A, B, C, D and one correct answer. Translate the option wording into ${targetLanguage}; retain the option letters A-D for answer selection.
@@ -835,32 +887,16 @@ Source text (content reference only; not the output language):
 ${String(p.sourceText || p.text || '').slice(0, 70000)}
 `;
 
-  const r = await fetch(
-    `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`,
-    {
-      method: 'POST',
-      headers: {
-        'content-type': 'application/json',
-        'x-goog-api-key': key
-      },
-      body: JSON.stringify({
-        contents: [{ role: 'user', parts: [{ text: prompt }] }],
-        generationConfig: {
-          responseMimeType: 'application/json',
-          temperature: 0.25,
-          maxOutputTokens: 12000
-        }
-      })
-    }
-  );
-
-  const data = await r.json();
-  if (!r.ok) throw new Error(data?.error?.message || 'AI request failed');
-
-  const raw = (data.candidates?.[0]?.content?.parts || [])
-    .map(x => x.text || '').join('');
-
-  const questions = JSON.parse(raw.replace(/^```json|```$/g, '').trim()).questions || [];
+  let questions = await requestQuestionBatch(buildPrompt(p.count, p.partPlan || []));
+  // If the answer was cut short (long Somali/Arabic exams), ask for ONLY the missing questions and continue.
+  for (let round = 0; questions.length < p.count && round < 3; round++) {
+    const missing = p.count - questions.length;
+    const avoid = questions.map(q => ({ question: String(q.question || '').slice(0, 140), objective: String(q.objective || '').slice(0, 140) }));
+    try {
+      const extra = await requestQuestionBatch(buildPrompt(missing, remainingPlan(p.partPlan, questions.length), avoid));
+      questions = questions.concat(extra.slice(0, missing));
+    } catch (e) { console.warn('Top-up batch failed:', e.message); break; }
+  }
   // Bloom is teacher-only: strip any leaked label, then make sure the whole paper is in the selected language.
   questions.forEach(stripBloomFromQuestion);
   const languageReport = await enforceQuestionLanguage(questions, p.examLanguage);
