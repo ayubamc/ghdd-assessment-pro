@@ -611,6 +611,7 @@ LANGUAGE RULE (mandatory): Use the user-selected exam language: ${p.examLanguage
 Create exactly ${p.count} questions using ONLY the supplied source text. Do not invent facts or repeat questions.
 Use Bloom levels: ${JSON.stringify(p.levels || blooms)}.
 Required ordered section plan: ${JSON.stringify(p.partPlan || [])}. Follow the exact section order and counts.
+AI-GENERATED TOPIC BLUEPRINT (follow this as the source of truth for topic coverage and learning outcomes): ${JSON.stringify(p.blueprint || {})}. Distribute questions across the blueprint topics and source pages; preserve the marks and question counts per topic as closely as possible.
 SOURCE DISTRIBUTION RULE: ${p.sourceSelectionRule || 'Spread questions across different headings/topics; do not take consecutive questions from the same paragraph or heading. Prefer passages separated by at least two headings or at least one full page.'}
 Do not create consecutive questions from the same paragraph or heading. Spread questions across the selected page range and distinct topics. Every question must include sourcePages and topic/heading.
 MCQ: exactly four options A, B, C, D and one correct answer.
@@ -720,6 +721,69 @@ Return ONLY a single standalone SVG element, no markdown or explanation. Require
   return svg;
 }
 
+app.post('/api/blueprint', async (req, res) => {
+  try {
+    const p = req.body || {};
+    const sourceText = String(p.sourceText || '').trim();
+    if (!sourceText) return res.status(400).json({error:'Qoraalka OCR ee buugga ayaa loo baahan yahay.'});
+    const key = process.env.GEMINI_API_KEY;
+    if (!key) return res.status(503).json({error:'GEMINI_API_KEY laguma dejin Railway.'});
+    const totalMarks = Math.max(10, Math.min(300, Number(p.totalMarks) || 100));
+    const defaultCount = Math.min(50, Math.max(10, Math.round(totalMarks * 0.44)));
+    const totalQuestions = Math.max(4, Math.min(50, Number(p.count || p.questionCount) || defaultCount));
+    const lang = p.examLanguage || 'en';
+    const languageName = lang === 'so' ? 'Somali' : lang === 'ar' ? 'Arabic' : lang === 'auto' ? 'detect the source textbook language' : 'English';
+    const prompt = `You are an expert secondary-school assessment designer. Create an EXAM BLUEPRINT / TABLE OF SPECIFICATIONS before the questions are generated. Use ONLY topics, headings, facts and learning outcomes supported by the supplied OCR text. Do not invent units or learning outcomes.\nExam language: ${languageName}. Subject: ${p.subject || ''}. Class: ${p.className || ''}. Source book: ${p.sourceTitle || ''}. Selected pages: ${JSON.stringify(p.pageRange || {})}. Total marks: ${totalMarks}. Total questions: ${totalQuestions}. Format: ${p.format || 'four-part'}.\nUse Bloom levels ${JSON.stringify(p.levels || blooms)}. Spread topics across distinct headings and pages; do not base adjacent questions on the same paragraph. Determine topic/unit, measurable learning outcomes, source pages, Bloom distribution, planned question count and marks per topic. Counts must add to exactly ${totalQuestions}; marks must add to exactly ${totalMarks}. Section counts should match this section plan: ${JSON.stringify(p.partPlan || [])}. Return valid JSON only. Set the language field to the actual output language name (English, Somali, or Arabic), not an instruction phrase. Schema: {"subject":"","language":"","totalMarks":${totalMarks},"totalQuestions":${totalQuestions},"coverage":[{"unit":"","topic":"","learningOutcomes":[""],"sourcePages":"","bloomDistribution":{"Remember":0,"Understand":0,"Apply":0,"Analyze":0,"Evaluate":0,"Create":0},"questionCount":0,"marks":0}],"sectionDistribution":[{"section":"","questionCount":0,"marks":0}],"qualityRules":["source traceability","no duplicate questions","marks sum exactly","Bloom alignment"],"notes":[]}.\nOCR SOURCE TEXT:\n${sourceText.slice(0,70000)}`;
+
+    const models = [...new Set([process.env.GEMINI_MODEL || 'gemini-2.5-flash', 'gemini-3.5-flash-lite', 'gemini-2.5-flash'])];
+    let blueprint = null, lastError = '';
+    for (const model of models) {
+      try {
+        const r = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`, {
+          method:'POST', headers:{'content-type':'application/json','x-goog-api-key':key},
+          body:JSON.stringify({contents:[{role:'user',parts:[{text:prompt}]}],generationConfig:{responseMimeType:'application/json',temperature:0.15,maxOutputTokens:9000}})
+        });
+        const data = await r.json();
+        if (!r.ok) { lastError = data?.error?.message || `AI request failed (${r.status})`; if ([429,500,502,503,504].includes(r.status)) continue; throw new Error(lastError); }
+        const raw=(data.candidates?.[0]?.content?.parts||[]).map(x=>x.text||'').join('').replace(/^```json|```$/g,'').trim();
+        blueprint=JSON.parse(raw); break;
+      } catch (e) { lastError=e.message; }
+    }
+    if (!blueprint) throw new Error(lastError || 'AI Blueprint lama helin.');
+    if (!Array.isArray(blueprint.coverage) || !blueprint.coverage.length) throw new Error('AI-gu ma aqoonsan mawduucyo ku filan qoraalka OCR.');
+
+    // Reconcile AI rounding so displayed Blueprint totals always equal the selected exam totals.
+    const distribute = (field, target) => {
+      const rows=blueprint.coverage;
+      const weights=rows.map(x=>Math.max(0,Number(x[field])||0));
+      const sum=weights.reduce((a,b)=>a+b,0) || rows.length;
+      let used=0;
+      rows.forEach((row,i)=>{
+        const weight=weights[i] || (sum===rows.length?1:0);
+        let value=i===rows.length-1 ? target-used : Math.floor(target*weight/sum);
+        if (target>=rows.length) value=Math.max(1,value);
+        row[field]=Math.max(0,value); used+=row[field];
+      });
+      if (used!==target) rows[rows.length-1][field]=Math.max(0,Number(rows[rows.length-1][field]||0)+(target-used));
+    };
+    distribute('questionCount',totalQuestions);
+    distribute('marks',totalMarks);
+    blueprint.totalMarks=totalMarks;
+    blueprint.totalQuestions=totalQuestions;
+    blueprint.subject=blueprint.subject||p.subject||'';
+    blueprint.language=blueprint.language||languageName;
+    if (Array.isArray(p.partPlan) && p.partPlan.length) {
+      blueprint.sectionDistribution=p.partPlan.map(x=>({section:x.section,type:x.type,questionCount:Number(x.count)||0,marks:Number(x.targetMarks)||0}));
+    }
+    const marksSum=blueprint.coverage.reduce((n,x)=>n+Number(x.marks||0),0);
+    const countSum=blueprint.coverage.reduce((n,x)=>n+Number(x.questionCount||0),0);
+    res.json({ok:true,blueprint,validation:{marksSum,countSum,marksMatch:marksSum===totalMarks,questionsMatch:countSum===totalQuestions}});
+  } catch(e) {
+    console.error('AI Blueprint failed:',e.message);
+    res.status(502).json({error:'AI Blueprint lama samayn: '+e.message});
+  }
+});
+
 app.post('/api/generate', async (req, res) => {
   try {
     const p = req.body || {};
@@ -737,7 +801,7 @@ app.post('/api/generate', async (req, res) => {
     } catch (e) {
       console.error('AI generation failed:', e.message);
       return res.status(502).json({
-        error: 'AI-gu ma samayn su’aalaha. Hubi GEMINI_API_KEY iyo adeegga AI.'
+        error: 'AI-gu ma samayn su’aalaha: ' + e.message
       });
     }
 
