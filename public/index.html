@@ -273,7 +273,10 @@ PDF weyn wuxuu u baahan karaa xusuus badan, waqti dheeraad ah iyo kayd PostgreSQ
 <option selected value="Create">Create — Abuurid</option>
 </select>
 <p class="muted">Telefoonka ku taabo heer kasta si aad u doorato ama uga saarto.</p>
-<button id="generateExam" class="green">✨ Samee imtixaanka</button>
+<button id="makeExamBlueprint" class="secondary">📐 AI-gu marka hore ha ii sameeyo Blueprint</button>
+<div id="examBlueprintStatus" class="muted" role="status"></div>
+<div id="examBlueprintPreview" class="list"></div>
+<button id="generateExam" class="green">✨ Samee imtixaanka (Blueprint + Su’aalo)</button>
 <p class="muted">AI-gu wuxuu ku salaynayaa su’aalaha qoraalka OCR ee bogagga la doortay. Tirada su’aalaha waad madhan uga tagi kartaa; wadarta dhibcaha waxaa loo qaybinayaa si ay ula ekaato dhibcaha aad dooratay.</p>
 <p id="generateStatus" role="status" class="muted"></p>
 <div id="generatedQuestions" class="list"></div>
@@ -403,6 +406,8 @@ let questions = [];
 let questionBank = [];
 let exams = [];
 let currentExamId = null;
+let currentExamBlueprint = null;
+let currentExamBlueprintKey = '';
 
 function uid(){
   return Date.now().toString(36) + Math.random().toString(36).slice(2,8);
@@ -650,6 +655,7 @@ async function loadBooks(){
   }
 }
 $('refreshBooks').onclick=loadBooks;
+['sourceBook','startPage','endPage','genTotalMarks','genCount','genFormat','diagramCount','examLanguage','genLevels'].forEach(id=>{const el=$(id);if(el)el.addEventListener('change',()=>{currentExamBlueprint=null;currentExamBlueprintKey='';});});
 
 
 function detectExamLanguage(source){
@@ -730,6 +736,45 @@ function cleanMatches(q){
   return q;
 }
 
+function examBlueprintKey(id,start,end,totalMarks,count,format,examLanguage,levels){return JSON.stringify({id,start,end,totalMarks,count,format,examLanguage,levels});}
+function renderExamBlueprint(blueprint,validation){
+  const el=$('examBlueprintPreview');
+  if(!blueprint){el.innerHTML='';return;}
+  el.innerHTML=`<div class="item"><strong>AI Exam Blueprint / Table of Specifications</strong><p>Maaddo: ${esc(blueprint.subject||'')} · Luqad: ${esc(blueprint.language||'')} · Wadarta: ${Number(blueprint.totalMarks)||0} marks · ${Number(blueprint.totalQuestions)||0} questions</p><p>Hubin: ${validation?.marksMatch?'✅ Marks sax':'⚠️ Hubi marks'} · ${validation?.questionsMatch?'✅ Tirada su’aalaha sax':'⚠️ Hubi tirada'}</p></div><div class="table-wrap"><table class="matching-table"><thead><tr><th>Unit / Chapter</th><th>Topic</th><th>Learning outcomes</th><th>Bloom distribution</th><th>Questions</th><th>Marks</th><th>Pages</th></tr></thead><tbody>${(blueprint.coverage||[]).map(x=>`<tr><td>${esc(x.unit||'')}</td><td>${esc(x.topic||'')}</td><td>${(x.learningOutcomes||[]).map(esc).join('<br>')}</td><td>${Object.entries(x.bloomDistribution||{}).filter(([,v])=>Number(v)>0).map(([k,v])=>`${esc(k)}: ${Number(v)}`).join('<br>')}</td><td>${Number(x.questionCount)||0}</td><td>${Number(x.marks)||0}</td><td>${esc(x.sourcePages||'')}</td></tr>`).join('')}</tbody></table></div><p class="muted">Blueprint-kan AI ayaa ka sameeyey qoraalka OCR ee bogagga la doortay. Macallinku ha xaqiijiyo in mawduucyada iyo outcomes-ku waafaqsan yihiin manhajka.</p>`;
+}
+async function requestExamBlueprint(sourceText,p){
+  const d=await api('/api/blueprint',{method:'POST',body:JSON.stringify({...p,sourceText})});
+  currentExamBlueprint=d.blueprint;
+  currentExamBlueprintKey=p.blueprintKey;
+  renderExamBlueprint(d.blueprint,d.validation);
+  return d.blueprint;
+}
+$('makeExamBlueprint').onclick=async()=>{
+  const id=$('sourceBook').value, start=Number($('startPage').value), end=Number($('endPage').value);
+  const totalMarks=Number($('genTotalMarks').value)||100;
+  const countText=$('genCount').value.trim(), count=countText===''?null:Number(countText);
+  const levels=Array.from($('genLevels').selectedOptions).map(o=>o.value);
+  const diagramCount=Number($('diagramCount').value), format=$('genFormat').value;
+  const chosen=document.getElementById('examLanguage')?.value||'en';
+  if(!id)return alert('Marka hore dooro buugga OCR.');
+  if(!Number.isInteger(start)||!Number.isInteger(end)||start<1||end<start)return alert('Hubi bogagga bilowga iyo dhammaadka.');
+  const status=$('examBlueprintStatus'); status.textContent='AI ayaa aqoonsanaya cutubyada, topics-ka, learning outcomes-ka iyo qaybinta marks-ka...';
+  try{
+    const d=await api(`/api/books/${encodeURIComponent(id)}/text?start=${start}&end=${end}`,{method:'GET'});
+    const sourceText=(d.pages||[]).filter(p=>p.text&&p.text.trim()).map(p=>`[PAGE ${p.page}]\n${p.text}`).join('\n\n--- PAGE BREAK ---\n\n');
+    if(!sourceText.trim())throw new Error('Qoraal OCR ah lagama helin bogagga la doortay.');
+    const book=books.find(b=>String(b.id)===String(id));
+    const subject=$('genSubject').value.trim()||$('bookSubject').value.trim()||book?.subject||'';
+    const className=$('genClass').value.trim();
+    const effectiveCount=count===null?Math.min(50,Math.max(10,Math.round(totalMarks*.44))):count;
+    const lang=chosen==='auto'?detectExamLanguage(sourceText):chosen;
+    const partPlan=makePartPlan(effectiveCount,totalMarks,format,diagramCount,lang);
+    const key=examBlueprintKey(id,start,end,totalMarks,effectiveCount,format,chosen,levels);
+    const bp=await requestExamBlueprint(sourceText,{subject,className,sourceTitle:d.title,pageRange:{start,end},totalMarks,count:effectiveCount,format,diagramCount,partPlan,levels,examLanguage:chosen,blueprintKey:key});
+    status.textContent=`Blueprint waa diyaar: ${bp.coverage.length} mawduuc ayaa la aqoonsaday.`;
+  }catch(e){status.textContent='Khalad: '+e.message;alert('AI Blueprint: '+e.message);}
+};
+
 $('generateExam').onclick=async()=>{
   const id=$('sourceBook').value;
   const start=Number($('startPage').value);
@@ -767,17 +812,22 @@ $('generateExam').onclick=async()=>{
      partPlan=makePartPlan(effectiveCount,totalMarks,format,diagramCount,examLanguage);
     if(!sourceText.trim())throw new Error('Qoraal lagama helin bogagga la doortay.');
 
-    status.textContent='AI ayaa diyaarinaya su’aalaha laga soo qaatay bogagga aad dooratay...';
-
     const book=books.find(b=>String(b.id)===String(id));
     const subject=$('genSubject').value.trim()||$('bookSubject').value.trim()||book?.subject||'';
     const className=$('genClass').value.trim();
+    const blueprintKeyNow=examBlueprintKey(id,start,end,totalMarks,effectiveCount,format,chosenExamLanguage,levels);
+    if(!currentExamBlueprint || currentExamBlueprintKey!==blueprintKeyNow){
+      status.textContent='Tallaabada 1/2: AI ayaa marka hore samaynaya Exam Blueprint...';
+      const bp=await requestExamBlueprint(sourceText,{subject,className,sourceTitle:d.title,pageRange:{start,end},totalMarks,count:effectiveCount,format,diagramCount,partPlan,levels,examLanguage,blueprintKey:blueprintKeyNow});
+      if(!bp)throw new Error('Blueprint lama samayn.');
+    }
+    status.textContent='Tallaabada 2/2: AI ayaa Blueprint-ka raacaya si uu u sameeyo su’aalaha...';
 
     const generated=await api('/api/generate',{
       method:'POST',
       body:JSON.stringify({
         sourceText,subject,className,count:effectiveCount,questionCount:effectiveCount,
-        totalMarks,format,diagramCount,partPlan,levels,type:'Isku-dhafan',sourceSelectionRule:'Spread questions across different headings/topics. Do not take consecutive questions from the same paragraph or same heading. Prefer passages separated by at least two headings or at least one full page. Record source pages and topic/heading for each question.',examLanguage,
+        totalMarks,format,diagramCount,partPlan,blueprint:currentExamBlueprint,levels,type:'Isku-dhafan',sourceSelectionRule:'Spread questions across different headings/topics. Do not take consecutive questions from the same paragraph or same heading. Prefer passages separated by at least two headings or at least one full page. Record source pages and topic/heading for each question.',examLanguage,
         sourceTitle:d.title,
         pageRange:{start,end}
       })
@@ -862,9 +912,15 @@ $('generateExam').onclick=async()=>{
     const examPaper=`<div class="student-paper-no-solutions">${header}${meta}<p><strong>${examText(lang,'instructions')}:</strong> ${esc(instructions)}</p>${renderPaperQuestions(false)}<p><strong>${examText(lang,'total')}: ${total} marks</strong></p></div>`;
     const answerPaper=`${header}<h2>${examText(lang,'answer')}</h2><p><strong>${examText(lang,'total')}:</strong> ${total}</p>${renderPaperQuestions(true)}`;
     $('printRoot').innerHTML=`<div class="paper-tools no-print"><button id="printExamOnly">Daabac imtixaanka (jawaabaha ma muuqdaan)</button><button id="printAnswerKey">Daabac answer key</button></div><div id="studentPaper">${examPaper}</div><div id="keyPaper" style="margin-top:35px;border-top:3px double #333;padding-top:18px">${answerPaper}</div>`;
+    let preflight={average:0,questions:[],status:'Hubinta tayada lama helin'};
+    try{preflight=await api('/api/quality-check',{method:'POST',body:JSON.stringify({questions:qs})});}catch(checkError){console.warn('Quality pre-check unavailable:',checkError.message);}
+    const traceable=normalized.filter(q=>String(q.sourcePages||'').trim()).length;
+    const topicsCovered=new Set(normalized.map(q=>String(q.topic||'').trim()).filter(Boolean)).size;
+    const qualityIssues=(preflight.questions||[]).reduce((n,q)=>n+(q.quality?.issues?.length||0),0);
+    const qualityHtml=`<div class="panel"><h3>📊 Exam Quality Report — Preliminary</h3><div class="grid"><div class="stat"><b>${Number(preflight.average)||0}/100</b><br>Question quality score</div><div class="stat"><b>${Math.round(traceable/Math.max(1,normalized.length)*100)}%</b><br>Source traceability</div><div class="stat"><b>${topicsCovered}</b><br>Topics represented</div><div class="stat"><b>${qualityIssues}</b><br>Automated issues to review</div></div><p><strong>Blueprint coverage:</strong> ${(currentExamBlueprint?.coverage||[]).length} topics · ${Number(currentExamBlueprint?.totalMarks)||total} planned marks · ${Number(currentExamBlueprint?.totalQuestions)||normalized.length} planned questions.</p><p class="muted">Warbixintani waa hubin hordhac ah; macallinku waa inuu xaqiijiyaa saxnaanta aqooneed, jawaabaha iyo waafaqsanaanta manhajka ka hor daabacaadda.</p>${(preflight.questions||[]).filter(q=>q.quality?.issues?.length).slice(0,10).map(q=>`<p>Q${Number(q.number)||''}: ${esc((q.quality.issues||[]).join('; '))}</p>`).join('')}</div>`;
     out.innerHTML=`<div class="notice"><strong>Imtixaanka oo dhammaystiran ayaa diyaar ah.</strong><br>Wadarta dhibcaha: ${total}/${total}. Su’aalaha si toos ah ayaa loogu daray imtixaanka; looma baahna inaad mid-mid u riixdo.<br>Dib u eeg su’aalaha, kadib dooro daabacaadda imtixaanka ama answer key-ga.</div>
       <div class="paper-tools no-print"><button id="previewPrintExam">🖨️ Daabac imtixaanka</button><button id="previewPrintKey" class="secondary">🔑 Daabac answer key</button><button id="previewPrintBoth" class="secondary">Daabac labadaba</button></div>
-      <div class="item"><strong>${esc(examTitle)}</strong><p>${esc(subject)} · ${esc(className)} · ${total} dhibcood · ${normalized.length} su’aalood</p><p>Su’aalaha si toos ah ayaa loogu daray imtixaanka.</p></div>`;
+      <div class="item"><strong>${esc(examTitle)}</strong><p>${esc(subject)} · ${esc(className)} · ${total} dhibcood · ${normalized.length} su’aalood</p><p>Su’aalaha si toos ah ayaa loogu daray imtixaanka.</p></div>${qualityHtml}`;
     function printSelection(which){
       document.body.classList.add('print-mode');
       $('studentPaper').style.display=which==='key'?'none':'block';
@@ -931,6 +987,8 @@ $('saveExam').onclick=async()=>{
     className:$('className').value.trim(),
     instructions:$('examInstructions').value,
     questions:JSON.parse(JSON.stringify(questions)),
+    blueprint:currentExamBlueprint||{},
+    totalMarks:questions.reduce((sum,q)=>sum+(Number(q.marks)||0),0),
     createdAt:new Date().toISOString()
   };
   exams.unshift(exam);
@@ -938,7 +996,14 @@ $('saveExam').onclick=async()=>{
   localStorage.setItem('ghdd_exams',JSON.stringify(exams));
   localStorage.setItem('ghdd_bank',JSON.stringify(questionBank));
   renderBank();
-  alert('Imtixaanka waxaa lagu kaydiyey browser-ka. Soo dejiso backup si aad u ilaaliso.');
+  try{
+    const saved=await api('/api/assessments',{method:'POST',body:JSON.stringify({title:exam.title,subject:exam.subject,klass:exam.className,totalMarks:exam.totalMarks,school:'GHDD',blueprint:exam.blueprint,data:{instructions:exam.instructions,questions:exam.questions}})});
+    exam.databaseId=saved.id;
+    localStorage.setItem('ghdd_exams',JSON.stringify(exams));
+    alert('Imtixaanka iyo AI Blueprint-ka waxaa lagu kaydiyey PostgreSQL iyo browser-ka.');
+  }catch(e){
+    alert('Imtixaanka waxaa lagu kaydiyey browser-ka, laakiin database-ka lama kaydin: '+e.message+'\nHubi furaha maamulka iyo Railway database-ka.');
+  }
 };
 
 function renderBank(){
