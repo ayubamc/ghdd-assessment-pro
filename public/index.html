@@ -57,6 +57,7 @@ footer{text-align:center;color:#65738a;padding:22px;font-size:13px}
   body.print-mode>header,body.print-mode>.wrap,body.print-mode>footer{display:none!important}
   body.print-mode>#printRoot{display:block!important}
   body.print-mode #printRoot .paper-tools{display:none!important}
+  .bloom-preview{display:none!important}
   body:not(.print-mode) header,body:not(.print-mode) nav,body:not(.print-mode) footer,body:not(.print-mode) .no-print{display:none!important}
   body:not(.print-mode) .tab{display:none!important}
   body:not(.print-mode) #builder.active{display:block!important}
@@ -1034,8 +1035,8 @@ function renderQuestions(){
   el.innerHTML=questions.map((q,i)=>`
     <div class="item">
       <b>${i+1}. ${esc(q.text)}</b>
-      <p>${esc(q.level)} · ${Number(q.marks)||1} dhibcood</p>
-      <p><b>Jawaab:</b> ${esc(q.answer||'')}</p>
+      <p><span class="bloom-preview"><strong>${examLanguage==='ar'?'مستوى بلوم':examLanguage==='so'?'Heerka Bloom':'Bloom level'}:</strong> ${esc(q.level||q.bloom||'Understand')}</span> · ${Number(q.marks)||1} ${examLanguage==='ar'?'درجات':examLanguage==='so'?'dhibcood':'marks'}</p>
+      <p><b>${examLanguage==='ar'?'الإجابة':examLanguage==='so'?'Jawaab':'Answer'}:</b> ${esc(q.answer||'')}</p>
       <button class="danger" data-remove-q="${q.id}">Ka saar</button>
     </div>`).join('');
 
