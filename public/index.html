@@ -256,6 +256,7 @@ PDF weyn wuxuu u baahan karaa xusuus badan, waqti dheeraad ah iyo kayd PostgreSQ
 <label for="sourceBook">Buugga</label>
 <select id="sourceBook"><option value="">Dooro buug...</option></select>
 
+<div class="form-group"><label for="examLanguage">Luqadda imtixaanka / Exam language / لغة الامتحان</label><select id="examLanguage" name="examLanguage"><option value="en" selected>English</option><option value="so">Af-Soomaali</option><option value="ar">العربية</option></select><small>Dooro luqadda ka hor Blueprint-ka. Cinwaannada, tilmaamaha, su’aalaha, doorashooyinka, isku-aadinta, jaantusyada iyo answer key-ga oo dhan waa inay raacaan luqaddan.</small></div>
 <div class="grid">
 <div><label for="genSubject">Maaddada</label><input id="genSubject" placeholder="Physics"></div>
 <div><label for="genClass">Fasalka</label><input id="genClass" placeholder="Form 4"></div>
@@ -296,7 +297,7 @@ PDF weyn wuxuu u baahan karaa xusuus badan, waqti dheeraad ah iyo kayd PostgreSQ
 <h2>Diyaari imtixaan</h2>
 <label for="examName">Magaca imtixaanka</label>
 <input id="examName" placeholder="Imtixaanka dhexe">
-<div class="form-group"><label for="examLanguage">Luqadda imtixaanka / Exam language</label><select id="examLanguage" name="examLanguage"><option value="en" selected>English</option><option value="so">Soomaali</option><option value="ar">العربية</option><option value="auto">Raac luqadda buugga (Auto)</option></select><small>Dooro luqadda warqadda imtixaanka oo dhan.</small></div>
+
 <label for="subject">Maaddada</label>
 <input id="subject" placeholder="Physics">
 <label for="className">Fasalka</label>
@@ -750,9 +751,9 @@ function detectExamLanguage(source){
 }
 function examText(lang,key){
   const labels={
-    en:{mcq:'PART I — MULTIPLE CHOICE QUESTIONS',fill:'PART II — FILL IN THE BLANKS',matching:'PART III — MATCHING',structured:'PART IV — DIRECT / STRUCTURED QUESTIONS',name:'Name',date:'Date',class:'Class',total:'Total Marks',instructions:'Instructions',answer:'ANSWER KEY AND MARKING GUIDE',studentAnswer:'Answer',question:'Question',answerChoices:'Answer choices',matchPrompt:'Match the following items with the correct answers:',source:'Source'},
-    so:{mcq:'QAYBTA I — SU’AALAHA DOORASHADA',fill:'QAYBTA II — MEELAHA BANNAAN',matching:'QAYBTA III — ISKU-AADINTA',structured:'QAYBTA IV — SU’AALAHA TOOSKA AH / QAABAYSAN',name:'Magaca',date:'Taariikhda',class:'Fasalka',total:'Wadarta dhibcaha',instructions:'Tilmaamaha',answer:'JAWAABAHA SAXDA AH IYO HABKA SAXIDDA',studentAnswer:'Jawaabta',question:'Su’aasha',answerChoices:'Doorashooyinka jawaabaha',matchPrompt:'Isku-aadi su’aalaha iyo jawaabaha saxda ah:',source:'Isha'},
-    ar:{mcq:'القسم الأول — أسئلة الاختيار من متعدد',fill:'القسم الثاني — أكمل الفراغات',matching:'القسم الثالث — المطابقة',structured:'القسم الرابع — الأسئلة المباشرة / المنظمة',name:'الاسم',date:'التاريخ',class:'الصف',total:'الدرجة الكلية',instructions:'التعليمات',answer:'نموذج الإجابة ودليل التصحيح',studentAnswer:'إجابة الطالب',question:'السؤال',answerChoices:'خيارات الإجابة',matchPrompt:'صِل العناصر بالإجابات الصحيحة:',source:'المصدر'}
+    en:{mcq:'PART I — MULTIPLE CHOICE QUESTIONS',fill:'PART II — FILL IN THE BLANKS',matching:'PART III — MATCHING',structured:'PART IV — DIRECT / STRUCTURED QUESTIONS',name:'Name',date:'Date',class:'Class',total:'Total Marks',instructions:'Instructions',answer:'ANSWER KEY AND MARKING GUIDE',studentAnswer:'Answer',question:'Question',answerChoices:'Answer choices',matchPrompt:'Match each item in Column A with the correct option in Column B. Write only the option letter.',number:'Number',columnA:'Column A: Items',answerLetter:'Answer letter',columnB:'Column B: Options / descriptions',markingGuide:'Answer / Marking guide',notProvided:'Not provided',allQuestions:'Answer all questions. Read each question carefully.',marks:'marks',matchingKey:'Answer key',blueprint:'AI Exam Blueprint / Table of Specifications',subjectLabel:'Subject',languageLabel:'Language',unitLabel:'Unit / Chapter',topicLabel:'Topic',outcomesLabel:'Learning outcomes',bloomLabel:'Bloom distribution',questionsLabel:'Questions',marksLabel:'Marks',pagesLabel:'Pages',source:'Source'},
+    so:{mcq:'QAYBTA I — SU’AALAHA DOORASHADA',fill:'QAYBTA II — MEELAHA BANNAAN',matching:'QAYBTA III — ISKU-AADINTA',structured:'QAYBTA IV — SU’AALAHA TOOSKA AH / QAABAYSAN',name:'Magaca',date:'Taariikhda',class:'Fasalka',total:'Wadarta dhibcaha',instructions:'Tilmaamaha',answer:'JAWAABAHA SAXDA AH IYO HABKA SAXIDDA',studentAnswer:'Jawaabta',question:'Su’aasha',answerChoices:'Doorashooyinka jawaabaha',matchPrompt:'Qaybta A iyo Qaybta B isku-aadi. Ku qor xarafka doorashada saxda ah oo keliya.',number:'Lambarka',columnA:'Qaybta A: Erayga / Su’aasha',answerLetter:'Xarafka jawaabta',columnB:'Qaybta B: Jawaabaha / Sharaxaadda',markingGuide:'Jawaabta saxda ah / Habka sixidda',notProvided:'Jawaab lama bixin',allQuestions:'Ka jawaab dhammaan su’aalaha. Su’aal kasta si taxaddar leh u akhri.',marks:'dhibcood',matchingKey:'Jawaabaha saxda ah',blueprint:'Qorshaha Imtixaanka (Blueprint)',subjectLabel:'Maaddada',languageLabel:'Luqadda',unitLabel:'Cutubka',topicLabel:'Mawduuca',outcomesLabel:'Ujeeddooyinka waxbarasho',bloomLabel:'Qaybinta Bloom',questionsLabel:'Su’aalaha',marksLabel:'Dhibcaha',pagesLabel:'Bogagga',source:'Isha'},
+    ar:{mcq:'القسم الأول — أسئلة الاختيار من متعدد',fill:'القسم الثاني — أكمل الفراغات',matching:'القسم الثالث — المطابقة',structured:'القسم الرابع — الأسئلة المباشرة / المنظمة',name:'الاسم',date:'التاريخ',class:'الصف',total:'الدرجة الكلية',instructions:'التعليمات',answer:'نموذج الإجابة ودليل التصحيح',studentAnswer:'الإجابة',question:'السؤال',answerChoices:'خيارات الإجابة',matchPrompt:'طابق عناصر العمود أ مع الخيارات الصحيحة في العمود ب، واكتب حرف الخيار فقط.',number:'الرقم',columnA:'العمود أ: العناصر',answerLetter:'حرف الإجابة',columnB:'العمود ب: الخيارات / الأوصاف',markingGuide:'الإجابة / دليل التصحيح',notProvided:'لم تُقدَّم إجابة',allQuestions:'أجب عن جميع الأسئلة. اقرأ كل سؤال بعناية.',marks:'درجات',matchingKey:'مفتاح الإجابة',blueprint:'مخطط الاختبار وجدول المواصفات',subjectLabel:'المادة',languageLabel:'اللغة',unitLabel:'الوحدة / الفصل',topicLabel:'الموضوع',outcomesLabel:'نواتج التعلم',bloomLabel:'توزيع بلوم',questionsLabel:'الأسئلة',marksLabel:'الدرجات',pagesLabel:'الصفحات',source:'المصدر'}
   };
   return (labels[lang]||labels.en)[key]||key;
 }
@@ -821,7 +822,8 @@ function examBlueprintKey(id,start,end,totalMarks,count,format,examLanguage,leve
 function renderExamBlueprint(blueprint,validation){
   const el=$('examBlueprintPreview');
   if(!blueprint){el.innerHTML='';return;}
-  el.innerHTML=`<div class="item"><strong>AI Exam Blueprint / Table of Specifications</strong><p>Maaddo: ${esc(blueprint.subject||'')} · Luqad: ${esc(blueprint.language||'')} · Wadarta: ${Number(blueprint.totalMarks)||0} marks · ${Number(blueprint.totalQuestions)||0} questions</p><p>Hubin: ${validation?.marksMatch?'✅ Marks sax':'⚠️ Hubi marks'} · ${validation?.questionsMatch?'✅ Tirada su’aalaha sax':'⚠️ Hubi tirada'}</p></div><div class="table-wrap"><table class="matching-table"><thead><tr><th>Unit / Chapter</th><th>Topic</th><th>Learning outcomes</th><th>Bloom distribution</th><th>Questions</th><th>Marks</th><th>Pages</th></tr></thead><tbody>${(blueprint.coverage||[]).map(x=>`<tr><td>${esc(x.unit||'')}</td><td>${esc(x.topic||'')}</td><td>${(x.learningOutcomes||[]).map(esc).join('<br>')}</td><td>${Object.entries(x.bloomDistribution||{}).filter(([,v])=>Number(v)>0).map(([k,v])=>`${esc(k)}: ${Number(v)}`).join('<br>')}</td><td>${Number(x.questionCount)||0}</td><td>${Number(x.marks)||0}</td><td>${esc(x.sourcePages||'')}</td></tr>`).join('')}</tbody></table></div><p class="muted">Blueprint-kan AI ayaa ka sameeyey qoraalka OCR ee bogagga la doortay. Macallinku ha xaqiijiyo in mawduucyada iyo outcomes-ku waafaqsan yihiin manhajka.</p>`;
+  const lang=document.getElementById('examLanguage')?.value||'en';
+  el.innerHTML=`<div class="item"><strong>${examText(lang,'blueprint')}</strong><p>${examText(lang,'subjectLabel')}: ${esc(blueprint.subject||'')} · ${examText(lang,'languageLabel')}: ${esc(blueprint.language||'')} · ${examText(lang,'total')}: ${Number(blueprint.totalMarks)||0} ${examText(lang,'marks')} · ${Number(blueprint.totalQuestions)||0} ${examText(lang,'questionsLabel').toLowerCase()}</p><p>${lang==='ar'?'التحقق':lang==='so'?'Hubin':'Validation'}: ${validation?.marksMatch?'✅ '+(lang==='ar'?'الدرجات صحيحة':lang==='so'?'Dhibcaha waa sax':'Marks valid'):'⚠️ '+(lang==='ar'?'تحقق من الدرجات':lang==='so'?'Hubi dhibcaha':'Check marks')} · ${validation?.questionsMatch?'✅ '+(lang==='ar'?'عدد الأسئلة صحيح':lang==='so'?'Tirada su’aalaha waa sax':'Question count valid'):'⚠️ '+(lang==='ar'?'تحقق من العدد':lang==='so'?'Hubi tirada':'Check count')}</p></div><div class="table-wrap"><table class="matching-table"><thead><tr><th>${examText(lang,'unitLabel')}</th><th>${examText(lang,'topicLabel')}</th><th>${examText(lang,'outcomesLabel')}</th><th>${examText(lang,'bloomLabel')}</th><th>${examText(lang,'questionsLabel')}</th><th>${examText(lang,'marksLabel')}</th><th>${examText(lang,'pagesLabel')}</th></tr></thead><tbody>${(blueprint.coverage||[]).map(x=>`<tr><td>${esc(x.unit||'')}</td><td>${esc(x.topic||'')}</td><td>${(x.learningOutcomes||[]).map(esc).join('<br>')}</td><td>${Object.entries(x.bloomDistribution||{}).filter(([,v])=>Number(v)>0).map(([k,v])=>`${esc(k)}: ${Number(v)}`).join('<br>')}</td><td>${Number(x.questionCount)||0}</td><td>${Number(x.marks)||0}</td><td>${esc(x.sourcePages||'')}</td></tr>`).join('')}</tbody></table></div><p class="muted">${lang==='ar'?'تم إعداد المخطط من نصوص الصفحات المحددة المستخرجة بتقنية OCR. يرجى مراجعة الموضوعات ونواتج التعلم للتأكد من توافقها مع المنهج.':lang==='so'?'Blueprint-kan AI ayaa ka sameeyey qoraalka OCR ee bogagga la doortay. Macallinku ha xaqiijiyo in mawduucyada iyo ujeeddooyinka waxbarashadu waafaqsan yihiin manhajka.':'This blueprint was generated from OCR text on the selected pages. Review topics and learning outcomes for curriculum alignment.'}</p>`;
 }
 async function requestExamBlueprint(sourceText,p){
   const d=await api('/api/blueprint',{method:'POST',body:JSON.stringify({...p,sourceText})});
@@ -848,7 +850,7 @@ $('makeExamBlueprint').onclick=async()=>{
     const subject=$('genSubject').value.trim()||$('bookSubject').value.trim()||book?.subject||'';
     const className=$('genClass').value.trim();
     const effectiveCount=count===null?Math.min(50,Math.max(10,Math.round(totalMarks*.44))):count;
-    const lang=chosen==='auto'?detectExamLanguage(sourceText):chosen;
+    const lang=chosen;
     const partPlan=makePartPlan(effectiveCount,totalMarks,format,diagramCount,lang);
     const key=examBlueprintKey(id,start,end,totalMarks,effectiveCount,format,chosen,levels);
     const bp=await requestExamBlueprint(sourceText,{subject,className,sourceTitle:d.title,pageRange:{start,end},totalMarks,count:effectiveCount,format,diagramCount,partPlan,levels,examLanguage:chosen,blueprintKey:key});
@@ -889,7 +891,7 @@ $('generateExam').onclick=async()=>{
     const sourceText=selected.map(p=>`[BOGGA ${p.page} — QORAALKA BOGGAN]\n${p.text}`).join('\n\n--- DHAMMAADKA BOGGA ---\n\n');
      const detectedLanguage=detectExamLanguage(sourceText);
      const chosenExamLanguage=(document.getElementById('examLanguage')?.value||'en');
-     const examLanguage=chosenExamLanguage==='auto'?detectedLanguage:chosenExamLanguage;
+     const examLanguage=chosenExamLanguage;
      partPlan=makePartPlan(effectiveCount,totalMarks,format,diagramCount,examLanguage);
     if(!sourceText.trim())throw new Error('Qoraal lagama helin bogagga la doortay.');
 
@@ -928,7 +930,7 @@ $('generateExam').onclick=async()=>{
        }else q.diagram='';
      });
      const examTitle=$('examName').value.trim()||`${subject||'Imtixaan'} — ${className||'Fasal'}`;
-    const schoolName='Golaha Horumarinta Dugsiyada Dadweynaha (GHDD)';
+    const schoolName=lang==='ar'?'مجلس تطوير المدارس الحكومية (GHDD)':lang==='en'?'Public Schools Development Council (GHDD)':'Golaha Horumarinta Dugsiyada Dadweynaha (GHDD)';
     const normalized=qs.map((q,i)=>({
       id:uid(),
       text:q.question||q.text||'',
@@ -968,30 +970,30 @@ $('generateExam').onclick=async()=>{
              const choiceCell=j===0?`<td rowspan="${Math.max(1,pairs.length)}" class="matching-choice-cell"><div class="matching-options">${choices.map((c,k)=>`<div><b>${String.fromCharCode(65+k)}.</b> ${esc(c)}</div>`).join('')}</div></td>`:'';
              return `<tr><td class="match-no">${j+1}</td><td>${esc(pair.question||'')}</td><td class="match-answer">${answerCell}</td>${choiceCell}</tr>`;
            }).join('');
-           const correct=withAnswers?`<p class="matching-key"><strong>Answer key:</strong> ${pairs.map((p,j)=>`${j+1}. ${esc(p.answer)}`).join('; ')}</p>`:'';
-           const warning=choices.length===pairs.length+1?'':'<p class="muted"><em>Check: provide exactly one extra option beyond the number of matching items.</em></p>';
-           return `${sectionHtml}<div class="paper-question matching-question"><p class="question-line"><strong>${i+1}. ${esc(q.text||'Match each item in Column A with the correct answer in Column B. Write the letter in the answer column.')}</strong><span class="marks">(${q.marks} marks)</span></p><div class="table-wrap"><table class="matching-table"><thead><tr><th>Number</th><th>Column A: Item / Question</th><th>Answer letter</th><th>Column B: Answers / Descriptions</th></tr></thead><tbody>${rows}</tbody></table></div>${correct}${warning}</div>`;
+           const correct=withAnswers?`<p class="matching-key"><strong>${examText(lang,'matchingKey')}:</strong> ${pairs.map((p,j)=>`${j+1}. ${esc(p.answer)}`).join('; ')}</p>`:'';
+           const warning=choices.length===pairs.length+1?'':(withAnswers?`<p class="muted"><em>${lang==='ar'?'تنبيه: يجب أن يزيد عدد الخيارات بواحد عن عدد العناصر.':lang==='so'?'Hubi: doorashooyinku waa inay hal ka bataan tirada erayada.':'Check: provide exactly one extra option beyond the number of matching items.'}</em></p>`:'');
+           return `${sectionHtml}<div class="paper-question matching-question"><p class="question-line"><strong>${i+1}. ${esc(q.text||examText(lang,'matchPrompt'))}</strong><span class="marks">(${q.marks} ${examText(lang,'marks')})</span></p><div class="table-wrap"><table class="matching-table"><thead><tr><th>${examText(lang,'number')}</th><th>${examText(lang,'columnA')}</th><th>${examText(lang,'answerLetter')}</th><th>${examText(lang,'columnB')}</th></tr></thead><tbody>${rows}</tbody></table></div>${correct}${warning}</div>`;
          }
          const options=q.options?.length?`<table class="mcq-options-table"><tbody><tr>${q.options.slice(0,4).map((opt,k)=>`<td><strong>${String.fromCharCode(65+k)}.</strong> ${esc(String(opt).replace(/^[A-D]\.\s*/i,''))}</td>`).join('')}</tr></tbody></table>`:'';
          const safeSvg=q.diagramSvg?sanitizeDiagramSvg(q.diagramSvg):'';
          const diagram=safeSvg?`<div class="exam-diagram">${safeSvg}</div>`:(q.diagram&&q.diagram!=='undefined'?`<div class="diagram-note"><strong>${lang==='ar'?'الرسم التوضيحي':lang==='so'?'Jaantus / sawir':'Diagram'}:</strong> ${esc(q.diagram)}</div>`:'');
          const isDirect=/structured|direct/i.test(q.type||'')||/STRUCTURED|DIRECT/i.test(section);
-         const answerSpace=(!withAnswers&&isDirect)?`<div class="student-answer-label">Answer:</div><div class="answer-space">${Array.from({length:Math.max(2,Math.min(14,Math.ceil(Number(q.marks||1)*1.4)))},()=>'<div class="answer-line"></div>').join('')}</div>`:'';
-         const answer = withAnswers ? `<div class="answer-box"><strong>Answer / Marking guide:</strong> ${esc(q.answer||'Not provided')}</div>` : '';
-         const questionLine=`<div class="mcq-question-row"><span class="question-number">${i+1}.</span><span class="question-text">${esc(q.text)}</span><span class="marks">(${q.marks} marks)</span></div>`;
+         const answerSpace=(!withAnswers&&isDirect)?`<div class="student-answer-label">${examText(lang,'studentAnswer')}:</div><div class="answer-space">${Array.from({length:Math.max(2,Math.min(14,Math.ceil(Number(q.marks||1)*1.4)))},()=>'<div class="answer-line"></div>').join('')}</div>`:'';
+         const answer = withAnswers ? `<div class="answer-box"><strong>${examText(lang,'markingGuide')}:</strong> ${esc(q.answer||examText(lang,'notProvided'))}</div>` : '';
+         const questionLine=`<div class="mcq-question-row"><span class="question-number">${i+1}.</span><span class="question-text">${esc(q.text)}</span><span class="marks">(${q.marks} ${examText(lang,'marks')})</span></div>`;
          if(q.type==='MCQ'||q.type==='Multiple Choice'||q.type==='Multiple Choice Questions'){
            return `${sectionHtml}<div class="paper-question mcq-box">${questionLine}${options}${answer}</div>`;
          }
          return `${sectionHtml}<div class="paper-question structured-box">${questionLine}${diagram}${answerSpace}${answer}</div>`;
        }).join('');
      };
-    const instructions= $('examInstructions').value.trim()||'Answer all questions. Read each question carefully.';
+    const instructions= $('examInstructions').value.trim()||examText(lang,'allQuestions');
     const total=normalized.reduce((sum,q)=>sum+q.marks,0);
     const lang=examLanguage||detectExamLanguage(sourceText);
-    const header=`<div class="paper-head"><img class="exam-logo" src="/letterhead.jpg" alt="GHDD logo"><h1>${esc(schoolName)}</h1><h2>${esc(examTitle)}</h2><p>${esc(subject)} · ${esc(className)}</p></div>`;
+    const header=`<div class="paper-head" ${lang==='ar'?'dir="rtl" lang="ar"':''}><img class="exam-logo" src="/letterhead.jpg" alt="GHDD logo"><h1>${esc(schoolName)}</h1><h2>${esc(examTitle)}</h2><p>${esc(subject)} · ${esc(className)}</p></div>`;
     const meta=`<div class="paper-meta"><div><strong>${examText(lang,'name')}:</strong> ________________________</div><div><strong>${examText(lang,'date')}:</strong> ________________________</div><div><strong>${examText(lang,'class')}:</strong> ${esc(className)}</div><div><strong>${examText(lang,'total')}:</strong> ${total}</div></div>`;
-    const examPaper=`<div class="student-paper-no-solutions">${header}${meta}<p><strong>${examText(lang,'instructions')}:</strong> ${esc(instructions)}</p>${renderPaperQuestions(false)}<p><strong>${examText(lang,'total')}: ${total} marks</strong></p></div>`;
-    const answerPaper=`${header}<h2>${examText(lang,'answer')}</h2><p><strong>${examText(lang,'total')}:</strong> ${total}</p>${renderPaperQuestions(true)}`;
+    const examPaper=`<div class="student-paper-no-solutions" ${lang==='ar'?'dir="rtl" lang="ar"':''}>${header}${meta}<p><strong>${examText(lang,'instructions')}:</strong> ${esc(instructions)}</p>${renderPaperQuestions(false)}<p><strong>${examText(lang,'total')}: ${total} ${examText(lang,'marks')}</strong></p></div>`;
+    const answerPaper=`<div ${lang==='ar'?'dir="rtl" lang="ar"':''}>${header}<h2>${examText(lang,'answer')}</h2><p><strong>${examText(lang,'total')}:</strong> ${total} ${examText(lang,'marks')}</p>${renderPaperQuestions(true)}</div>`;
     $('printRoot').innerHTML=`<div class="paper-tools no-print"><button id="printExamOnly">Daabac imtixaanka (jawaabaha ma muuqdaan)</button><button id="printAnswerKey">Daabac answer key</button></div><div id="studentPaper">${examPaper}</div><div id="keyPaper" style="margin-top:35px;border-top:3px double #333;padding-top:18px">${answerPaper}</div>`;
     let preflight={average:0,questions:[],status:'Hubinta tayada lama helin'};
     try{preflight=await api('/api/quality-check',{method:'POST',body:JSON.stringify({questions:qs})});}catch(checkError){console.warn('Quality pre-check unavailable:',checkError.message);}
