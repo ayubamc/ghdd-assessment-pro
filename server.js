@@ -254,6 +254,25 @@ async function enforceQuestionLanguage(questions, targetCode) {
   return { fixed: bad.length - remaining, remaining };
 }
 
+// Step 1 of passage mode: a dedicated request just for the passage (more reliable than asking for it inside the questions JSON).
+async function generatePassage(p, targetLanguage) {
+  const objectives = blueprintObjectives(p.blueprint).map(o => o.text).slice(0, 40);
+  const prompt = `You are an expert ${targetLanguage} language teacher writing the reading passage for a school exam.
+Write ONE original reading passage / story in ${targetLanguage} ONLY for ${p.className || 'the class'} students (subject: ${p.subject || 'language'}). Length 250 to 350 words in 3 to 5 short paragraphs separated by a newline. Build it on a theme, vocabulary and language structures taken from the CURRICULUM TEXT below (do not copy long sentences from it). It must contain enough content to test these learning objectives through questions: ${JSON.stringify(objectives)}. Do not mention Bloom or cognitive levels. Return valid JSON only: {"title":"","text":""}
+CURRICULUM TEXT:
+${String(p.sourceText || p.text || '').slice(0, 30000)}`;
+  let last = '';
+  for (let attempt = 0; attempt < 3; attempt++) {
+    try {
+      const out = await callGeminiJson(prompt, { maxTokens: 16000, temperature: 0.5 });
+      const cand = normalizePassage(out && out.passage ? out.passage : out);
+      if (cand && cand.text.split(/\s+/).length >= 60) return cand;
+      last = 'passage empty or too short';
+    } catch (e) { last = e.message; }
+  }
+  throw new Error('AI did not return a reading passage (' + last + '). Try again.');
+}
+
 async function enforcePassageLanguage(passage, targetCode) {
   const target = normalizeLang(targetCode);
   const d = detectTextLanguage(`${passage.title} ${passage.text}`);
@@ -915,9 +934,10 @@ Source text (content reference only; not the output language):
 ${String(p.sourceText || p.text || '').slice(0, 70000)}
 `;
 
-  const firstBatch = await requestQuestionBatch(buildPrompt(p.count, p.partPlan || []));
+  let passage = null;
+  if (p.passage) passage = await generatePassage(p, targetLanguage);
+  const firstBatch = await requestQuestionBatch(buildPrompt(p.count, p.partPlan || [], [], passage?.text || ''));
   let questions = firstBatch.questions;
-  let passage = firstBatch.passage;
   // If the answer was cut short (long Somali/Arabic exams), ask for ONLY the missing questions and continue.
   for (let round = 0; questions.length < p.count && round < 3; round++) {
     const missing = p.count - questions.length;
