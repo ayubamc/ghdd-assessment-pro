@@ -174,23 +174,6 @@ footer{text-align:center;color:#65738a;padding:22px;font-size:13px}
 @media print{.lesson-plan-card{break-inside:auto}.lesson-plan-card h3,.lesson-plan-card h4{break-after:avoid}}
 
 </style>
-
-<style id="blueprintPrintStyles">
-@media print {
-  body.blueprint-print-mode * { display:none !important; }
-  body.blueprint-print-mode #examBlueprintPreview { display:block !important; position:absolute !important; left:0 !important; top:0 !important; width:100% !important; margin:0 !important; padding:0 !important; color:#111 !important; }
-  body.blueprint-print-mode #examBlueprintPreview .item,
-  body.blueprint-print-mode #examBlueprintPreview p,
-  body.blueprint-print-mode #examBlueprintPreview strong { display:block !important; color:#111 !important; }
-  body.blueprint-print-mode #examBlueprintPreview .table-wrap { display:block !important; overflow:visible !important; }
-  body.blueprint-print-mode #examBlueprintPreview table { display:table !important; width:100% !important; font-size:9pt !important; border-collapse:collapse !important; }
-  body.blueprint-print-mode #examBlueprintPreview thead { display:table-header-group !important; }
-  body.blueprint-print-mode #examBlueprintPreview tbody { display:table-row-group !important; }
-  body.blueprint-print-mode #examBlueprintPreview tr { display:table-row !important; }
-  body.blueprint-print-mode #examBlueprintPreview th,
-  body.blueprint-print-mode #examBlueprintPreview td { display:table-cell !important; border:1px solid #222 !important; padding:5px !important; color:#111 !important; vertical-align:top !important; }
-}
-</style>
 </head>
 <body>
 <header>
@@ -240,6 +223,14 @@ PDF weyn wuxuu u baahan karaa xusuus badan, waqti dheeraad ah iyo kayd PostgreSQ
 
 <label for="bookSubject">Maaddada</label>
 <input id="bookSubject" placeholder="Tusaale: Physics">
+
+<label for="ocrLanguage">Luqadda OCR-ga (bogagga sawirka ah)</label>
+<select id="ocrLanguage">
+  <option value="eng">English / qoraal Latin ah (eng)</option>
+  <option value="ara">Arabic (ara)</option>
+  <option value="eng+ara">English + Arabic (eng+ara)</option>
+</select>
+<p class="muted">Haddii PDF-gu leeyahay qoraal la dooran karo, nidaamku si toos ah ayuu uga soo saarayaa isaga oo aan OCR samayn. Somali Latin ah waxaa la adeegsanayaa engine-ka Latin/English, sidaas darteed bogagga tayadoodu hooseyso dib u eeg.</p>
 
 <label for="bookFile">Dooro PDF (ugu badnaan 500 MB)</label>
 <input id="bookFile" type="file" accept=".pdf,application/pdf">
@@ -292,10 +283,6 @@ PDF weyn wuxuu u baahan karaa xusuus badan, waqti dheeraad ah iyo kayd PostgreSQ
 <p class="muted">Telefoonka ku taabo heer kasta si aad u doorato ama uga saarto.</p>
 <button id="makeExamBlueprint" class="secondary">📐 AI-gu marka hore ha ii sameeyo Blueprint</button>
 <div id="examBlueprintStatus" class="muted" role="status"></div>
-<div class="no-print" style="display:flex;gap:8px;flex-wrap:wrap;margin:10px 0">
-<button id="saveExamBlueprint" class="secondary" type="button">💾 Kaydi Blueprint-ka</button>
-<button id="printExamBlueprint" class="secondary" type="button">🖨️ Daabac Blueprint-ka / PDF</button>
-</div>
 <div id="examBlueprintPreview" class="list"></div>
 <button id="generateExam" class="green">✨ Samee imtixaanka (Blueprint + Su’aalo)</button>
 <p class="muted">AI-gu wuxuu ku salaynayaa su’aalaha qoraalka OCR ee bogagga la doortay. Tirada su’aalaha waad madhan uga tagi kartaa; wadarta dhibcaha waxaa loo qaybinayaa si ay ula ekaato dhibcaha aad dooratay.</p>
@@ -528,8 +515,6 @@ $('uploadBook').onclick=async()=>{
   const title=$('bookTitle').value.trim();
   const subject=$('bookSubject').value.trim();
   const btn=$('uploadBook');
-  let worker=null;
-
   if(!file) return alert('Dooro PDF marka hore.');
   if(file.type!=='application/pdf'&&!file.name.toLowerCase().endsWith('.pdf'))
     return alert('Fadlan dooro fayl PDF ah.');
@@ -555,36 +540,105 @@ $('uploadBook').onclick=async()=>{
 
     progress(3,`PDF-ga wuxuu leeyahay ${pdf.numPages} bog. OCR ayaa bilaabanaya...`);
 
-    // OCR bog-bog
-    const pages=[];
+    // Fast, quality-preserving page pipeline:
+    // - Extract embedded text first on every page; OCR only when needed.
+    // - Process two pages concurrently, each with its own Tesseract worker.
+    // - Keep the same 1.6 render scale and confidence checks to protect quality.
+    const pagesByNumber=new Array(pdf.numPages);
     let ocrCount=0;
+    let embeddedCount=0;
+    let lowQualityCount=0;
+    let processedCount=0;
+    let nextPage=1;
+    const ocrLang=$('ocrLanguage')?.value || 'eng';
+    const OCR_CONCURRENCY=2;
+    const ocrWorkers=[null,null];
 
-    for(let n=1;n<=pdf.numPages;n++){
+    const processPage=async(n,slot)=>{
       const page=await pdf.getPage(n);
-      const content=await page.getTextContent();
-      let text=content.items.map(x=>x.str||'').join(' ').trim();
+      try{
+        const content=await page.getTextContent({disableCombineTextItems:false});
+        let text='';
+        let method='embedded';
+        let confidence=100;
+        try {
+          const lines=[];
+          let line='';
+          for(const item of (content.items||[])){
+            const str=String(item.str||'');
+            if(str) line += (line && item.hasEOL!==true ? ' ' : '') + str;
+            if(item.hasEOL){ if(line.trim()) lines.push(line.trim()); line=''; }
+          }
+          if(line.trim()) lines.push(line.trim());
+          text=lines.join('\n').trim();
+        } catch(_) {
+          text=(content.items||[]).map(x=>x.str||'').join(' ').trim();
+        }
 
-      if(text.length<25){
-        if(!window.Tesseract) throw new Error('OCR lama soo dejin. Hubi internetka.');
-        if(!worker) worker=await Tesseract.createWorker('eng');
-        const viewport=page.getViewport({scale:1.35});
-        const canvas=document.createElement('canvas');
-        canvas.width=Math.ceil(viewport.width);
-        canvas.height=Math.ceil(viewport.height);
-        const ctx=canvas.getContext('2d');
-        await page.render({canvasContext:ctx,viewport}).promise;
-        const result=await worker.recognize(canvas);
-        text=(result.data.text||'').trim();
-        canvas.width=canvas.height=1;
-        ocrCount++;
+        const usefulChars=(text.match(/[A-Za-z0-9\u0600-\u06FF\u0750-\u077F]/g)||[]).length;
+        const usefulRatio=text.length ? usefulChars/text.length : 0;
+        const needsOcr=text.length<35 || usefulRatio<0.42;
+
+        if(needsOcr){
+          if(!window.Tesseract) throw new Error('OCR lama soo dejin. Hubi internetka.');
+          if(!ocrWorkers[slot]){
+            progress(3+Math.round((processedCount/pdf.numPages)*32),`Diyaarinaya OCR (${ocrLang}) — worker ${slot+1}/${OCR_CONCURRENCY}...`);
+            ocrWorkers[slot]=await Tesseract.createWorker(ocrLang,1,{
+              logger:m=>{
+                if(m.status==='recognizing text' && Number.isFinite(m.progress)){
+                  progress(3+Math.round((processedCount/pdf.numPages)*32),`OCR: bogga ${n}/${pdf.numPages} (${Math.round(m.progress*100)}%) · shaqaale ${slot+1}/${OCR_CONCURRENCY}`);
+                }
+              }
+            });
+            try { await ocrWorkers[slot].setParameters({preserve_interword_spaces:'1'}); } catch(_) {}
+          }
+          const viewport=page.getViewport({scale:1.6});
+          const canvas=document.createElement('canvas');
+          canvas.width=Math.ceil(viewport.width);
+          canvas.height=Math.ceil(viewport.height);
+          const ctx=canvas.getContext('2d',{willReadFrequently:false});
+          await page.render({canvasContext:ctx,viewport}).promise;
+          const result=await ocrWorkers[slot].recognize(canvas);
+          const ocrText=String(result.data?.text||'').trim();
+          const rawConfidence=Number(result.data?.confidence);
+          const ocrConfidence=Number.isFinite(rawConfidence)?rawConfidence:null;
+          const ocrUseful=(ocrText.match(/[A-Za-z0-9\u0600-\u06FF\u0750-\u077F]/g)||[]).length;
+          const ocrRatio=ocrText.length ? ocrUseful/ocrText.length : 0;
+          if(ocrText && (text.length<35 || ocrText.length>=text.length || ocrRatio>usefulRatio+0.12)){
+            text=ocrText;
+            method='ocr';
+            confidence=ocrConfidence;
+          }
+          canvas.width=1; canvas.height=1;
+          ocrCount++;
+          if((ocrConfidence!==null&&ocrConfidence<45)||text.length<35) lowQualityCount++;
+        }else{
+          embeddedCount++;
+        }
+        pagesByNumber[n-1]={page:n,text,method,confidence};
+      }finally{
+        page.cleanup?.();
       }
+    };
 
-      pages.push({page:n,text});
-      const pct=3+Math.round((n/pdf.numPages)*32);
-      progress(pct,`Akhrinta bogga ${n}/${pdf.numPages}. OCR waxaa loo adeegsaday ${ocrCount} bog.`);
+    const pageWorker=async(slot)=>{
+      while(true){
+        const n=nextPage++;
+        if(n>pdf.numPages) return;
+        await processPage(n,slot);
+        processedCount++;
+        const pct=3+Math.round((processedCount/pdf.numPages)*32);
+        progress(pct,`Akhrinta ${processedCount}/${pdf.numPages} bog · OCR: ${ocrCount} · qoraal PDF toos ah: ${embeddedCount} · dib-u-eegis: ${lowQualityCount}`);
+      }
+    };
+
+    try{
+      await Promise.all(Array.from({length:Math.min(OCR_CONCURRENCY,pdf.numPages)},(_,slot)=>pageWorker(slot)));
+    }finally{
+      await Promise.all(ocrWorkers.filter(Boolean).map(w=>w.terminate().catch(()=>{})));
+      ocrWorkers.fill(null);
     }
-
-    if(worker){await worker.terminate();worker=null;}
+    const pages=pagesByNumber;
 
     // Bilow kaydinta buugga server-ka.
     const start=await api('/api/books/upload/start',{
@@ -600,29 +654,36 @@ $('uploadBook').onclick=async()=>{
     // faylka oo dhan hal mar.
     const totalChunks=Math.ceil(file.size/CHUNK_BYTES);
 
-    for(let i=0;i<totalChunks;i++){
-      const from=i*CHUNK_BYTES;
-      const to=Math.min(file.size,from+CHUNK_BYTES);
-      const chunk=file.slice(from,to);
-      const encoded=await blobBase64(chunk);
-
-      await api(`/api/books/${encodeURIComponent(bookId)}/chunks/${i}`,{
-        method:'POST',
-        body:JSON.stringify({chunkBase64:encoded})
-      });
-
-      const pct=35+Math.round(((i+1)/totalChunks)*55);
-      progress(pct,`Kaydinta PDF: qaybta ${i+1}/${totalChunks}.`);
-    }
+    let uploadedChunks=0;
+    let nextChunk=0;
+    const uploadChunkWorker=async()=>{
+      while(true){
+        const i=nextChunk++;
+        if(i>=totalChunks) return;
+        const from=i*CHUNK_BYTES;
+        const to=Math.min(file.size,from+CHUNK_BYTES);
+        const encoded=await blobBase64(file.slice(from,to));
+        await api(`/api/books/${encodeURIComponent(bookId)}/chunks/${i}`,{
+          method:'POST', body:JSON.stringify({chunkBase64:encoded})
+        });
+        uploadedChunks++;
+        const pct=35+Math.round((uploadedChunks/totalChunks)*55);
+        progress(pct,`Kaydinta PDF: qaybta ${uploadedChunks}/${totalChunks}.`);
+      }
+    };
+    await Promise.all(Array.from({length:Math.min(2,totalChunks)},()=>uploadChunkWorker()));
 
     progress(93,'PDF-ga waa la kaydiyey. Qoraalka OCR ayaa la dhammeystirayaa...');
 
-    await api(`/api/books/${encodeURIComponent(bookId)}/upload/finish`,{
+    const saved=await api(`/api/books/${encodeURIComponent(bookId)}/upload/finish`,{
       method:'POST',
       body:JSON.stringify({pages})
     });
 
-    progress(100,`Guul! Buugga ${title} waa la kaydiyey. ${pdf.numPages} bog; OCR: ${ocrCount} bog.`);
+    progress(100,`Guul! ${title}: ${pdf.numPages} bog; qoraal PDF toos ah ${embeddedCount}; OCR ${ocrCount}; bogag tayadoodu u baahan karto dib-u-eegis ${Math.max(lowQualityCount,Number(saved.lowConfidencePages)||0)}.`);
+    if(lowQualityCount>0 || Number(saved.lowConfidencePages)>0){
+      console.warn('OCR quality review recommended', {lowQualityCount, saved});
+    }
     $('bookFile').value='';
     $('fileInfo').textContent='Weli PDF lama dooran.';
     await loadBooks();
@@ -633,7 +694,6 @@ $('uploadBook').onclick=async()=>{
     alert('PDF/OCR: '+e.message+
       (bookId?'\nBuugga upload-kiisu wuu bilaabmay. Hubi liiska buugaagta ka hor intaadan mar kale soo gelin.':''));
   }finally{
-    if(worker) try{await worker.terminate()}catch(_){}
     btn.disabled=false;
   }
 };
@@ -770,44 +830,6 @@ async function requestExamBlueprint(sourceText,p){
   renderExamBlueprint(d.blueprint,d.validation);
   return d.blueprint;
 }
-
-function blueprintSaveRecord(){
-  if(!currentExamBlueprint) throw new Error('Marka hore samee Blueprint-ka AI-ga.');
-  const bookId=$('sourceBook').value;
-  const book=books.find(b=>String(b.id)===String(bookId));
-  const start=Number($('startPage').value)||1, end=Number($('endPage').value)||start;
-  const subject=$('genSubject').value.trim()||$('bookSubject').value.trim()||book?.subject||currentExamBlueprint.subject||'';
-  const klass=$('genClass').value.trim();
-  const title=`Blueprint - ${subject||'Imtixaan'} - ${book?.title||'Buugga OCR'} (${start}-${end})`;
-  return {title,subject,klass,totalMarks:Number(currentExamBlueprint.totalMarks)||Number($('genTotalMarks').value)||100,school:'GHDD',blueprint:currentExamBlueprint,data:{kind:'blueprint',sourceBookId:bookId,sourceTitle:book?.title||'',pageRange:{start,end},language:currentExamBlueprint.language||$('examLanguage').value,blueprintKey:currentExamBlueprintKey,savedForReview:true}};
-}
-$('saveExamBlueprint').onclick=async()=>{
-  const status=$('examBlueprintStatus');
-  try{
-    const record=blueprintSaveRecord();
-    const savedBlueprints=JSON.parse(localStorage.getItem('ghdd_saved_exam_blueprints')||'[]');
-    const localRecord={...record,localSavedAt:new Date().toISOString()};
-    savedBlueprints.unshift(localRecord);
-    localStorage.setItem('ghdd_saved_exam_blueprints',JSON.stringify(savedBlueprints.slice(0,100)));
-    try{
-      const result=await api('/api/assessments',{method:'POST',body:JSON.stringify(record)});
-      status.textContent=`Blueprint-ka waa la kaydiyey. Kaydka server-ka ID: ${result.id}. Waxaad dib u eegi kartaa ka hor inta aan imtixaanka la samayn.`;
-      alert('Blueprint-ka waa la kaydiyey (browser-ka iyo database-ka). Hadda waad daabacan kartaa ama dib u eegi kartaa ka hor imtixaanka.');
-    }catch(serverError){
-      status.textContent='Blueprint-ka browser-ka waa la kaydiyey, laakiin database-ka laguma kaydin: '+serverError.message;
-      alert('Blueprint-ka browser-ka waa la kaydiyey. Database-ku ma kaydin: '+serverError.message+' Haddii aad rabto in qalab kale laga helo, hubi xiriirka server-ka.');
-    }
-  }catch(e){status.textContent=e.message;alert(e.message);}
-};
-$('printExamBlueprint').onclick=()=>{
-  if(!currentExamBlueprint)return alert('Marka hore samee Blueprint-ka AI-ga.');
-  const oldTitle=document.title;
-  document.title='GHDD_Exam_Blueprint';
-  document.body.classList.add('blueprint-print-mode');
-  window.print();
-  document.body.classList.remove('blueprint-print-mode');
-  document.title=oldTitle;
-};
 $('makeExamBlueprint').onclick=async()=>{
   const id=$('sourceBook').value, start=Number($('startPage').value), end=Number($('endPage').value);
   const totalMarks=Number($('genTotalMarks').value)||100;
