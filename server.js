@@ -145,6 +145,21 @@ async function initDb() {
       PRIMARY KEY(book_id, chunk_index)
     )
   `);
+
+  // Indexed per-page OCR text makes page-range searches much faster than
+  // loading the entire JSONB document for every request. Old books remain usable.
+  await db(`
+    CREATE TABLE IF NOT EXISTS book_pages(
+      book_id TEXT NOT NULL REFERENCES books(id) ON DELETE CASCADE,
+      page INT NOT NULL,
+      text TEXT NOT NULL DEFAULT '',
+      extraction_method TEXT NOT NULL DEFAULT 'embedded',
+      confidence REAL,
+      char_count INT NOT NULL DEFAULT 0,
+      PRIMARY KEY(book_id, page)
+    )
+  `);
+  await db(`CREATE INDEX IF NOT EXISTS idx_book_pages_book_page ON book_pages(book_id, page)`);
 }
 
 const dbReady = initDb()
@@ -361,7 +376,10 @@ app.post('/api/books/:id/upload/finish', async (req, res) => {
     const cleanPages = pages
       .map(p => ({
         page: Number(p.page),
-        text: String(p.text || '').slice(0, 100000)
+        text: String(p.text || '').slice(0, 100000),
+        method: ['ocr','embedded'].includes(String(p.method || '')) ? String(p.method) : 'embedded',
+        confidence: Number.isFinite(Number(p.confidence)) && p.confidence !== null && p.confidence !== ''
+          ? Math.max(0, Math.min(100, Number(p.confidence))) : null
       }))
       .filter(p =>
         Number.isInteger(p.page) &&
@@ -377,12 +395,37 @@ app.post('/api/books/:id/upload/finish', async (req, res) => {
       WHERE id=$1
     `, [req.params.id, JSON.stringify(cleanPages), chars]);
 
+    // Upsert each page into the indexed table for fast, selective retrieval.
+    // Metadata is optional so legacy clients sending only page/text still work.
+    await db(`
+      INSERT INTO book_pages(book_id, page, text, extraction_method, confidence, char_count)
+      SELECT $1,
+             (x->>'page')::int,
+             COALESCE(x->>'text',''),
+             COALESCE(NULLIF(x->>'method',''), 'embedded'),
+             CASE WHEN x ? 'confidence' AND NULLIF(x->>'confidence','') IS NOT NULL
+                  THEN (x->>'confidence')::real ELSE NULL END,
+             length(COALESCE(x->>'text',''))
+      FROM jsonb_array_elements($2::jsonb) AS x
+      ON CONFLICT(book_id,page) DO UPDATE SET
+        text=EXCLUDED.text,
+        extraction_method=EXCLUDED.extraction_method,
+        confidence=EXCLUDED.confidence,
+        char_count=EXCLUDED.char_count
+    `, [req.params.id, JSON.stringify(cleanPages)]);
+
+    const lowConfidencePages = cleanPages.filter(p =>
+      p.method === 'ocr' && (Number(p.confidence || 0) < 45 || String(p.text || '').trim().length < 35)
+    ).length;
+
     res.json({
       ok: true,
       id: req.params.id,
       pageCount: cleanPages.length,
       textChars: chars,
-      bytes
+      bytes,
+      ocrPages: cleanPages.filter(p => p.method === 'ocr').length,
+      lowConfidencePages
     });
   } catch (e) {
     console.error('Upload finish:', e.message);
@@ -438,28 +481,29 @@ app.get('/api/books/:id/pdf', async (req, res) => {
 app.get('/api/books/:id/text', async (req, res) => {
   try {
     await dbReady;
-
     const start = Math.max(1, Number(req.query.start) || 1);
     const end = Math.max(start, Number(req.query.end) || 100000);
 
-    const r = await db(`
-      SELECT id, title, page_count, pages
-      FROM books WHERE id=$1
-    `, [req.params.id]);
-
-    if (!r.rows.length) {
-      return res.status(404).json({ error: 'Buugga lama helin.' });
-    }
-
+    const r = await db('SELECT id, title, page_count, pages FROM books WHERE id=$1', [req.params.id]);
+    if (!r.rows.length) return res.status(404).json({ error: 'Buugga lama helin.' });
     const b = r.rows[0];
 
-    res.json({
-      id: b.id,
-      title: b.title,
-      pageCount: b.page_count,
-      pages: (b.pages || []).filter(p => p.page >= start && p.page <= end)
-    });
+    const indexed = await db(`
+      SELECT page, text, extraction_method AS method, confidence, char_count
+      FROM book_pages
+      WHERE book_id=$1 AND page BETWEEN $2 AND $3
+      ORDER BY page
+    `, [req.params.id, start, end]);
+
+    // Old books uploaded before the indexed table existed are read from JSONB once;
+    // their next successful upload/refresh will populate book_pages.
+    const pages = indexed.rows.length
+      ? indexed.rows.map(p => ({ page: p.page, text: p.text, method: p.method, confidence: p.confidence, charCount: p.char_count }))
+      : (b.pages || []).filter(p => p.page >= start && p.page <= end);
+
+    res.json({ id: b.id, title: b.title, pageCount: b.page_count, pages });
   } catch (e) {
+    console.error('Book text retrieval:', e.message);
     res.status(500).json({ error: 'Qoraalka bogagga lama soo dejin.' });
   }
 });
