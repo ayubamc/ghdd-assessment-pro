@@ -65,6 +65,8 @@ textarea{min-height:90px}
 .passage-block .passage-title{text-align:center;font-weight:700;font-size:1.08em;margin:2px 14px 8px}
 .passage-block .passage-body{padding:0 20px;line-height:1.95;font-size:1.03em}
 .passage-block .passage-body p{margin:0 0 7px;text-align:justify}
+#dashboard h3{margin-top:20px}
+#dashViewer{margin-top:14px}
 #printBpRoot{display:none;padding:18px;background:#fff;color:#111;font-family:Arial,sans-serif}
 .bp-rules{font-size:12px;margin:10px 0}
 .paper-question{margin:16px 0;break-inside:avoid}
@@ -215,6 +217,7 @@ footer{text-align:center;color:#65738a;padding:22px;font-size:13px}
 <button data-tab="bank">📚 Kaydka su'aalaha</button>
 <button data-tab="books">📖 Buugaagta PDF/OCR</button>
 <button data-tab="lessonplan">🗓️ Lesson Plan + Lesson Note</button>
+<button data-tab="dashboard">🗂️ Dashboard</button>
 <button data-tab="analysis">📊 Falanqayn</button>
 </nav>
 
@@ -224,6 +227,7 @@ footer{text-align:center;color:#65738a;padding:22px;font-size:13px}
 <p>Soo geli buugaagta PDF, OCR ku akhri, dooro bogagga, kadibna ka samee imtixaan.</p>
 <button data-go="books">📖 Fur buugaagta</button>
 <button class="secondary" data-go="builder">Diyaari imtixaan</button>
+<button class="secondary" data-go="dashboard">🗂️ Dashboard</button>
 </div>
 <div class="cards">
 <div class="card"><h3>📖 PDF iyo OCR</h3><p>Buugaagta ku kaydi database-ka si dib loogu isticmaalo.</p></div>
@@ -417,6 +421,19 @@ PDF weyn wuxuu u baahan karaa xusuus badan, waqti dheeraad ah iyo kayd PostgreSQ
   <div id="lessonPlanOutput" class="panel hidden"></div>
 </section>
 
+<section class="tab" id="dashboard">
+<div class="panel">
+<h2>🗂️ Dashboard — Kaydka</h2>
+<p class="muted">Halkan waxaa ku jira imtixaannada iyo Blueprint-yada aad keydisay. Riix <b>Fur</b> si aad u aragto, <b>Daabac</b> si aad u daabacdo, ama <b>Tir</b> si aad u tirtirto.</p>
+<button id="refreshDash" class="secondary">↻ Cusboonaysii</button>
+<h3>📝 Imtixaannada la keydiyay</h3>
+<div id="dashExams" class="list"></div>
+<h3>📐 Blueprint-yada la keydiyay</h3>
+<div id="dashBlueprints" class="list"></div>
+</div>
+<div id="dashViewer"></div>
+</section>
+
 <section class="tab" id="analysis">
 <div class="panel">
 <h2>Falanqaynta tayada</h2>
@@ -486,6 +503,7 @@ function showTab(id){
   if(id==='books') loadBooks();
   if(id==='lessonplan') loadLessonBookOptions();
   if(id==='bank') renderBank();
+  if(id==='dashboard') loadDashboard();
   window.scrollTo({top:0,behavior:'smooth'});
 }
 document.querySelectorAll('[data-tab]').forEach(b=>b.onclick=()=>showTab(b.dataset.tab));
@@ -907,8 +925,9 @@ async function saveCurrentBlueprint(){
   try{localStorage.setItem(BP_STORE,JSON.stringify(list.slice(0,50)));}catch(e){alert('Browser-ka kaydin ma suurtagalin: '+e.message);return;}
   renderSavedBlueprints();
   try{
-    await api('/api/assessments',{method:'POST',body:JSON.stringify({title:entry.title,subject,klass:className,totalMarks:Number(entry.blueprint.totalMarks)||0,school:'GHDD',blueprint:entry.blueprint,data:{kind:'blueprint',language:lang}})});
-    status.textContent='Blueprint-ka waa la keydiyay (PostgreSQL iyo browser-ka).';
+    const savedBp=await api('/api/assessments',{method:'POST',body:JSON.stringify({title:entry.title,subject,klass:className,totalMarks:Number(entry.blueprint.totalMarks)||0,school:'GHDD',blueprint:entry.blueprint,data:{kind:'blueprint',language:lang}})});
+    try{const all=loadSavedBlueprints();const me=all.find(x=>x.id===entry.id);if(me){me.databaseId=savedBp.id;localStorage.setItem(BP_STORE,JSON.stringify(all));}}catch(_){}
+    status.textContent='Blueprint-ka waa la keydiyay (PostgreSQL iyo browser-ka). Waxaad ka heli doontaa tabka 🗂️ Dashboard.';
   }catch(e){
     status.textContent='Blueprint-ka waxaa lagu keydiyay browser-ka; database-ka lama keydin: '+e.message;
   }
@@ -1064,8 +1083,33 @@ $('generateExam').onclick=async()=>{
     $('className').value=className;
     renderQuestions();
 
-    const renderPaperQuestions=(withAnswers)=> {
-       const lang=examLanguage||detectExamLanguage(sourceText);
+    const renderPaperQuestions=(withAnswers)=>paperQuestionsHtml(normalized,passage,lang,withAnswers);
+    const total=buildPrintRoot({lang,examTitle,subject,className,normalized,passage,instructions:$('examInstructions').value});
+    lastGenerated={lang,passage};
+    let preflight={average:0,questions:[],status:'Hubinta tayada lama helin'};
+    try{preflight=await api('/api/quality-check',{method:'POST',body:JSON.stringify({questions:qs})});}catch(checkError){console.warn('Quality pre-check unavailable:',checkError.message);}
+    const traceable=normalized.filter(q=>String(q.sourcePages||'').trim()).length;
+    const topicsCovered=new Set(normalized.map(q=>String(q.topic||'').trim()).filter(Boolean)).size;
+    const qualityIssues=(preflight.questions||[]).reduce((n,q)=>n+(q.quality?.issues?.length||0),0);
+    const objCov=generated.objectiveCoverage||{total:0,covered:0,percent:0,uncovered:[]};
+    const langCheck=generated.languageCheck||{fixed:0,remaining:0};
+    const qualityHtml=`<div class="panel"><h3>📊 Exam Quality Report — Preliminary</h3><div class="grid"><div class="stat"><b>${Number(preflight.average)||0}/100</b><br>Question quality score</div><div class="stat"><b>${Math.round(traceable/Math.max(1,normalized.length)*100)}%</b><br>Source traceability</div><div class="stat"><b>${topicsCovered}</b><br>Topics represented</div><div class="stat"><b>${objCov.total?objCov.percent+'%':'—'}</b><br>Objectives covered (${objCov.covered}/${objCov.total})</div><div class="stat"><b>${qualityIssues}</b><br>Automated issues to review</div></div>${objCov.uncovered&&objCov.uncovered.length?`<p class="muted"><strong>Objectives aan weli su’aal lahayn:</strong> ${objCov.uncovered.map(esc).join(' · ')}. Kordhi tirada su’aalaha ama dib u samee imtixaanka si loo daboolo.</p>`:''}${langCheck.remaining?`<p class="muted">⚠️ ${Number(langCheck.remaining)} su’aalood waxay laga yaabaa inay weli ku jiraan erayo luqad kale ah; dib u eeg ka hor daabacaadda.</p>`:''}<p><strong>Blueprint coverage:</strong> ${(currentExamBlueprint?.coverage||[]).length} topics · ${Number(currentExamBlueprint?.totalMarks)||total} planned marks · ${Number(currentExamBlueprint?.totalQuestions)||normalized.length} planned questions.</p><p class="muted">Warbixintani waa hubin hordhac ah; macallinku waa inuu xaqiijiyaa saxnaanta aqooneed, jawaabaha iyo waafaqsanaanta manhajka ka hor daabacaadda.</p>${(preflight.questions||[]).map((q,idx)=>({q,idx})).filter(x=>x.q.quality?.issues?.length).slice(0,10).map(x=>`<p>Q${x.idx+1}: ${esc((x.q.quality.issues||[]).join('; '))}</p>`).join('')}</div>`;
+    out.innerHTML=`<div class="notice"><strong>Imtixaanka oo dhammaystiran ayaa diyaar ah.</strong><br>Wadarta dhibcaha: ${total}/${total}. Su’aalaha si toos ah ayaa loogu daray imtixaanka; looma baahna inaad mid-mid u riixdo.<br>Dib u eeg su’aalaha, kadib dooro daabacaadda imtixaanka ama answer key-ga.</div>
+      <div class="paper-tools no-print"><button id="previewPrintExam">🖨️ Daabac imtixaanka</button><button id="previewPrintKey" class="secondary">🔑 Daabac answer key</button><button id="previewPrintBoth" class="secondary">Daabac labadaba</button><button id="saveGeneratedExam" class="green">💾 Keydi imtixaanka</button></div>
+      <div class="item"><strong>${esc(examTitle)}</strong><p>${esc(subject)} · ${esc(className)} · ${total} dhibcood · ${normalized.length} su’aalood</p><p>Su’aalaha si toos ah ayaa loogu daray imtixaanka.</p></div>${qualityHtml}${passage?`<div class="passage-block" ${lang==='ar'?'dir="rtl"':''}><div class="passage-head">${esc(examText(lang,'passageLabel'))}</div>${passage.title?`<p class="passage-title">${esc(passage.title)}</p>`:''}<div class="passage-body">${String(passage.text).split(/\n+/).filter(x=>x.trim()).map(x=>`<p>${esc(x)}</p>`).join('')}</div></div>`:''}<h3>Dib u eeg su’aalaha (heerka Bloom macallinka ayaa arka; marka la daabacayo waa libdhaa)</h3><div class="list">${questionCardsHtml(lang,false)}</div>`;
+    $('previewPrintExam').onclick=()=>printSelection('exam');
+    $('previewPrintKey').onclick=()=>printSelection('key');
+    $('previewPrintBoth').onclick=()=>printSelection('both');
+    $('saveGeneratedExam').onclick=saveExamPackage;
+
+        status.textContent=`Guul! ${qs.length} su’aalood ayaa laga sameeyey bogagga ${start}–${end}. Dib u eeg su’aalaha iyo jawaabaha.`;
+  }catch(e){
+    status.textContent='Khalad: '+e.message;
+    alert('Samaynta imtixaanka: '+e.message);
+  }
+};
+
+function paperQuestionsHtml(normalized,passage,lang,withAnswers){
        let lastSection='';
        const passageHtml=passage?`<div class="passage-block"><div class="passage-head">${esc(examText(lang,'passageLabel'))}</div>${passage.title?`<p class="passage-title">${esc(passage.title)}</p>`:''}<div class="passage-body">${String(passage.text).split(/\n+/).filter(x=>x.trim()).map(x=>`<p>${esc(x)}</p>`).join('')}</div></div>`:'';
        const numbers=[];let nn=0;const firstMatch=normalized.find(x=>x.type==='Matching');
@@ -1111,46 +1155,147 @@ $('generateExam').onclick=async()=>{
          }
          return `${sectionHtml}<div class="paper-question structured-box">${questionLine}${diagram}${answerSpace}${answer}${objectiveHtml}</div>`;
        }).join('');
-     };
-    const instructions= $('examInstructions').value.trim()||examText(lang,'allQuestions');
-    const total=normalized.reduce((sum,q)=>sum+q.marks,0);
-    const header=`<div class="paper-head" ${lang==='ar'?'dir="rtl" lang="ar"':''}><img class="exam-logo" src="/letterhead.jpg" alt="GHDD logo"><h1>${esc(schoolName)}</h1><h2>${esc(examTitle)}</h2><p>${esc(subject)} · ${esc(className)}</p></div>`;
-    const meta=`<div class="paper-meta"><div><strong>${examText(lang,'name')}:</strong> ________________________</div><div><strong>${examText(lang,'date')}:</strong> ________________________</div><div><strong>${examText(lang,'class')}:</strong> ${esc(className)}</div><div><strong>${examText(lang,'total')}:</strong> ${total}</div></div>`;
-    const examPaper=`<div class="student-paper-no-solutions" ${lang==='ar'?'dir="rtl" lang="ar"':''}>${header}${meta}<p><strong>${examText(lang,'instructions')}:</strong> ${esc(instructions)}${passage?' '+esc(examText(lang,'passageInstruction')):''}</p>${renderPaperQuestions(false)}<p><strong>${examText(lang,'total')}: ${total} ${examText(lang,'marks')}</strong></p></div>`;
-    const answerPaper=`<div ${lang==='ar'?'dir="rtl" lang="ar"':''}>${header}<h2>${examText(lang,'answer')}</h2><p><strong>${examText(lang,'total')}:</strong> ${total} ${examText(lang,'marks')}</p>${renderPaperQuestions(true)}</div>`;
-    $('printRoot').innerHTML=`<div class="paper-tools no-print"><button id="printExamOnly">Daabac imtixaanka (jawaabaha ma muuqdaan)</button><button id="printAnswerKey">Daabac answer key</button></div><div id="studentPaper">${examPaper}</div><div id="keyPaper" style="margin-top:35px;border-top:3px double #333;padding-top:18px">${answerPaper}</div>`;
-    let preflight={average:0,questions:[],status:'Hubinta tayada lama helin'};
-    try{preflight=await api('/api/quality-check',{method:'POST',body:JSON.stringify({questions:qs})});}catch(checkError){console.warn('Quality pre-check unavailable:',checkError.message);}
-    const traceable=normalized.filter(q=>String(q.sourcePages||'').trim()).length;
-    const topicsCovered=new Set(normalized.map(q=>String(q.topic||'').trim()).filter(Boolean)).size;
-    const qualityIssues=(preflight.questions||[]).reduce((n,q)=>n+(q.quality?.issues?.length||0),0);
-    const objCov=generated.objectiveCoverage||{total:0,covered:0,percent:0,uncovered:[]};
-    const langCheck=generated.languageCheck||{fixed:0,remaining:0};
-    const qualityHtml=`<div class="panel"><h3>📊 Exam Quality Report — Preliminary</h3><div class="grid"><div class="stat"><b>${Number(preflight.average)||0}/100</b><br>Question quality score</div><div class="stat"><b>${Math.round(traceable/Math.max(1,normalized.length)*100)}%</b><br>Source traceability</div><div class="stat"><b>${topicsCovered}</b><br>Topics represented</div><div class="stat"><b>${objCov.total?objCov.percent+'%':'—'}</b><br>Objectives covered (${objCov.covered}/${objCov.total})</div><div class="stat"><b>${qualityIssues}</b><br>Automated issues to review</div></div>${objCov.uncovered&&objCov.uncovered.length?`<p class="muted"><strong>Objectives aan weli su’aal lahayn:</strong> ${objCov.uncovered.map(esc).join(' · ')}. Kordhi tirada su’aalaha ama dib u samee imtixaanka si loo daboolo.</p>`:''}${langCheck.remaining?`<p class="muted">⚠️ ${Number(langCheck.remaining)} su’aalood waxay laga yaabaa inay weli ku jiraan erayo luqad kale ah; dib u eeg ka hor daabacaadda.</p>`:''}<p><strong>Blueprint coverage:</strong> ${(currentExamBlueprint?.coverage||[]).length} topics · ${Number(currentExamBlueprint?.totalMarks)||total} planned marks · ${Number(currentExamBlueprint?.totalQuestions)||normalized.length} planned questions.</p><p class="muted">Warbixintani waa hubin hordhac ah; macallinku waa inuu xaqiijiyaa saxnaanta aqooneed, jawaabaha iyo waafaqsanaanta manhajka ka hor daabacaadda.</p>${(preflight.questions||[]).map((q,idx)=>({q,idx})).filter(x=>x.q.quality?.issues?.length).slice(0,10).map(x=>`<p>Q${x.idx+1}: ${esc((x.q.quality.issues||[]).join('; '))}</p>`).join('')}</div>`;
-    out.innerHTML=`<div class="notice"><strong>Imtixaanka oo dhammaystiran ayaa diyaar ah.</strong><br>Wadarta dhibcaha: ${total}/${total}. Su’aalaha si toos ah ayaa loogu daray imtixaanka; looma baahna inaad mid-mid u riixdo.<br>Dib u eeg su’aalaha, kadib dooro daabacaadda imtixaanka ama answer key-ga.</div>
-      <div class="paper-tools no-print"><button id="previewPrintExam">🖨️ Daabac imtixaanka</button><button id="previewPrintKey" class="secondary">🔑 Daabac answer key</button><button id="previewPrintBoth" class="secondary">Daabac labadaba</button></div>
-      <div class="item"><strong>${esc(examTitle)}</strong><p>${esc(subject)} · ${esc(className)} · ${total} dhibcood · ${normalized.length} su’aalood</p><p>Su’aalaha si toos ah ayaa loogu daray imtixaanka.</p></div>${qualityHtml}${passage?`<div class="passage-block" ${lang==='ar'?'dir="rtl"':''}><div class="passage-head">${esc(examText(lang,'passageLabel'))}</div>${passage.title?`<p class="passage-title">${esc(passage.title)}</p>`:''}<div class="passage-body">${String(passage.text).split(/\n+/).filter(x=>x.trim()).map(x=>`<p>${esc(x)}</p>`).join('')}</div></div>`:''}<h3>Dib u eeg su’aalaha (heerka Bloom macallinka ayaa arka; marka la daabacayo waa libdhaa)</h3><div class="list">${questionCardsHtml(lang,false)}</div>`;
-    function printSelection(which){
-      document.body.classList.add('print-mode');
-      $('studentPaper').style.display=which==='key'?'none':'block';
-      $('keyPaper').style.display=which==='exam'?'none':'block';
-      if(which==='both'){$('keyPaper').style.display='block';}
-      window.print();
-      setTimeout(()=>document.body.classList.remove('print-mode'),700);
-    }
-    $('previewPrintExam').onclick=()=>printSelection('exam');
-    $('previewPrintKey').onclick=()=>printSelection('key');
-    $('previewPrintBoth').onclick=()=>printSelection('both');
-    $('printExamOnly').onclick=()=>printSelection('exam');
-    $('printAnswerKey').onclick=()=>printSelection('key');
+     }
 
-    status.textContent=`Guul! ${qs.length} su’aalood ayaa laga sameeyey bogagga ${start}–${end}. Dib u eeg su’aalaha iyo jawaabaha.`;
+let lastGenerated=null;
+function buildPrintRoot(pkg){
+  const {lang,examTitle,subject,className,normalized,passage}=pkg;
+  const schoolName=schoolNameFor(lang);
+  const instructions=String(pkg.instructions||'').trim()||examText(lang,'allQuestions');
+  const total=normalized.reduce((sum,q)=>sum+(Number(q.marks)||0),0);
+  const header=`<div class="paper-head" ${lang==='ar'?'dir="rtl" lang="ar"':''}><img class="exam-logo" src="/letterhead.jpg" alt="GHDD logo"><h1>${esc(schoolName)}</h1><h2>${esc(examTitle)}</h2><p>${esc(subject)} · ${esc(className)}</p></div>`;
+  const meta=`<div class="paper-meta"><div><strong>${examText(lang,'name')}:</strong> ________________________</div><div><strong>${examText(lang,'date')}:</strong> ________________________</div><div><strong>${examText(lang,'class')}:</strong> ${esc(className)}</div><div><strong>${examText(lang,'total')}:</strong> ${total}</div></div>`;
+  const examPaper=`<div class="student-paper-no-solutions" ${lang==='ar'?'dir="rtl" lang="ar"':''}>${header}${meta}<p><strong>${examText(lang,'instructions')}:</strong> ${esc(instructions)}${passage?' '+esc(examText(lang,'passageInstruction')):''}</p>${paperQuestionsHtml(normalized,passage,lang,false)}<p><strong>${examText(lang,'total')}: ${total} ${examText(lang,'marks')}</strong></p></div>`;
+  const answerPaper=`<div ${lang==='ar'?'dir="rtl" lang="ar"':''}>${header}<h2>${examText(lang,'answer')}</h2><p><strong>${examText(lang,'total')}:</strong> ${total} ${examText(lang,'marks')}</p>${paperQuestionsHtml(normalized,passage,lang,true)}</div>`;
+  $('printRoot').innerHTML=`<div class="paper-tools no-print"><button id="printExamOnly">Daabac imtixaanka (jawaabaha ma muuqdaan)</button><button id="printAnswerKey">Daabac answer key</button></div><div id="studentPaper">${examPaper}</div><div id="keyPaper" style="margin-top:35px;border-top:3px double #333;padding-top:18px">${answerPaper}</div>`;
+  $('printExamOnly').onclick=()=>printSelection('exam');
+  $('printAnswerKey').onclick=()=>printSelection('key');
+  return total;
+}
+function printSelection(which){
+  document.body.classList.add('print-mode');
+  $('studentPaper').style.display=which==='key'?'none':'block';
+  $('keyPaper').style.display=which==='exam'?'none':'block';
+  if(which==='both'){$('keyPaper').style.display='block';}
+  window.print();
+  setTimeout(()=>document.body.classList.remove('print-mode'),700);
+}
+
+async function saveExamPackage(){
+  if(!questions.length)return alert('Ku dar su’aalo marka hore.');
+  const meta=lastGenerated||{};
+  const lang=meta.lang||currentExamLang();
+  const exam={
+    id:currentExamId||uid(),
+    title:$('examName').value.trim()||'Imtixaan',
+    subject:$('subject').value.trim(),
+    className:$('className').value.trim(),
+    instructions:$('examInstructions').value,
+    language:lang,
+    passage:meta.passage||null,
+    questions:JSON.parse(JSON.stringify(questions)),
+    blueprint:currentExamBlueprint||{},
+    totalMarks:questions.reduce((sum,q)=>sum+(Number(q.marks)||0),0),
+    createdAt:new Date().toISOString()
+  };
+  exams.unshift(exam);
+  questionBank.push(...exam.questions.map(q=>({...q,subject:exam.subject,className:exam.className})));
+  try{localStorage.setItem('ghdd_exams',JSON.stringify(exams));localStorage.setItem('ghdd_bank',JSON.stringify(questionBank));}catch(e){console.warn('Local storage full:',e.message);}
+  renderBank();
+  try{
+    const saved=await api('/api/assessments',{method:'POST',body:JSON.stringify({title:exam.title,subject:exam.subject,klass:exam.className,totalMarks:exam.totalMarks,school:'GHDD',blueprint:exam.blueprint,data:{kind:'exam',language:lang,passage:exam.passage,instructions:exam.instructions,questions:exam.questions}})});
+    exam.databaseId=saved.id;
+    try{localStorage.setItem('ghdd_exams',JSON.stringify(exams));}catch(_){}
+    alert('Imtixaanka (iyo Blueprint-ka) waa la keydiyay. Waxaad ka heli doontaa tabka 🗂️ Dashboard.');
   }catch(e){
-    status.textContent='Khalad: '+e.message;
-    alert('Samaynta imtixaanka: '+e.message);
+    alert('Imtixaanka waxaa lagu keydiyay browser-ka, laakiin database-ka lama keydin: '+e.message+'\nHubi furaha maamulka iyo Railway database-ka.');
   }
-};
+}
 
+// ---------------- Dashboard: saved exams + saved blueprints ----------------
+function fmtDate(x){try{return new Date(x).toLocaleString();}catch(_){return '';}}
+async function loadDashboard(){
+  const elE=$('dashExams'),elB=$('dashBlueprints');
+  if(!elE||!elB)return;
+  elE.innerHTML=elB.innerHTML='<div class="item muted">Waa la soo rarayaa...</div>';
+  let rows=[],dbError='';
+  try{const r=await api('/api/assessments');rows=Array.isArray(r)?r:[];}catch(e){dbError=e.message;}
+  const dbIds=new Set(rows.map(r=>r.id));
+  const dbExams=rows.filter(r=>(r.kind||'exam')!=='blueprint').map(r=>({src:'db',id:r.id,title:r.title,subject:r.subject,className:r.klass,marks:r.total_marks,count:r.question_count,date:r.created_at}));
+  const dbBps=rows.filter(r=>r.kind==='blueprint').map(r=>({src:'db',id:r.id,title:r.title,subject:r.subject,className:r.klass,marks:r.total_marks,date:r.created_at}));
+  const locExams=exams.filter(x=>!x.databaseId||!dbIds.has(x.databaseId)).map(x=>({src:'local',id:x.id,title:x.title,subject:x.subject,className:x.className,marks:x.totalMarks,count:(x.questions||[]).length,date:x.createdAt}));
+  const locBps=loadSavedBlueprints().filter(x=>!x.databaseId||!dbIds.has(x.databaseId)).map(x=>({src:'local',id:x.id,title:x.title,subject:x.subject,className:x.className,marks:x.blueprint?.totalMarks,date:x.savedAt}));
+  const card=(x,kind)=>`<div class="item"><b>${esc(x.title||'—')}</b><p class="muted">${esc(x.subject||'')}${x.className?' · '+esc(x.className):''} · ${esc(fmtDate(x.date))}</p><p class="muted">${Number(x.marks)||0} dhibcood${kind==='exam'?' · '+(Number(x.count)||0)+' su’aalood':''} · ${x.src==='db'?'🗄️ Database':'📱 Browser kaliya'}</p><div class="paper-tools no-print"><button class="secondary" data-dash-open="${kind}|${x.src}|${esc(x.id)}">Fur</button>${kind==='exam'?`<button class="secondary" data-dash-print="exam|${x.src}|${esc(x.id)}">🖨️ Imtixaan</button><button class="secondary" data-dash-print="key|${x.src}|${esc(x.id)}">🔑 Answer key</button>`:`<button class="secondary" data-dash-print="bp|${x.src}|${esc(x.id)}">🖨️ Daabac</button>`}<button class="danger" data-dash-del="${kind}|${x.src}|${esc(x.id)}">Tir</button></div></div>`;
+  const listE=[...dbExams,...locExams],listB=[...dbBps,...locBps];
+  elE.innerHTML=(dbError?`<div class="item muted">⚠️ Database-ka lama soo dejin: ${esc(dbError)} (waxaa la muujinayaa kaydka browser-ka).</div>`:'')+(listE.length?listE.map(x=>card(x,'exam')).join(''):'<div class="item muted">Weli imtixaan lama keydin. Samee imtixaan, kadibna riix “💾 Keydi imtixaanka”.</div>');
+  elB.innerHTML=listB.length?listB.map(x=>card(x,'bp')).join(''):'<div class="item muted">Weli Blueprint lama keydin. Samee Blueprint, kadibna riix “💾 Keydi Blueprint”.</div>';
+  document.querySelectorAll('[data-dash-open]').forEach(b=>b.onclick=()=>dashOpen(...b.dataset.dashOpen.split('|')));
+  document.querySelectorAll('[data-dash-print]').forEach(b=>b.onclick=()=>dashPrint(...b.dataset.dashPrint.split('|')));
+  document.querySelectorAll('[data-dash-del]').forEach(b=>b.onclick=()=>dashDelete(...b.dataset.dashDel.split('|')));
+}
+async function fetchSavedPackage(kind,src,id){
+  if(src==='local'){
+    if(kind==='bp'){const x=loadSavedBlueprints().find(y=>y.id===id);return x&&{title:x.title,subject:x.subject,className:x.className,language:x.lang||'so',blueprint:x.blueprint};}
+    const x=exams.find(y=>y.id===id);
+    return x&&{id:x.id,title:x.title,subject:x.subject,className:x.className,instructions:x.instructions,language:x.language||detectExamLanguage((x.questions||[]).map(q=>q.text).join(' ')),passage:x.passage||null,questions:x.questions||[],blueprint:x.blueprint||{},totalMarks:x.totalMarks};
+  }
+  const r=await api('/api/assessments/'+encodeURIComponent(id));
+  const d=r.data||{};
+  const qs=d.questions||[];
+  return {id:r.id,title:r.title,subject:r.subject,className:r.klass,instructions:d.instructions||'',language:d.language||(qs.length?detectExamLanguage(qs.map(q=>q.text).join(' ')):'so'),passage:d.passage||null,questions:qs,blueprint:r.blueprint||{},totalMarks:r.total_marks};
+}
+async function dashOpen(kind,src,id){
+  const viewer=$('dashViewer');
+  viewer.innerHTML='<div class="item muted">Waa la furayaa...</div>';
+  try{
+    const pkg=await fetchSavedPackage(kind,src,id);
+    if(!pkg)throw new Error('Lama helin.');
+    const lang=['en','so','ar'].includes(pkg.language)?pkg.language:'so';
+    if(kind==='bp'){
+      currentExamBlueprint=pkg.blueprint;
+      viewer.innerHTML=`<div class="panel"><h3>${esc(pkg.title)}</h3>${blueprintTableHtml(pkg.blueprint,lang)}<div class="paper-tools no-print"><button id="dashPrintBp">🖨️ Daabac Blueprint</button></div></div>`;
+      $('dashPrintBp').onclick=()=>printBlueprintDoc(pkg.blueprint,lang);
+    }else{
+      questions=pkg.questions;
+      $('examName').value=pkg.title||'';$('subject').value=pkg.subject||'';$('className').value=pkg.className||'';$('examInstructions').value=pkg.instructions||'';
+      const sel=$('examLanguage');if(sel)sel.value=lang;
+      currentExamBlueprint=(pkg.blueprint&&Object.keys(pkg.blueprint).length)?pkg.blueprint:null;
+      currentExamId=null;lastGenerated={lang,passage:pkg.passage};
+      renderQuestions();
+      const total=buildPrintRoot({lang,examTitle:pkg.title||'',subject:pkg.subject||'',className:pkg.className||'',normalized:pkg.questions,passage:pkg.passage,instructions:pkg.instructions||''});
+      viewer.innerHTML=`<div class="panel"><h3>${esc(pkg.title)}</h3><p class="muted">${esc(pkg.subject||'')} · ${esc(pkg.className||'')} · ${total} dhibcood · ${pkg.questions.length} su’aalood</p><div class="paper-tools no-print"><button id="dashPrintExam">🖨️ Daabac imtixaanka</button><button id="dashPrintKey" class="secondary">🔑 Daabac answer key</button><button id="dashPrintBoth" class="secondary">Daabac labadaba</button><button id="dashEdit" class="secondary">✏️ Ku fur Imtixaanka (tafatir)</button></div>${pkg.passage?`<div class="passage-block" ${lang==='ar'?'dir="rtl"':''}><div class="passage-head">${esc(examText(lang,'passageLabel'))}</div>${pkg.passage.title?`<p class="passage-title">${esc(pkg.passage.title)}</p>`:''}<div class="passage-body">${String(pkg.passage.text).split(/\n+/).filter(x=>x.trim()).map(x=>`<p>${esc(x)}</p>`).join('')}</div></div>`:''}<div class="list">${questionCardsHtml(lang,false)}</div></div>`;
+      $('dashPrintExam').onclick=()=>printSelection('exam');
+      $('dashPrintKey').onclick=()=>printSelection('key');
+      $('dashPrintBoth').onclick=()=>printSelection('both');
+      $('dashEdit').onclick=()=>showTab('builder');
+    }
+    viewer.scrollIntoView({behavior:'smooth',block:'start'});
+  }catch(e){viewer.innerHTML=`<div class="item muted">Khalad: ${esc(e.message)}</div>`;}
+}
+async function dashPrint(what,src,id){
+  try{
+    const kind=what==='bp'?'bp':'exam';
+    const pkg=await fetchSavedPackage(kind,src,id);
+    if(!pkg)throw new Error('Lama helin.');
+    const lang=['en','so','ar'].includes(pkg.language)?pkg.language:'so';
+    if(kind==='bp'){printBlueprintDoc(pkg.blueprint,lang);return;}
+    lastGenerated={lang,passage:pkg.passage};
+    buildPrintRoot({lang,examTitle:pkg.title||'',subject:pkg.subject||'',className:pkg.className||'',normalized:pkg.questions,passage:pkg.passage,instructions:pkg.instructions||''});
+    printSelection(what==='key'?'key':'exam');
+  }catch(e){alert('Daabacaadda: '+e.message);}
+}
+async function dashDelete(kind,src,id){
+  if(!confirm('Ma tirtirtaa kaydkan?'))return;
+  try{
+    if(src==='db')await api('/api/assessments/'+encodeURIComponent(id),{method:'DELETE'});
+    else if(kind==='bp')localStorage.setItem(BP_STORE,JSON.stringify(loadSavedBlueprints().filter(x=>x.id!==id)));
+    else{exams=exams.filter(x=>x.id!==id);localStorage.setItem('ghdd_exams',JSON.stringify(exams));}
+    // also drop the browser copy that points to this database record
+    if(src==='db'){exams=exams.filter(x=>x.databaseId!==id);localStorage.setItem('ghdd_exams',JSON.stringify(exams));localStorage.setItem(BP_STORE,JSON.stringify(loadSavedBlueprints().filter(x=>x.databaseId!==id)));renderSavedBlueprints();}
+    $('dashViewer').innerHTML='';
+    loadDashboard();
+  }catch(e){alert('Lama tirtirin: '+e.message);}
+}
 function questionCardsHtml(lg,removable){
   // Bloom badge is for the teacher on screen only (.bloom-preview is hidden when printing; the student paper never contains it).
   const copyLabel={en:'Student copy to be printed',so:'Nuqulka ardayga ee la daabacayo',ar:'نسخة الطالب المطبوعة'}[lg];
@@ -1197,34 +1342,9 @@ $('addQuestion').onclick=()=>{
 };
 $('printExam').onclick=()=>window.print();
 renderSavedBlueprints();
+$('refreshDash').onclick=loadDashboard;
 
-$('saveExam').onclick=async()=>{
-  if(!questions.length)return alert('Ku dar su’aalo marka hore.');
-  const exam={
-    id:currentExamId||uid(),
-    title:$('examName').value.trim()||'Imtixaan',
-    subject:$('subject').value.trim(),
-    className:$('className').value.trim(),
-    instructions:$('examInstructions').value,
-    questions:JSON.parse(JSON.stringify(questions)),
-    blueprint:currentExamBlueprint||{},
-    totalMarks:questions.reduce((sum,q)=>sum+(Number(q.marks)||0),0),
-    createdAt:new Date().toISOString()
-  };
-  exams.unshift(exam);
-  questionBank.push(...exam.questions.map(q=>({...q,subject:exam.subject,className:exam.className})));
-  localStorage.setItem('ghdd_exams',JSON.stringify(exams));
-  localStorage.setItem('ghdd_bank',JSON.stringify(questionBank));
-  renderBank();
-  try{
-    const saved=await api('/api/assessments',{method:'POST',body:JSON.stringify({title:exam.title,subject:exam.subject,klass:exam.className,totalMarks:exam.totalMarks,school:'GHDD',blueprint:exam.blueprint,data:{instructions:exam.instructions,questions:exam.questions}})});
-    exam.databaseId=saved.id;
-    localStorage.setItem('ghdd_exams',JSON.stringify(exams));
-    alert('Imtixaanka iyo AI Blueprint-ka waxaa lagu kaydiyey PostgreSQL iyo browser-ka.');
-  }catch(e){
-    alert('Imtixaanka waxaa lagu kaydiyey browser-ka, laakiin database-ka lama kaydin: '+e.message+'\nHubi furaha maamulka iyo Railway database-ka.');
-  }
-};
+$('saveExam').onclick=saveExamPackage;
 
 function renderBank(){
   const el=$('bankList');
@@ -1317,132 +1437,4 @@ lpEl('loadSchemePdf').onclick=async()=>{
     }
     if(totalChars<80) throw new Error('PDF-ga ma laha qoraal la akhrin karo. Waxaa laga yaabaa inuu yahay scan/sawir. Ma samaynayno OCR; fadlan dooro PDF qoraalkiisu la dooran karo yahay.');
     lpEl('schemeText').value=`SCHEME OF WORK PDF: ${file.name}\nTOTAL PAGES: ${pdf.numPages}\n\n${pages.join('\n\n')}`;
-    status.textContent=`Waa la akhriyey: ${file.name} — ${pdf.numPages} bog, ${totalChars.toLocaleString()} xaraf. OCR lama samayn, buuggana database-ka OCR laguma darin.`;
-  }catch(e){status.textContent='Khalad: '+e.message;alert('Scheme of Work PDF: '+e.message);}
-  finally{btn.disabled=false;}
-};
-
-async function loadSavedOCRText(kind) {
-  const selectId='lpTextbookBook';
-  const startId='lpTextbookStart';
-  const endId='lpTextbookEnd';
-  const targetId='textbookText';
-  const buttonId='loadTextbookOCR';
-  const id=lpEl(selectId).value;
-  if(!id) return alert('Fadlan ka dooro buugga maaddada OCR ee database-ka.');
-  const start=Math.max(1,Number(lpEl(startId).value)||1);
-  const end=Math.max(start,Number(lpEl(endId).value)||start);
-  const book=lessonBooks.find(b=>String(b.id)===String(id));
-  const maxPages=Number(book?.page_count)||end;
-  if(start>maxPages||end>maxPages) return alert(`Bogagga buuggan waxay u dhexeeyaan 1 iyo ${maxPages}.`);
-  const status=lpEl('schemeFileStatus'), btn=lpEl(buttonId);
-  btn.disabled=true;status.textContent='Qoraalka buugga maaddada ee OCR database-ka ayaa la soo qaadanayaa...';
-  try{
-    const data=await api(`/api/books/${encodeURIComponent(id)}/text?start=${start}&end=${end}`,{method:'GET'});
-    const pages=Array.isArray(data.pages)?data.pages:[];
-    const text=pages.map(p=>`[Page ${p.page}]\n${String(p.text||'').trim()}`).filter(x=>x.trim()).join('\n\n');
-    if(text.trim().length<80) throw new Error('Bogagga la doortay qoraal OCR oo ku filan kuma jiraan. Hubi bogagga buugga database-ka.');
-    lpEl(targetId).value=`BOOK: ${data.title||book?.title||''}\nPAGES: ${start}-${end}\n\n${text}`;
-    status.textContent=`Buugga maaddada OCR waa la soo qaaday: ${pages.length} bog — ${data.title||book?.title||''}.`;
-    if(!lpEl('lpSubject').value.trim() && book?.subject) lpEl('lpSubject').value=book.subject;
-  }catch(e){status.textContent='Khalad: '+e.message;alert('Qoraalka OCR: '+e.message);}
-  finally{btn.disabled=false;}
-}
-lpEl('loadTextbookOCR').onclick=()=>loadSavedOCRText('textbook');
-
-function lpList(items) {
-  return Array.isArray(items) && items.length ? `<ul>${items.map(x=>`<li>${lpEsc(x)}</li>`).join('')}</ul>` : '<p>—</p>';
-}
-function renderLessonPackage(pkg) {
-  const output=lpEl('lessonPlanOutput');
-  const lessons=pkg.lessons||[];
-  let content=`<div class="notice"><b>Waxaa la sameeyey ${lessons.length} cashar.</b> Dib u eeg qorshaha iyo qoraallada casharrada. Hubi in mawduucyada ku jira bogagga OCR ee aad dooratay la daboolay.</div>
-    <h2>${lpEsc(pkg.subject||'')} — ${lpEsc(pkg.className||'')}</h2>
-    <p><b>Academic year:</b> ${lpEsc(pkg.academicYear||'')} &nbsp; <b>Teacher:</b> ${lpEsc(pkg.teacherName||'')}</p>
-    <h3>Year overview</h3><p>${lpEsc(pkg.yearOverview||'')}</p>`;
-  if(pkg.assumptions?.length) content+=`<h3>Assumptions / items to verify</h3>${lpList(pkg.assumptions)}`;
-  content+=`<div class="lesson-plan-tools no-print"><button id="lpPrintAll">🖨️ Daabac dhammaan Lesson Plans + Notes</button><button class="secondary" id="lpDownloadJson">Soo dejiso backup (JSON)</button></div>`;
-  lessons.forEach((l,i)=>{
-    const tm=Array.isArray(l.timeManagement)?l.timeManagement:[];
-    const total=tm.reduce((s,t)=>s+Number(t.minutes||0),0);
-    content+=`<article class="lesson-plan-card">
-      <h3>HOWLWADAAG SECONDARY SCHOOL</h3><h4>LESSON PLAN ${lpEsc(pkg.academicYear||'')}</h4>
-      <table><tr><th>Teacher</th><td>${lpEsc(pkg.teacherName||'')}</td><th>Class</th><td>${lpEsc(pkg.className||'')}</td></tr>
-      <tr><th>Subject</th><td>${lpEsc(pkg.subject||'')}</td><th>Date / Day</th><td>${lpEsc(l.date||'________________')}</td></tr>
-      <tr><th>Term / Week</th><td>${lpEsc(l.term||'')} / ${lpEsc(l.week||'')}</td><th>Unit</th><td>${lpEsc(l.unit||'')}</td></tr>
-      <tr><th>Lesson</th><td>${lpEsc(l.lessonTitle||'')}</td><th>Time / Session</th><td>${lpEsc(l.durationMinutes||40)} min / ${lpEsc(l.lessonNumber||i+1)}</td></tr></table>
-      <div class="lp-section-title">Introduction</div><p>${lpEsc(l.introduction||'')}</p>
-      <div class="lp-section-title">Lesson Objectives</div><p>By the end of the lesson, learners should be able to:</p>${lpList(l.objectives)}
-      <div class="lp-section-title">Teaching Methods</div>${lpList(l.teachingMethods)}
-      <div class="lp-section-title">Learning Aids</div>${lpList(l.learningAids)}
-      <div class="lp-section-title">Evaluation</div>${lpList(l.evaluationQuestions)}
-      <div class="lp-section-title">Time Management (${total} min)</div><table><thead><tr><th>Stage / Activity</th><th>Time (min)</th></tr></thead><tbody>${tm.map(t=>`<tr><td>${lpEsc(t.stage||'')}</td><td>${Number(t.minutes||0)}</td></tr>`).join('')}<tr><th>Total</th><th>${total}</th></tr></tbody></table>
-      <div class="lp-section-title">LESSON NOTE — ${lpEsc(l.lessonTitle||'')}</div>
-      <h4>Summary</h4><p>${lpEsc(l.noteSummary||'')}</p>
-      ${(l.noteHeadings||[]).map(n=>`<h4 style="text-align:left">${lpEsc(n.heading||'')}</h4><p>${lpEsc(n.content||'')}</p>`).join('')}
-      <h4 style="text-align:left">Homework</h4><p>${lpEsc(l.homework||'')}</p>
-      <p><i>Scheme topic: ${lpEsc(l.sourceTopic||l.lessonTitle||'')}</i></p>
-    </article>`;
-  });
-  output.innerHTML=content;
-  output.classList.remove('hidden');
-  lpEl('lpPrintAll').onclick=()=>{
-    const oldTitle=document.title; document.title=`Lesson Plans ${pkg.subject||''} ${pkg.academicYear||''}`;
-    document.body.classList.add('lesson-print-mode');
-    const style=document.createElement('style');style.id='lessonPrintTemp';
-    style.textContent='@media print{body.lesson-print-mode>header,body.lesson-print-mode>.wrap>nav,body.lesson-print-mode>footer,body.lesson-print-mode .no-print{display:none!important}body.lesson-print-mode .tab{display:none!important}body.lesson-print-mode #lessonplan{display:block!important}body.lesson-print-mode #lessonplan .panel:first-child,body.lesson-print-mode #lessonplan .panel:nth-child(2){display:none!important}body.lesson-print-mode #lessonPlanOutput{display:block!important;border:0!important;padding:0!important;margin:0!important}body.lesson-print-mode .lesson-plan-card{break-after:page;page-break-after:always}}';
-    document.head.appendChild(style);window.print();
-    setTimeout(()=>{document.body.classList.remove('lesson-print-mode');style.remove();document.title=oldTitle;},700);
-  };
-  lpEl('lpDownloadJson').onclick=()=>{
-    const blob=new Blob([JSON.stringify(pkg,null,2)],{type:'application/json'});
-    const url=URL.createObjectURL(blob);const a=document.createElement('a');
-    a.href=url;a.download=`Lesson_Plans_${(pkg.subject||'subject').replace(/[^a-z0-9_-]/gi,'_')}_${pkg.academicYear||'year'}.json`;a.click();URL.revokeObjectURL(url);
-  };
-}
-
-lpEl('generateLessonYear').onclick=async()=>{
-  const schemeText=lpEl('schemeText').value.trim();
-  const textbookText=lpEl('textbookText').value.trim();
-  if(schemeText.length<80) return alert('Marka hore dooro Scheme of Work PDF oo riix “Akhri Scheme of Work PDF”.');
-  if(textbookText.length<80) return alert('Marka hore soo qaado qoraalka buugga maaddada OCR-ga.');
-  const btn=lpEl('generateLessonYear');
-  const status=lpEl('lpStatus');
-  btn.disabled=true;status.textContent='AI-gu wuxuu qoraalka laga akhriyey Scheme of Work PDF uga raacayaa kala-horraynta sannadka; buugga maaddada wuxuu ka soo qaadanayaa OCR database-ka. Ha xirin bogga...';
-  try {
-    const response=await fetch('/api/lesson-plan/generate',{
-      method:'POST',headers:{'Content-Type':'application/json',...headers()},
-      body:JSON.stringify({
-        schemeText,
-        textbookText,
-        subject:lpEl('lpSubject').value.trim(),
-        className:lpEl('lpClass').value.trim(),
-        teacherName:lpEl('lpTeacher').value.trim(),
-        academicYear:lpEl('lpYear').value.trim()||'2026-2027',
-        language:lpEl('lpLanguage').value,
-        lessonDuration:Number(lpEl('lpDuration').value)||40,
-        lessonsPerWeek:Number(lpEl('lpPerWeek').value)||3,
-        termCount:Number(lpEl('lpTerms').value)||3
-      })
-    });
-    const data=await response.json().catch(()=>({}));
-    if(!response.ok) throw new Error(data.error||`Server error ${response.status}`);
-    generatedLessonPackage=data;renderLessonPackage(data);
-    status.textContent=`Waa diyaar: ${data.lessons.length} cashar ayaa la sameeyey. Hubi natiijada, kadib daabac ama soo dejiso backup.`;
-    lpEl('lessonPlanOutput').scrollIntoView({behavior:'smooth',block:'start'});
-  } catch(e) {
-    status.textContent='Khalad: '+e.message;
-    alert('Lesson Plan + Lesson Note: '+e.message);
-  } finally {btn.disabled=false;}
-};
-
-try{
-  questions=JSON.parse(localStorage.getItem('ghdd_questions')||'[]');
-  questionBank=JSON.parse(localStorage.getItem('ghdd_bank')||'[]');
-  exams=JSON.parse(localStorage.getItem('ghdd_exams')||'[]');
-}catch(_){}
-renderQuestions();
-renderBank();
-</script>
-</body>
-</html>
+    status.textContent=`Waa la akhriyey: ${file.name} — ${pdf.numPages} bog, ${totalChars.toLocaleString()} xaraf. OCR lama samayn,
