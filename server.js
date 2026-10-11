@@ -838,11 +838,24 @@ app.get('/api/assessments', async (req, res) => {
   try {
     await dbReady;
     const r = await db(
-      'SELECT id,title,subject,klass,total_marks,duration,school,created_at FROM assessments ORDER BY created_at DESC LIMIT 100'
+      `SELECT id,title,subject,klass,total_marks,duration,school,created_at,
+              COALESCE(data->>'kind','exam') AS kind,
+              CASE WHEN jsonb_typeof(data->'questions')='array' THEN jsonb_array_length(data->'questions') ELSE 0 END AS question_count
+       FROM assessments ORDER BY created_at DESC LIMIT 200`
     );
     res.json(r.rows);
   } catch (e) {
     res.status(500).json({ error: 'Imtixaannada lama soo dejin.' });
+  }
+});
+
+app.delete('/api/assessments/:id', async (req, res) => {
+  try {
+    await dbReady;
+    const r = await db('DELETE FROM assessments WHERE id=$1', [req.params.id]);
+    res.json({ ok: true, deleted: r.rowCount });
+  } catch (e) {
+    res.status(500).json({ error: 'Lama tirtirin.' });
   }
 });
 
