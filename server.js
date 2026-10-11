@@ -181,7 +181,7 @@ function normalizePassage(p) {
 function passageInstructions(p, passageText, targetLanguage) {
   if (!p.passage) return '';
   if (passageText) {
-    return `PASSAGE MODE: this exam starts with the reading passage below (already written). Base ALL questions on it, in ${targetLanguage}. Question stems should refer to the passage naturally. Do NOT write a new passage and do NOT repeat the passage in your answer.\nPASSAGE:\n<<<${passageText}>>>`;
+    return `PASSAGE MODE: this exam starts with the reading passage below (already written). Base ALL questions on it, in ${targetLanguage}. Question stems should refer to the passage naturally. Do NOT write a new passage and do NOT repeat the passage in your answer. The exam has an open-topic reading passage, but the QUESTIONS are drawn from the CURRICULUM learning objectives of the blueprint, and they must follow the required section plan and question types exactly as given (do not change types or counts). Use the passage as the text for the questions wherever the objective allows it: reading comprehension, meaning/synonym/antonym of words in the passage, grammar, word forms, rhetoric and style taken from the passage's own words and sentences. Other questions may test the curriculum objective directly, in the same language level. Keep stems short and clear in the style of national exams. Every question maps to ONE curriculum objective.\nPASSAGE:\n<<<${passageText}>>>`;
   }
   return `PASSAGE MODE (reading-passage language exam, MOST IMPORTANT): first write ONE original reading passage / story (a "passage" object with "title" and "text" next to "questions") in ${targetLanguage} ONLY. Length 250 to 350 words in 3 to 5 short paragraphs separated by a newline, suited to the class level. The passage must be built on a theme, vocabulary and language structures that come from the supplied curriculum text and blueprint topics (do not copy long sentences from the curriculum). Then write ALL questions so they are answered from the passage and still measure the blueprint learning objectives through it: main idea, details, vocabulary in context, inference, grammar/usage taken from passage sentences, opinion/evaluation, according to each objective's action verb. Question stems may say "according to the passage" naturally (in ${targetLanguage}). The passage must contain everything needed to answer, must not contain Bloom labels, and the answers must not be copied word-for-word into the options as a trick. Do not create diagrams.`;
 }
@@ -258,7 +258,7 @@ async function enforceQuestionLanguage(questions, targetCode) {
 async function generatePassage(p, targetLanguage) {
   const objectives = blueprintObjectives(p.blueprint).map(o => o.text).slice(0, 40);
   const prompt = `You are an expert ${targetLanguage} language teacher writing the reading passage for a school exam.
-Write ONE original reading passage / story in ${targetLanguage} ONLY for ${p.className || 'the class'} students (subject: ${p.subject || 'language'}). Length 250 to 350 words in 3 to 5 short paragraphs separated by a newline. Build it on a theme, vocabulary and language structures taken from the CURRICULUM TEXT below (do not copy long sentences from it). It must contain enough content to test these learning objectives through questions: ${JSON.stringify(objectives)}. Do not mention Bloom or cognitive levels. Return valid JSON only: {"title":"","text":""}
+Write ONE original reading passage in ${targetLanguage} ONLY, in the style of the Somali national examinations, for ${p.className || 'the class'} students (subject: ${p.subject || 'language'}). The topic is OPEN: choose any interesting, educational theme (for example a value such as generosity or cooperation, Somali life and culture, science, nature, health, history, or a short story); it does not have to match a textbook chapter. It is a connected text written in correct, rich, formal language, 350 to 450 words in 4 to 6 paragraphs separated by a newline. Although the topic is free, the language of the passage must serve the CURRICULUM TEXT below: deliberately include varied, clearly identifiable examples of what the curriculum teaches and these learning objectives test (for example grammar structures, word forms such as plurals and verb forms, figures of speech and rhetorical devices, punctuation, rich vocabulary with synonyms and antonyms) so that questions on those objectives can use the words and sentences of the passage. Do not copy long sentences from the curriculum text. Do not mention Bloom or cognitive levels. Objectives to be tested: ${JSON.stringify(objectives)}. Return valid JSON only: {"title":"","text":""}
 CURRICULUM TEXT:
 ${String(p.sourceText || p.text || '').slice(0, 30000)}`;
   let last = '';
@@ -865,7 +865,7 @@ function qualityCheck(q) {
   const text = String(q.question || q.text || '').trim();
   let score = 100;
 
-  if (text.length < 15) {
+  if (text.length < (q.type === 'MCQ' ? 8 : 15)) {
     issues.push('Question is too short');
     score -= 20;
   }
