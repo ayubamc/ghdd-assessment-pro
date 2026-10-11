@@ -444,12 +444,41 @@ PDF weyn wuxuu u baahan karaa xusuus badan, waqti dheeraad ah iyo kayd PostgreSQ
 </section>
 </div>
 
-<footer>GHDD Assessment Pro · Qorshayn wanaagsan · Imtixaan tayo leh</footer>
+<footer>GHDD Assessment Pro · Qorshayn wanaagsan · Imtixaan tayo leh · v13</footer>
 <div id="printRoot"></div>
 <div id="printBpRoot"></div>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
+<script>
+/* GHDD safety net: shows JS errors on screen and keeps the tabs usable even if the main script fails to load. Build r13 */
+(function(){
+  function banner(msg){
+    var b=document.getElementById('jsErrBanner');
+    if(!b){b=document.createElement('div');b.id='jsErrBanner';b.style.cssText='position:fixed;left:0;right:0;bottom:0;z-index:99999;background:#7f1d1d;color:#fff;padding:10px 14px;font:13px/1.45 Arial,sans-serif;white-space:pre-wrap;max-height:45vh;overflow:auto';(document.body||document.documentElement).appendChild(b);}
+    b.textContent=msg;
+  }
+  window.addEventListener('error',function(e){
+    if(e&&e.target&&e.target!==window)return;
+    banner('⚠️ Khalad JavaScript: '+(e.message||'lama garanayo')+(e.lineno?' (line '+e.lineno+')':'')+'\n\nHaddii tabs-ku shaqayn waayaan: hubi in faylka index.html si buuxda loo koobiyeeyay GitHub (dhammaadkiisu waa </html>), kadibna Railway deploy-ka sug oo bogga dib u cusboonaysii.');
+  });
+  window.addEventListener('load',function(){
+    setTimeout(function(){
+      if(!window.__ghddTabs){
+        document.querySelectorAll('[data-tab]').forEach(function(b){b.onclick=function(){
+          var id=b.getAttribute('data-tab');
+          document.querySelectorAll('.tab').forEach(function(x){x.classList.toggle('active',x.id===id)});
+          document.querySelectorAll('nav button').forEach(function(x){x.classList.toggle('active',x.getAttribute('data-tab')===id)});
+          window.scrollTo(0,0);
+        };});
+      }
+      if(!window.__ghddReady&&!document.getElementById('jsErrBanner')){
+        banner('⚠️ Script-ka ugu weyn ma dhammaystirmin (build r13). Faylka index.html waxaa laga yaabaa inuu si buuxda loo koobiyeeyn. Fur GitHub oo hubi dhammaadka faylka.');
+      }
+    },900);
+  });
+})();
+</script>
 <script>
 'use strict';
 
@@ -500,14 +529,17 @@ async function api(url,options={}){
 function showTab(id){
   document.querySelectorAll('.tab').forEach(x=>x.classList.toggle('active',x.id===id));
   document.querySelectorAll('nav button').forEach(x=>x.classList.toggle('active',x.dataset.tab===id));
-  if(id==='books') loadBooks();
-  if(id==='lessonplan') loadLessonBookOptions();
-  if(id==='bank') renderBank();
-  if(id==='dashboard') loadDashboard();
+  try{
+    if(id==='books') loadBooks();
+    if(id==='lessonplan') loadLessonBookOptions();
+    if(id==='bank') renderBank();
+    if(id==='dashboard') loadDashboard();
+  }catch(err){console.error('Tab loader failed:',err);}
   window.scrollTo({top:0,behavior:'smooth'});
 }
 document.querySelectorAll('[data-tab]').forEach(b=>b.onclick=()=>showTab(b.dataset.tab));
 document.querySelectorAll('[data-go]').forEach(b=>b.onclick=()=>showTab(b.dataset.go));
+window.__ghddTabs=true;
 
 async function checkHealth(){
   try{
@@ -1411,30 +1443,4 @@ async function loadLessonBookOptions() {
     lpEl('schemeFileStatus').textContent='Khalad: '+e.message;
   }
 }
-lpEl('refreshLessonBooks').onclick=loadLessonBookOptions;
-
-// Scheme of Work PDF is read from its embedded text layer only. No OCR and no database upload.
-lpEl('loadSchemePdf').onclick=async()=>{
-  const file=lpEl('lpSchemePdf').files[0];
-  const status=lpEl('schemePdfStatus');
-  const btn=lpEl('loadSchemePdf');
-  if(!file) return alert('Fadlan dooro Scheme of Work PDF marka hore.');
-  if(file.type!=='application/pdf'&&!file.name.toLowerCase().endsWith('.pdf')) return alert('Fadlan dooro fayl PDF ah.');
-  if(!window.pdfjsLib) return alert('PDF.js lama helin. Hubi internetka.');
-  btn.disabled=true;status.textContent='PDF-ga ayaa la akhrinayaa (text layer oo keliya; OCR ma jiro)...';
-  try{
-    pdfjsLib.GlobalWorkerOptions.workerSrc='https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
-    const data=await file.arrayBuffer();
-    const pdf=await pdfjsLib.getDocument({data}).promise;
-    if(pdf.numPages>1000) throw new Error('Scheme of Work wuxuu ka badan yahay 1000 bog; fadlan isticmaal PDF-ga Scheme of Work oo keliya.');
-    const pages=[];let totalChars=0;
-    for(let n=1;n<=pdf.numPages;n++){
-      const page=await pdf.getPage(n);
-      const content=await page.getTextContent();
-      const text=content.items.map(item=>item.str||'').join(' ').replace(/\s+/g,' ').trim();
-      if(text) {pages.push(`[Page ${n}]\n${text}`);totalChars+=text.length;}
-      status.textContent=`Akhrinta qoraalka PDF: bogga ${n}/${pdf.numPages}...`;
-    }
-    if(totalChars<80) throw new Error('PDF-ga ma laha qoraal la akhrin karo. Waxaa laga yaabaa inuu yahay scan/sawir. Ma samaynayno OCR; fadlan dooro PDF qoraalkiisu la dooran karo yahay.');
-    lpEl('schemeText').value=`SCHEME OF WORK PDF: ${file.name}\nTOTAL PAGES: ${pdf.numPages}\n\n${pages.join('\n\n')}`;
-    status.textContent=`Waa la akhriyey: ${file.name} — ${pdf.numPages} bog, ${totalChars.toLocaleString()} xaraf. OCR lama samayn,
+lpEl('refreshLessonBooks').onclick=loadL
