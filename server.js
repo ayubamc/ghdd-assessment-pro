@@ -181,7 +181,7 @@ function normalizePassage(p) {
 function passageInstructions(p, passageText, targetLanguage) {
   if (!p.passage) return '';
   if (passageText) {
-    return `PASSAGE MODE: this exam starts with the reading passage below (already written). Base ALL questions on it, in ${targetLanguage}. Question stems should refer to the passage naturally. Do NOT write a new passage and do NOT repeat the passage in your answer. The exam has an open-topic reading passage, but the QUESTIONS are drawn from the CURRICULUM learning objectives of the blueprint, and they must follow the required section plan and question types exactly as given (do not change types or counts). Use the passage as the text for the questions wherever the objective allows it: reading comprehension, meaning/synonym/antonym of words in the passage, grammar, word forms, rhetoric and style taken from the passage's own words and sentences. Other questions may test the curriculum objective directly, in the same language level. Keep stems short and clear in the style of national exams. Every question maps to ONE curriculum objective.\nPASSAGE:\n<<<${passageText}>>>`;
+    return `PASSAGE MODE: this exam starts with the reading passage below (already written). Base ALL questions on it, in ${targetLanguage}. Question stems should refer to the passage naturally. Do NOT write a new passage and do NOT repeat the passage in your answer. The exam has an open-topic reading passage, but the QUESTIONS are drawn from the CURRICULUM learning objectives of the blueprint, and they must follow the required section plan and question types exactly as given (do not change types or counts). Use the passage as the text for the questions wherever the objective allows it: reading comprehension, meaning/synonym/antonym of words in the passage, grammar, word forms, rhetoric and style taken from the passage's own words and sentences. MULTIPLE-CHOICE GROUP RULE (MOST IMPORTANT): every question of type MCQ must be answered from the PASSAGE above and from nothing else: its stem quotes or clearly refers to a word, sentence, idea or example that really appears in the passage (for example the main idea, details, cause and result, inference, the best title, the meaning, synonym or antonym of a quoted word, the grammar or rhetoric of a quoted phrase). The passage was written to carry the curriculum ideas, so these questions still measure the blueprint objectives. Do NOT ask MCQs about authors, poems, lessons or facts that do not appear in the passage. Questions of other types follow the curriculum objectives (and may also use the passage). This rule overrides the source distribution rule for the MCQ group. Keep stems short and clear in the style of national exams. Every question maps to ONE curriculum objective.\nPASSAGE:\n<<<${passageText}>>>`;
   }
   return `PASSAGE MODE (reading-passage language exam, MOST IMPORTANT): first write ONE original reading passage / story (a "passage" object with "title" and "text" next to "questions") in ${targetLanguage} ONLY. Length 250 to 350 words in 3 to 5 short paragraphs separated by a newline, suited to the class level. The passage must be built on a theme, vocabulary and language structures that come from the supplied curriculum text and blueprint topics (do not copy long sentences from the curriculum). Then write ALL questions so they are answered from the passage and still measure the blueprint learning objectives through it: main idea, details, vocabulary in context, inference, grammar/usage taken from passage sentences, opinion/evaluation, according to each objective's action verb. Question stems may say "according to the passage" naturally (in ${targetLanguage}). The passage must contain everything needed to answer, must not contain Bloom labels, and the answers must not be copied word-for-word into the options as a trick. Do not create diagrams.`;
 }
@@ -271,6 +271,45 @@ ${String(p.sourceText || p.text || '').slice(0, 30000)}`;
     } catch (e) { last = e.message; }
   }
   throw new Error('AI did not return a reading passage (' + last + '). Try again.');
+}
+
+// Passage mode: every multiple-choice question must really be answerable from the passage.
+function normToken(w) { return w.replace(/[\u064B-\u065F\u0670]/g, '').replace(/^(?:و)?(?:ال|لل)/, '').replace(/[ةه]$/, ''); }
+function contentTokens(s) { return new Set((String(s || '').toLowerCase().match(/[\p{L}]+/gu) || []).map(normToken).filter(w => w.length >= 3)); }
+function isGroundedInPassage(q, passageSet) {
+  const stemText = String(q.question || q.text || '');
+  const quoted = [...stemText.matchAll(/["“”«»'‘’]([^"“”«»'‘’]{2,40})["“”«»'‘’]/g)].map(m => m[1]);
+  for (const qt of quoted) for (const t of contentTokens(qt)) if (passageSet.has(t)) return true;
+  let hits = 0; for (const t of contentTokens(stemText)) if (passageSet.has(t)) hits++;
+  if (hits >= 2) return true;
+  let oh = 0; for (const t of contentTokens((Array.isArray(q.options) ? q.options : []).join(' '))) if (passageSet.has(t)) oh++;
+  return hits + oh >= 3;
+}
+async function enforcePassageGrounding(questions, passage, p, targetLanguage) {
+  if (!p.passage || !passage?.text) return { rewritten: 0, remaining: 0 };
+  const set = contentTokens(`${passage.title || ''} ${passage.text}`);
+  const isMcq = q => q.type === 'MCQ' || (Array.isArray(q.options) && q.options.length === 4);
+  const bad = questions.map((q, i) => ({ q, i })).filter(({ q }) => isMcq(q) && !isGroundedInPassage(q, set));
+  if (!bad.length) return { rewritten: 0, remaining: 0 };
+  const subset = bad.map(({ q, i }) => ({ index: i, objective: q.objective || '', question: q.question || '', options: q.options || [], answer: q.answer || '' }));
+  const prompt = `Rewrite each multiple-choice question below so that it is answered directly from the PASSAGE (its stem must quote or clearly refer to a word, sentence, idea or example that really appears in the passage), while still measuring the SAME learning objective. Write in ${targetLanguage} ONLY. Exactly four options, ONE clearly correct, plausible distractors of the same kind, and the answer must be the correct option letter (A, B, C or D) matching your new options. Never mention Bloom or cognitive levels. Return valid JSON only: {"questions":[{"index":0,"question":"","options":["","","",""],"answer":"A","objective":""}]}
+PASSAGE:
+${passage.title ? passage.title + '\n' : ''}${passage.text}
+QUESTIONS TO REWRITE:
+${JSON.stringify(subset)}`;
+  try {
+    const out = await callGeminiJson(prompt, { maxTokens: 12000, temperature: 0.2 });
+    for (const f of (Array.isArray(out.questions) ? out.questions : [])) {
+      const t = questions[Number(f.index)];
+      if (!t || !Array.isArray(f.options) || f.options.length !== 4 || !String(f.question || '').trim()) continue;
+      t.question = stripBloomLabels(String(f.question));
+      t.options = f.options.map(o => stripBloomLabels(String(o)));
+      if (String(f.answer || '').trim()) t.answer = String(f.answer).trim();
+      if (String(f.objective || '').trim()) t.objective = String(f.objective).trim();
+    }
+  } catch (e) { console.warn('Passage grounding pass failed:', e.message); }
+  const remaining = questions.filter(q => isMcq(q) && !isGroundedInPassage(q, set)).length;
+  return { rewritten: bad.length - remaining, remaining };
 }
 
 async function enforcePassageLanguage(passage, targetCode) {
@@ -956,6 +995,7 @@ ${String(p.sourceText || p.text || '').slice(0, 70000)}
     await enforcePassageLanguage(passage, p.examLanguage);
   }
   const languageReport = await enforceQuestionLanguage(questions, p.examLanguage);
+  const passageCheck = await enforcePassageGrounding(questions, passage, p, targetLanguage);
   const requestedDiagrams = Math.max(0, Math.min(30, Number(p.diagramCount || 0)));
   // Never expose "undefined" or text-only placeholders as diagrams.
   for (const q of questions) {
@@ -986,6 +1026,7 @@ ${String(p.sourceText || p.text || '').slice(0, 70000)}
     for (const q of questions) { q.diagramSvg = ''; q.diagram = ''; }
   }
   questions.languageReport = languageReport;
+  questions.passageCheck = passageCheck;
   questions.passage = p.passage ? passage : null;
   return questions;
 }
