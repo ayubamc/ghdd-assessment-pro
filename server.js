@@ -33,18 +33,30 @@ if (PUBLIC_DIR) {
   console.error('Could not find Public/index.html');
 }
 
-const pool = process.env.DATABASE_URL
-  ? new Pool({
-      connectionString: process.env.DATABASE_URL,
-      ssl: /railway/i.test(process.env.DATABASE_URL)
-        ? { rejectUnauthorized: false }
-        : false
-    })
-  : null;
+function makePool(url) {
+  return url
+    ? new Pool({
+        connectionString: url,
+        ssl: /railway/i.test(url) ? { rejectUnauthorized: false } : false
+      })
+    : null;
+}
+
+// Main database: exams, question bank, item analysis, app state.
+const pool = makePool(process.env.DATABASE_URL);
+// Optional second database (BOOKS_DATABASE_URL): books, OCR pages and PDF chunks.
+// If it is not set, everything lives in the main database exactly as before.
+const booksPool = process.env.BOOKS_DATABASE_URL ? makePool(process.env.BOOKS_DATABASE_URL) : pool;
+const splitDb = !!process.env.BOOKS_DATABASE_URL && booksPool !== pool;
 
 async function db(sql, params = []) {
   if (!pool) throw new Error('PostgreSQL lama dejin.');
   return pool.query(sql, params);
+}
+
+async function bdb(sql, params = []) {
+  if (!booksPool) throw new Error('PostgreSQL lama dejin.');
+  return booksPool.query(sql, params);
 }
 
 const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || 'change-me';
@@ -412,7 +424,7 @@ async function initDb() {
     )
   `);
 
-  await db(`
+  await bdb(`
     CREATE TABLE IF NOT EXISTS books(
       id TEXT PRIMARY KEY,
       title TEXT NOT NULL,
@@ -427,7 +439,7 @@ async function initDb() {
   `);
 
   // PDF-yada waaweyn waxaa lagu kaydiyaa qaybo database-ka ku jira.
-  await db(`
+  await bdb(`
     CREATE TABLE IF NOT EXISTS book_pdf_chunks(
       book_id TEXT NOT NULL REFERENCES books(id) ON DELETE CASCADE,
       chunk_index INT NOT NULL,
@@ -438,7 +450,7 @@ async function initDb() {
 
   // Indexed per-page OCR text makes page-range searches much faster than
   // loading the entire JSONB document for every request. Old books remain usable.
-  await db(`
+  await bdb(`
     CREATE TABLE IF NOT EXISTS book_pages(
       book_id TEXT NOT NULL REFERENCES books(id) ON DELETE CASCADE,
       page INT NOT NULL,
@@ -449,7 +461,7 @@ async function initDb() {
       PRIMARY KEY(book_id, page)
     )
   `);
-  await db(`CREATE INDEX IF NOT EXISTS idx_book_pages_book_page ON book_pages(book_id, page)`);
+  await bdb(`CREATE INDEX IF NOT EXISTS idx_book_pages_book_page ON book_pages(book_id, page)`);
 }
 
 const dbReady = initDb()
@@ -463,7 +475,8 @@ app.get('/api/health', async (req, res) => {
   try {
     await dbReady;
     await db('SELECT 1');
-    res.json({ ok: true, database: true, maxPdfMB: 500 });
+    if (splitDb) await bdb('SELECT 1');
+    res.json({ ok: true, database: true, booksDatabase: splitDb ? 'separate' : 'same', maxPdfMB: 500 });
   } catch (e) {
     res.status(503).json({ ok: false, error: e.message });
   }
@@ -514,7 +527,7 @@ app.put('/api/state', async (req, res) => {
 app.get('/api/books', async (req, res) => {
   try {
     await dbReady;
-    const r = await db(`
+    const r = await bdb(`
       SELECT id, title, subject, filename, page_count,
              text_chars, created_at
       FROM books
@@ -550,7 +563,7 @@ app.post('/api/books/upload/start', async (req, res) => {
 
     const id = uid();
 
-    await db(`
+    await bdb(`
       INSERT INTO books(
         id, title, subject, filename, page_count, pdf, pages, text_chars
       )
@@ -593,7 +606,7 @@ app.post('/api/books/:id/chunks/:index', async (req, res) => {
       return res.status(413).json({ error: 'Qaybta PDF-gu aad bay u weyn tahay.' });
     }
 
-    const exists = await db('SELECT id FROM books WHERE id=$1', [req.params.id]);
+    const exists = await bdb('SELECT id FROM books WHERE id=$1', [req.params.id]);
 
     if (!exists.rows.length) {
       return res.status(404).json({ error: 'Buugga lama helin.' });
@@ -605,7 +618,7 @@ app.post('/api/books/:id/chunks/:index', async (req, res) => {
       return res.status(400).json({ error: 'Cabbirka qaybta ma saxna.' });
     }
 
-    await db(`
+    await bdb(`
       INSERT INTO book_pdf_chunks(book_id, chunk_index, data)
       VALUES($1,$2,$3)
       ON CONFLICT(book_id,chunk_index)
@@ -629,7 +642,7 @@ app.post('/api/books/:id/upload/finish', async (req, res) => {
       return res.status(400).json({ error: 'Qoraalka OCR waa loo baahan yahay.' });
     }
 
-    const bookResult = await db(
+    const bookResult = await bdb(
       'SELECT id, page_count FROM books WHERE id=$1',
       [req.params.id]
     );
@@ -638,7 +651,7 @@ app.post('/api/books/:id/upload/finish', async (req, res) => {
       return res.status(404).json({ error: 'Buugga lama helin.' });
     }
 
-    const chunkResult = await db(`
+    const chunkResult = await bdb(`
       SELECT COUNT(*)::int AS count,
              COALESCE(SUM(octet_length(data)),0)::bigint AS bytes,
              MIN(chunk_index) AS first_chunk,
@@ -679,7 +692,7 @@ app.post('/api/books/:id/upload/finish', async (req, res) => {
 
     const chars = cleanPages.reduce((sum, p) => sum + p.text.length, 0);
 
-    await db(`
+    await bdb(`
       UPDATE books
       SET pages=$2::jsonb, text_chars=$3
       WHERE id=$1
@@ -687,7 +700,7 @@ app.post('/api/books/:id/upload/finish', async (req, res) => {
 
     // Upsert each page into the indexed table for fast, selective retrieval.
     // Metadata is optional so legacy clients sending only page/text still work.
-    await db(`
+    await bdb(`
       INSERT INTO book_pages(book_id, page, text, extraction_method, confidence, char_count)
       SELECT $1,
              (x->>'page')::int,
@@ -704,6 +717,13 @@ app.post('/api/books/:id/upload/finish', async (req, res) => {
         char_count=EXCLUDED.char_count
     `, [req.params.id, JSON.stringify(cleanPages)]);
 
+    // KEEP_PDF=0: the exams only need the OCR text, so free the PDF space as soon as the text is saved.
+    let pdfKept = true;
+    if (String(process.env.KEEP_PDF ?? '1') === '0') {
+      await bdb('DELETE FROM book_pdf_chunks WHERE book_id=$1', [req.params.id]);
+      pdfKept = false;
+    }
+
     const lowConfidencePages = cleanPages.filter(p =>
       p.method === 'ocr' && (Number(p.confidence || 0) < 45 || String(p.text || '').trim().length < 35)
     ).length;
@@ -714,6 +734,7 @@ app.post('/api/books/:id/upload/finish', async (req, res) => {
       pageCount: cleanPages.length,
       textChars: chars,
       bytes,
+      pdfKept,
       ocrPages: cleanPages.filter(p => p.method === 'ocr').length,
       lowConfidencePages
     });
@@ -728,7 +749,7 @@ app.get('/api/books/:id/pdf', async (req, res) => {
   try {
     await dbReady;
 
-    const r = await db(
+    const r = await bdb(
       'SELECT filename, pdf FROM books WHERE id=$1',
       [req.params.id]
     );
@@ -737,19 +758,24 @@ app.get('/api/books/:id/pdf', async (req, res) => {
       return res.status(404).json({ error: 'Buugga lama helin.' });
     }
 
+    const chunks = await bdb(`
+      SELECT chunk_index, data
+      FROM book_pdf_chunks
+      WHERE book_id=$1
+      ORDER BY chunk_index
+    `, [req.params.id]);
+
+    const legacyPdf = r.rows[0].pdf;
+    if (!chunks.rows.length && !(legacyPdf && legacyPdf.length)) {
+      return res.status(404).json({ error: 'PDF-ga waa la tirtiray (qoraalka OCR ayaa weli la hayaa).' });
+    }
+
     res.status(200);
     res.setHeader('Content-Type', 'application/pdf');
     res.setHeader(
       'Content-Disposition',
       `attachment; filename="${String(r.rows[0].filename || 'book.pdf').replace(/["\r\n]/g, '')}"`
     );
-
-    const chunks = await db(`
-      SELECT chunk_index, data
-      FROM book_pdf_chunks
-      WHERE book_id=$1
-      ORDER BY chunk_index
-    `, [req.params.id]);
 
     if (chunks.rows.length) {
       for (const chunk of chunks.rows) {
@@ -760,7 +786,7 @@ app.get('/api/books/:id/pdf', async (req, res) => {
       return res.end();
     }
 
-    return res.end(r.rows[0].pdf);
+    return res.end(legacyPdf);
   } catch (e) {
     console.error('PDF download:', e.message);
     if (!res.headersSent) res.status(500).json({ error: 'PDF-ga lama soo dejin.' });
@@ -774,11 +800,11 @@ app.get('/api/books/:id/text', async (req, res) => {
     const start = Math.max(1, Number(req.query.start) || 1);
     const end = Math.max(start, Number(req.query.end) || 100000);
 
-    const r = await db('SELECT id, title, page_count, pages FROM books WHERE id=$1', [req.params.id]);
+    const r = await bdb('SELECT id, title, page_count, pages FROM books WHERE id=$1', [req.params.id]);
     if (!r.rows.length) return res.status(404).json({ error: 'Buugga lama helin.' });
     const b = r.rows[0];
 
-    const indexed = await db(`
+    const indexed = await bdb(`
       SELECT page, text, extraction_method AS method, confidence, char_count
       FROM book_pages
       WHERE book_id=$1 AND page BETWEEN $2 AND $3
@@ -801,10 +827,161 @@ app.get('/api/books/:id/text', async (req, res) => {
 app.delete('/api/books/:id', async (req, res) => {
   try {
     await dbReady;
-    const r = await db('DELETE FROM books WHERE id=$1', [req.params.id]);
+    const r = await bdb('DELETE FROM books WHERE id=$1', [req.params.id]);
     res.json({ ok: true, deleted: r.rowCount });
   } catch (e) {
     res.status(500).json({ error: 'Buugga lama tirtirin.' });
+  }
+});
+
+
+// ───────────────────────── Storage management ─────────────────────────
+async function sizeInfo(query) {
+  const total = await query('SELECT pg_database_size(current_database())::bigint AS bytes');
+  const tables = await query(`
+    SELECT relname AS name, pg_total_relation_size(relid)::bigint AS bytes
+    FROM pg_catalog.pg_statio_user_tables
+    ORDER BY pg_total_relation_size(relid) DESC
+  `);
+  return { bytes: Number(total.rows[0].bytes), tables: tables.rows.map(r => ({ name: r.name, bytes: Number(r.bytes) })) };
+}
+
+app.get('/api/storage', async (req, res) => {
+  try {
+    await dbReady;
+    const out = { split: splitDb, keepPdf: String(process.env.KEEP_PDF ?? '1') !== '0' };
+    out.main = await sizeInfo(db);
+    out.books = splitDb ? await sizeInfo(bdb) : out.main;
+    const list = await bdb(`
+      SELECT b.id, b.title, b.page_count, b.text_chars, b.created_at,
+             COALESCE((SELECT SUM(octet_length(c.data)) FROM book_pdf_chunks c WHERE c.book_id = b.id), 0)::bigint AS pdf_bytes,
+             COALESCE(octet_length(b.pdf), 0)::bigint AS legacy_pdf_bytes
+      FROM books b
+      ORDER BY b.created_at DESC
+    `);
+    out.bookList = list.rows.map(r => ({
+      id: r.id, title: r.title, pageCount: r.page_count, textChars: r.text_chars, createdAt: r.created_at,
+      pdfBytes: Number(r.pdf_bytes) + Number(r.legacy_pdf_bytes)
+    }));
+    out.legacyBooks = 0;
+    if (splitDb) {
+      try {
+        const t = await db("SELECT to_regclass('public.books') AS t");
+        if (t.rows[0].t) {
+          const c = await db('SELECT COUNT(*)::int AS n FROM books');
+          out.legacyBooks = c.rows[0].n;
+        }
+      } catch (_) { /* old tables not present */ }
+    }
+    res.json(out);
+  } catch (e) {
+    console.error('Storage info:', e.message);
+    res.status(500).json({ error: 'Macluumaadka kaydka lama helin: ' + e.message });
+  }
+});
+
+// Delete the PDF of ONE book (OCR text, pages and exams stay).
+app.delete('/api/books/:id/pdf', async (req, res) => {
+  try {
+    await dbReady;
+    const r = await bdb('DELETE FROM book_pdf_chunks WHERE book_id=$1', [req.params.id]);
+    await bdb("UPDATE books SET pdf = ''::bytea WHERE id=$1 AND octet_length(pdf) > 0", [req.params.id]);
+    let compacted = false;
+    try { await bdb('VACUUM FULL book_pdf_chunks'); compacted = true; }
+    catch (e) { console.warn('VACUUM FULL skipped:', e.message); }
+    res.json({ ok: true, deletedChunks: r.rowCount, compacted });
+  } catch (e) {
+    console.error('Delete PDF:', e.message);
+    res.status(500).json({ error: 'PDF-ga lama tirtirin: ' + e.message });
+  }
+});
+
+// Delete the PDFs of ALL books at once. TRUNCATE gives the disk space back immediately.
+app.post('/api/storage/purge-pdfs', async (req, res) => {
+  try {
+    await dbReady;
+    if (req.body?.confirm !== true) return res.status(400).json({ error: 'Xaqiijin ayaa loo baahan yahay.' });
+    const before = await sizeInfo(bdb);
+    await bdb('TRUNCATE TABLE book_pdf_chunks');
+    await bdb("UPDATE books SET pdf = ''::bytea WHERE octet_length(pdf) > 0");
+    let compacted = false;
+    try { await bdb('VACUUM FULL books'); compacted = true; }
+    catch (e) { console.warn('VACUUM FULL skipped:', e.message); }
+    const after = await sizeInfo(bdb);
+    res.json({ ok: true, beforeBytes: before.bytes, afterBytes: after.bytes, compacted });
+  } catch (e) {
+    console.error('Purge PDFs:', e.message);
+    res.status(500).json({ error: 'PDF-yada lama tirtirin: ' + e.message });
+  }
+});
+
+// Move books (OCR text only, no PDF) from the old main database into the separate books database.
+app.post('/api/storage/migrate-books', async (req, res) => {
+  try {
+    await dbReady;
+    if (!splitDb) return res.status(400).json({ error: 'BOOKS_DATABASE_URL lama dejin; database labaad ma jiro.' });
+    if (req.body?.confirm !== true) return res.status(400).json({ error: 'Xaqiijin ayaa loo baahan yahay.' });
+    const deleteOld = req.body?.deleteOld !== false;
+
+    const t = await db("SELECT to_regclass('public.books') AS t");
+    if (!t.rows[0].t) return res.json({ ok: true, migrated: 0, skipped: 0, note: 'Buugaag ma jiraan database-ka hore.' });
+
+    const list = await db('SELECT id, title, subject, filename, page_count, pages, text_chars, created_at FROM books ORDER BY created_at');
+    let migrated = 0, skipped = 0, failed = 0;
+    for (const b of list.rows) {
+      try {
+        const exists = await bdb('SELECT 1 FROM books WHERE id=$1', [b.id]);
+        const srcCount = (await db('SELECT COUNT(*)::int AS n FROM book_pages WHERE book_id=$1', [b.id])).rows[0].n;
+        if (!exists.rows.length) {
+          // Keep the legacy pages JSON only when the indexed page table has no rows for this book.
+          const legacyPages = srcCount === 0 ? JSON.stringify(b.pages || []) : '[]';
+          await bdb(
+            'INSERT INTO books(id, title, subject, filename, page_count, pdf, pages, text_chars, created_at) VALUES($1,$2,$3,$4,$5,$6,$7::jsonb,$8,$9)',
+            [b.id, b.title, b.subject, b.filename, b.page_count, Buffer.alloc(0), legacyPages, b.text_chars, b.created_at]
+          );
+        } else {
+          skipped++;
+        }
+        let offset = 0;
+        for (;;) {
+          const pg = await db(
+            'SELECT page, text, extraction_method, confidence, char_count FROM book_pages WHERE book_id=$1 ORDER BY page LIMIT 200 OFFSET $2',
+            [b.id, offset]
+          );
+          if (!pg.rows.length) break;
+          await bdb(`
+            INSERT INTO book_pages(book_id, page, text, extraction_method, confidence, char_count)
+            SELECT $1, t.page, t.text, t.method, t.confidence, t.chars
+            FROM unnest($2::int[], $3::text[], $4::text[], $5::real[], $6::int[]) AS t(page, text, method, confidence, chars)
+            ON CONFLICT(book_id, page) DO NOTHING
+          `, [
+            b.id,
+            pg.rows.map(r => r.page),
+            pg.rows.map(r => r.text),
+            pg.rows.map(r => r.extraction_method),
+            pg.rows.map(r => r.confidence),
+            pg.rows.map(r => r.char_count)
+          ]);
+          offset += pg.rows.length;
+        }
+        const dstCount = (await bdb('SELECT COUNT(*)::int AS n FROM book_pages WHERE book_id=$1', [b.id])).rows[0].n;
+        if (dstCount !== srcCount) throw new Error(`Bogagga ma isle'eka: ${srcCount} vs ${dstCount}`);
+        if (!exists.rows.length) migrated++;
+      } catch (e) {
+        failed++;
+        console.error('Migrate book failed:', b.id, e.message);
+      }
+    }
+
+    let oldCleared = false;
+    if (deleteOld && failed === 0) {
+      await db('TRUNCATE TABLE book_pdf_chunks, book_pages, books');
+      oldCleared = true;
+    }
+    res.json({ ok: failed === 0, migrated, skipped, failed, oldCleared });
+  } catch (e) {
+    console.error('Migrate books:', e.message);
+    res.status(500).json({ error: 'Wareejinta buugaagta way fashilantay: ' + e.message });
   }
 });
 
