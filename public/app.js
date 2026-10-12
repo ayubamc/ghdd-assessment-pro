@@ -763,6 +763,45 @@ async function saveExamPackage(){
 }
 
 // ---------------- Dashboard: saved exams + saved blueprints ----------------
+function fmtBytes(n){n=Number(n)||0;if(n>=1073741824)return (n/1073741824).toFixed(2)+' GB';if(n>=1048576)return (n/1048576).toFixed(1)+' MB';if(n>=1024)return Math.round(n/1024)+' KB';return n+' B';}
+async function loadStorage(){
+  const el=$('dashStorage');if(!el)return;
+  el.innerHTML='<div class="item muted">Waa la soo rarayaa...</div>';
+  let st;
+  try{st=await api('/api/storage');}catch(e){el.innerHTML=`<div class="item muted">⚠️ Macluumaadka kaydka lama helin: ${esc(e.message)}</div>`;return;}
+  const top=info=>(info.tables||[]).slice(0,4).map(t=>`${esc(t.name)}: ${fmtBytes(t.bytes)}`).join(' · ');
+  let h=`<div class="item"><b>🗄️ Database-ka imtixaannada</b><p class="muted">Wadarta: <b>${fmtBytes(st.main.bytes)}</b> · ${top(st.main)}</p>`;
+  if(st.split){
+    h+=`<b>📚 Database-ka buugaagta (OCR)</b><p class="muted">Wadarta: <b>${fmtBytes(st.books.bytes)}</b> · ${top(st.books)}</p><p class="muted">✅ Buugaagta iyo imtixaannadu waa kala gooni: AI-gu wuxuu qoraalka ka qaadaa database-ka buugaagta, imtixaannada oo keliya ayaa lagu keydiyaa kan kale.</p>`;
+  }else{
+    h+=`<p class="muted">Buugaagta iyo imtixaannadu waxay ku jiraan isla database-ka. Si aad u kala saarto: Railway → project-kaaga → <b>+ New → Database → PostgreSQL</b>, kadibna service-ka <b>ghdd-assessment-pro → Variables</b> ku dar <code>BOOKS_DATABASE_URL</code> = <code>\${{Postgres-XXXX.DATABASE_URL}}</code> (magaca Postgres-ka cusub). Kadib re-deploy.</p>`;
+  }
+  h+=`<div class="paper-tools no-print">`;
+  if(st.split&&st.legacyBooks>0)h+=`<button id="stMigrate" class="green">📦 U wareeji ${st.legacyBooks} buug database-ka buugaagta (PDF-yada waa la ka tirayaa)</button>`;
+  h+=`<button id="stPurge" class="danger">🗑️ Ka tir PDF-yada oo dhan (qoraalka ilaali)</button><button id="stRefresh" class="secondary">↻ Cusboonaysii</button></div></div>`;
+  h+=(st.bookList||[]).map(b=>`<div class="item"><b>${esc(b.title||'—')}</b><p class="muted">${Number(b.pageCount)||0} bog · qoraal: ${Number(b.textChars)||0} xaraf · PDF: <b>${fmtBytes(b.pdfBytes)}</b></p>${Number(b.pdfBytes)>0?`<div class="paper-tools no-print"><button class="danger" data-st-pdf="${esc(b.id)}">Ka tir PDF-ka kaliya</button></div>`:'<p class="muted">PDF-ga waa la tirtiray; qoraalka ayaa la hayaa.</p>'}</div>`).join('');
+  el.innerHTML=h;
+  $('stRefresh').onclick=loadStorage;
+  $('stPurge').onclick=async()=>{
+    if(!confirm('Ma tirtirtaa PDF-yada buugaagta oo dhan?\n\nQoraalka OCR, imtixaannada iyo Blueprint-yada waa hadhayaan. Kaliya PDF-yada asalka ah ayaa lumaya (ma awoodid inaad dib u soo dejiso PDF-ka).'))return;
+    try{const r=await api('/api/storage/purge-pdfs',{method:'POST',body:JSON.stringify({confirm:true})});alert('PDF-yada waa la tirtiray.\nHore: '+fmtBytes(r.beforeBytes)+' → Hadda: '+fmtBytes(r.afterBytes)+(r.compacted?'':'\n(Meesha si buuxda looma siidaynin; haddii Railway weli muujiyo buuxsan, mar kale isku day.)'));}
+    catch(e){alert('Khalad: '+e.message);}
+    loadStorage();
+  };
+  const mg=$('stMigrate');
+  if(mg)mg.onclick=async()=>{
+    if(!confirm('Ma u wareejisaa buugaagta database-ka buugaagta?\n\nWaxaa la koobiyeynayaa qoraalka OCR kaliya. Kadib database-ka hore waxaa laga tirtirayaa buugaagta iyo PDF-yadooda (si meel looga bixiyo).'))return;
+    mg.disabled=true;mg.textContent='Waa la wareejinayaa...';
+    try{const r=await api('/api/storage/migrate-books',{method:'POST',body:JSON.stringify({confirm:true,deleteOld:true})});alert('Wareejinta: '+(r.migrated||0)+' buug la wareejiyay'+(r.skipped?', '+r.skipped+' hore u jiray':'')+(r.failed?', '+r.failed+' fashilmay (database-ka hore lama tirtirin)':'')+(r.oldCleared?'. Database-ka hore waa la nadiifiyay.':'.'));}
+    catch(e){alert('Khalad: '+e.message);}
+    loadStorage();
+  };
+  el.querySelectorAll('[data-st-pdf]').forEach(btn=>btn.onclick=async()=>{
+    if(!confirm('Ma tirtirtaa PDF-ka buuggan? Qoraalka OCR waa hadhayaa.'))return;
+    try{await api('/api/books/'+encodeURIComponent(btn.dataset.stPdf)+'/pdf',{method:'DELETE'});}catch(e){alert('Khalad: '+e.message);}
+    loadStorage();
+  });
+}
 function fmtDate(x){try{return new Date(x).toLocaleString();}catch(_){return '';}}
 async function loadDashboard(){
   const elE=$('dashExams'),elB=$('dashBlueprints');
@@ -779,6 +818,7 @@ async function loadDashboard(){
   const listE=[...dbExams,...locExams],listB=[...dbBps,...locBps];
   elE.innerHTML=(dbError?`<div class="item muted">⚠️ Database-ka lama soo dejin: ${esc(dbError)} (waxaa la muujinayaa kaydka browser-ka).</div>`:'')+(listE.length?listE.map(x=>card(x,'exam')).join(''):'<div class="item muted">Weli imtixaan lama keydin. Samee imtixaan, kadibna riix “💾 Keydi imtixaanka”.</div>');
   elB.innerHTML=listB.length?listB.map(x=>card(x,'bp')).join(''):'<div class="item muted">Weli Blueprint lama keydin. Samee Blueprint, kadibna riix “💾 Keydi Blueprint”.</div>';
+  loadStorage();
   document.querySelectorAll('[data-dash-open]').forEach(b=>b.onclick=()=>dashOpen(...b.dataset.dashOpen.split('|')));
   document.querySelectorAll('[data-dash-print]').forEach(b=>b.onclick=()=>dashPrint(...b.dataset.dashPrint.split('|')));
   document.querySelectorAll('[data-dash-del]').forEach(b=>b.onclick=()=>dashDelete(...b.dataset.dashDel.split('|')));
