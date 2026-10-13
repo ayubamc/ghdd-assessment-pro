@@ -115,6 +115,104 @@ function stripBloomFromQuestion(q) {
   return q;
 }
 
+
+// ───────────────────────── Math notation, source-citation and passage-MCQ helpers ─────────────────────────
+function isMathSubject(subject) {
+  return /xisaab|math|رياضيات|حساب|algebra|geometry|joometri|هندسة|جبر/i.test(String(subject || ''));
+}
+const SUP = { '0':'⁰','1':'¹','2':'²','3':'³','4':'⁴','5':'⁵','6':'⁶','7':'⁷','8':'⁸','9':'⁹','+':'⁺','-':'⁻','−':'⁻','=':'⁼','(':'⁽',')':'⁾','n':'ⁿ','i':'ⁱ' };
+const SUB = { '0':'₀','1':'₁','2':'₂','3':'₃','4':'₄','5':'₅','6':'₆','7':'₇','8':'₈','9':'₉','+':'₊','-':'₋','−':'₋' };
+function toScript(str, map) {
+  const chars = [...String(str).replace(/\s+/g, '')];
+  return chars.length && chars.every(c => map[c]) ? chars.map(c => map[c]).join('') : null;
+}
+function wrapIfComplex(x) {
+  const t = String(x).trim();
+  return /^[\p{L}\p{N}.√π°²³]+$/u.test(t) ? t : '(' + t + ')';
+}
+// Turns LaTeX / markdown leftovers into plain textbook-style math text (Unicode), and removes decorative symbols.
+function cleanMathText(text) {
+  if (typeof text !== 'string' || !text) return text;
+  let t = text;
+  // math delimiters
+  t = t.replace(/\$\$([\s\S]*?)\$\$/g, '$1').replace(/\$([^$\n]*)\$/g, '$1').replace(/\\\(|\\\)|\\\[|\\\]/g, '');
+  // \text{...}, \mathrm{...}, \textbf{...}
+  t = t.replace(/\\(?:text|mathrm|textbf|mathbf|operatorname)\s*\{([^{}]*)\}/g, '$1');
+  // fractions and roots (repeat for simple nesting)
+  for (let i = 0; i < 4; i++) {
+    t = t.replace(/\\[dt]?frac\s*\{([^{}]*)\}\s*\{([^{}]*)\}/g, (_, a, b) => `${wrapIfComplex(a)}/${wrapIfComplex(b)}`);
+    t = t.replace(/\\sqrt\s*\[([^\]]*)\]\s*\{([^{}]*)\}/g, (_, n, x) => `${toScript(n, SUP) || '^(' + n + ')'}√${wrapIfComplex(x)}`);
+    t = t.replace(/\\sqrt\s*\{([^{}]*)\}/g, (_, x) => `√${wrapIfComplex(x)}`);
+  }
+  // degrees: ^\circ, ^{\circ}
+  t = t.replace(/\^\s*(?:\{\s*\\circ\s*\}|\\circ)/g, '°');
+  const sym = { times:'×', div:'÷', cdot:'·', pm:'±', mp:'∓', leq:'≤', le:'≤', geq:'≥', ge:'≥', neq:'≠', ne:'≠', approx:'≈', pi:'π', infty:'∞', therefore:'∴', angle:'∠', triangle:'△', perp:'⊥', parallel:'∥', circ:'°', degree:'°', alpha:'α', beta:'β', theta:'θ', sum:'Σ', Delta:'Δ', rightarrow:'→', to:'→', in:'∈', cup:'∪', cap:'∩', subset:'⊂', emptyset:'∅', sim:'∼', cong:'≅' };
+  t = t.replace(/\\([A-Za-z]+)/g, (m, name) => {
+    if (name === 'left' || name === 'right' || name === 'displaystyle' || name === 'quad' || name === 'qquad') return '';
+    return sym[name] !== undefined ? sym[name] : name;   // unknown command: keep the plain word, drop the backslash
+  });
+  t = t.replace(/\\[,;:! ]/g, ' ').replace(/\\%/g, '%').replace(/\\&/g, '&').replace(/\\/g, '');
+  // superscripts / subscripts
+  t = t.replace(/\^\{([^{}]*)\}/g, (m, x) => toScript(x, SUP) || `^(${x})`);
+  t = t.replace(/(?<=[\p{L}\p{N})\]])\^(-?[0-9n])(?![\p{L}\p{N}])/gu, (m, x) => toScript(x, SUP) || m);
+  t = t.replace(/_\{([^{}]*)\}/g, (m, x) => toScript(x, SUB) || x);
+  t = t.replace(/(?<=[\p{L}])_([0-9])/gu, (m, x) => SUB[x]);
+  // markdown and decorative symbols
+  t = t.replace(/\*\*([^*]+)\*\*/g, '$1').replace(/`+/g, '').replace(/^\s{0,3}#{1,6}\s+/gm, '');
+  t = t.replace(/(?<=[0-9A-Za-z)\]])\s*\*\s*(?=[0-9A-Za-z(\[])/g, ' × ').replace(/(?<=[0-9A-Za-z)\]])\s*\*\s*(?=[0-9A-Za-z(\[])/g, ' × ');
+  t = t.replace(/\*+/g, '');
+  t = t.replace(/[\u{1F300}-\u{1FAFF}\u{2600}-\u{27BF}\u{FE0F}]/gu, '');
+  t = t.replace(/\bundefined\b|\bNaN\b/g, '');
+  t = t.replace(/([.,;:!?])\1{1,}/g, '$1').replace(/[ \t]{2,}/g, ' ').replace(/\s+([,.;:?!])/g, '$1');
+  return t.trim();
+}
+function mapQuestionText(q, fn) {
+  for (const k of ['question', 'text', 'answer', 'topic', 'objective']) if (typeof q[k] === 'string') q[k] = fn(q[k]);
+  if (Array.isArray(q.options)) q.options = q.options.map(o => fn(String(o)));
+  if (Array.isArray(q.matches)) q.matches = q.matches.map(m => (m && typeof m === 'object') ? { ...m, question: fn(String(m.question || '')), answer: fn(String(m.answer || '')) } : m);
+  return q;
+}
+
+// Source citations ("bogga 5aad", "page 5", "sida buugga ku qoran") must never appear in the question: the question is simply asked.
+const PG_WORD = '(?:bogga|boga|bog|bogagga|page|pages|pg|pp|p|الصفحة|صفحة|صفحات|ص)';
+const PG_NUM = '\\d+(?:\\s*-?\\s*(?:aad|ad|aad\\.|-aad))?(?:\\s*(?:-|–|ilaa|iyo|to|and|إلى|و)\\s*\\d+(?:\\s*-?\\s*(?:aad|ad))?)?';
+const CITE_LEAD = '(?:(?:sida|siday|sidii)\\s+(?:uu\\s+|ay\\s+|ku\\s+|ay\\s+ku\\s+)?)?(?:(?:ku\\s+)?(?:xusan|qoran|sharaxan|jira|taxan|muuqda|ka\\s+muuqda|ka\\s+jira|ka\\s+hadlaya|ku\\s+saabsan)\\s+(?:tahay\\s+)?)?(?:ee\\s+|ka\\s+|gudaha\\s+|dhexdiisa\\s+)?';
+const CITE_EN = '(?:according\\s+to|as\\s+(?:stated|shown|given|written|explained|described|mentioned)\\s+(?:in|on)|based\\s+on|from|in|on|see|refer\\s+to)\\s+(?:the\\s+)?';
+const CITE_AR = '(?:حسب|وفق[اً]?|كما\\s+(?:ورد|جاء|هو\\s+مذكور)\\s+(?:في)?|في|من|انظر)\\s*';
+const BOOK_WORD = '(?:buugga|buuga|buugaag|qoraalka\\s+buugga|textbook|the\\s+book|the\\s+text\\s*book|الكتاب\\s+المدرسي|الكتاب)';
+function stripSourceCitations(text) {
+  if (typeof text !== 'string' || !text) return text;
+  let t = text;
+  const flags = 'giu';
+  // 1. bracketed citation: (bogga 5aad) [Page 5] (p. 12-14) (Isha: bogga 5)
+  t = t.replace(new RegExp(`\\s*[\\(\\[（]\\s*(?:(?:isha|source|المصدر)\\s*[:：-]\\s*)?(?:${BOOK_WORD}\\s*[,،:-]?\\s*)?${PG_WORD}\\s*\\.?\\s*${PG_NUM}\\s*[\\)\\]）]`, flags), '');
+  // 2. "[PAGE 5]" markers the model may copy from the source text
+  t = t.replace(/\s*\[\s*PAGE\s*\d+\s*\]\s*/gi, ' ');
+  // 3. Somali: "Sida ku xusan bogga 5aad, ...", "Bogga 5aad ku jira ..., ", "Su'aasha bogga 5aad: ..." at the start
+  t = t.replace(new RegExp(`^\\s*(?:su['’]?aasha\\s+)?${CITE_LEAD}(?:${BOOK_WORD}\\s+)?${PG_WORD}\\s*\\.?\\s*${PG_NUM}\\s*(?:ku\\s+(?:xusan|qoran|jira)\\s*)?[,:;\\-–—]?\\s*`, flags), '');
+  // 4. English / Arabic leading clause: "According to page 5, ..." "On page 5: ..." "في الصفحة 5 ..."
+  t = t.replace(new RegExp(`^\\s*${CITE_EN}${PG_WORD}\\s*\\.?\\s*${PG_NUM}\\s*[,:;\\-–—]?\\s*`, flags), '');
+  t = t.replace(new RegExp(`^\\s*${CITE_AR}${PG_WORD}\\s*\\.?\\s*${PG_NUM}\\s*[,،:;\\-–—]?\\s*`, flags), '');
+  // 5. mid-sentence mentions: ", sida ku xusan bogga 5aad," / "(...) ee bogga 12"
+  t = t.replace(new RegExp(`\\s*[,،]?\\s*${CITE_LEAD}(?:${BOOK_WORD}\\s+)?\\b${PG_WORD}\\s*\\.?\\s*${PG_NUM}(?=\\s*[,.;:?!؟)]|\\s|$)`, flags), '');
+  t = t.replace(new RegExp(`\\s*[,،]?\\s*${CITE_EN}${PG_WORD}\\s*\\.?\\s*${PG_NUM}(?=\\s*[,.;:?!)]|\\s|$)`, flags), '');
+  // 6. book references without a page: "sida buugga ku qoran", "according to the textbook,"
+  t = t.replace(new RegExp(`\\s*[,،]?\\s*(?:sida|siday|sidii)\\s+(?:uu\\s+|ay\\s+|ku\\s+)?(?:(?:ku\\s+)?(?:xusan|qoran|sharaxan|taxan)\\s+(?:tahay\\s+)?)?(?:ee\\s+|ka\\s+|gudaha\\s+)?${BOOK_WORD}(?:\\s+(?:ku\\s+(?:xusan|qoran|sharaxan)|ee\\s+maadada))?\\s*[,:;]?`, flags), ' ');
+  t = t.replace(new RegExp(`\\s*[,]?\\s*(?:according\\s+to|as\\s+(?:stated|shown|given|written|explained|described)\\s+in|based\\s+on)\\s+(?:the\\s+)?(?:textbook|book|text\\s*book|source\\s+text|lesson)\\s*[,:;]?`, flags), ' ');
+  t = t.replace(/\s*[,،]?\s*(?:حسب|وفق[اً]?|كما\s+ورد\s+في)\s+الكتاب(?:\s+المدرسي)?\s*[,،:;]?/gu, ' ');
+  // tidy: leftover punctuation / spacing, capitalise the first Latin letter
+  t = t.replace(/\(\s*\)|\[\s*\]/g, '').replace(/\s+([,.;:?!؟])/g, '$1').replace(/^[\s,;:\-–—]+/, '').replace(/[ \t]{2,}/g, ' ').trim();
+  t = t.replace(/^(\p{Ll})/u, c => c.toUpperCase());
+  return t;
+}
+function stripCitationsFromQuestion(q) {
+  // Teacher-only metadata (sourcePages, topic) is untouched; everything the student reads, and the answer key, is cleaned.
+  for (const k of ['question', 'text', 'answer', 'objective']) if (typeof q[k] === 'string') q[k] = stripSourceCitations(q[k]);
+  if (Array.isArray(q.options)) q.options = q.options.map(o => stripSourceCitations(String(o)));
+  if (Array.isArray(q.matches)) q.matches = q.matches.map(m => (m && typeof m === 'object') ? { ...m, question: stripSourceCitations(String(m.question || '')), answer: stripSourceCitations(String(m.answer || '')) } : m);
+  return q;
+}
+
 // Learning-objective helpers: objectives drive the blueprint and every generated question.
 function tokenSet(s) { return new Set((String(s || '').toLowerCase().match(/[\p{L}\p{N}]+/gu) || []).filter(w => w.length >= 3)); }
 function overlapScore(a, b) {
@@ -238,9 +336,17 @@ function passageInstructions(p, passageObj, targetLanguage) {
   const passageText = passageObj?.text || '';
   const anchors = Array.isArray(passageObj?.anchors) ? passageObj.anchors : [];
   if (passageText) {
-    return `PASSAGE MODE: this exam starts with the reading passage below (already written). Base ALL questions on it, in ${targetLanguage}. Question stems should refer to the passage naturally. Do NOT write a new passage and do NOT repeat the passage in your answer. The exam has an open-topic reading passage, but the QUESTIONS are drawn from the CURRICULUM learning objectives of the blueprint, and they must follow the required section plan and question types exactly as given (do not change types or counts). Use the passage as the text for the questions wherever the objective allows it: reading comprehension, meaning/synonym/antonym of words in the passage, grammar, word forms, rhetoric and style taken from the passage's own words and sentences. MULTIPLE-CHOICE GROUP RULE (MOST IMPORTANT): every question of type MCQ must be answered from the PASSAGE above and from nothing else: its stem quotes or clearly refers to a word, sentence, idea or example that really appears in the passage (for example the main idea, details, cause and result, inference, the best title, the meaning, synonym or antonym of a quoted word, the grammar or rhetoric of a quoted phrase). The passage was written to carry the curriculum ideas, so these questions still measure the blueprint objectives. Do NOT ask MCQs about authors, poems, lessons or facts that do not appear in the passage. Questions of other types follow the curriculum objectives (and may also use the passage). This rule overrides the source distribution rule for the MCQ group. Keep stems short and clear in the style of national exams. Every question maps to ONE curriculum objective. The passage is NOT in the students' textbook: the questions measure the CURRICULUM skills (grammar, rhetoric, vocabulary, spelling and punctuation) applied to this new text, together with comprehension of it.${anchors.length ? `\nANCHORS (curriculum objective -> example inside the passage): build the grammar, rhetoric, vocabulary and language-rule questions on these examples, quoting the example in the question stem, and spread the questions across as many different objectives as possible:\n${JSON.stringify(anchors)}` : ''}\nPASSAGE:\n<<<${passageText}>>>`;
+    return `PASSAGE MODE: this exam starts with the reading passage below (already written, in ${targetLanguage}). Do NOT write a new passage and do NOT repeat the passage in your answer.
+PURPOSE: the exam measures the student's LANGUAGE ABILITY according to the CURRICULUM OBJECTIVES (grammar/naxwaha, vocabulary/ereyada, word forms, synonyms and antonyms, rhetoric and style, spelling and punctuation, and reading comprehension), using the passage as the text the questions are drawn from. The passage is NOT in the textbook; the objectives come from the curriculum text and blueprint.
+FIRST MULTIPLE-CHOICE QUESTIONS (Part 1, type MCQ) \u2014 MOST IMPORTANT RULES:
+1. Every MCQ is drawn OUT OF THE PASSAGE: its stem quotes or clearly points to a real word, phrase, sentence or idea that appears in the passage, so it can only be answered by using the passage.
+2. Every MCQ is built on ONE curriculum objective of the blueprint (copy that objective into the \"objective\" field). The objective, not the passage content, decides the question: grammar/naxwe objectives -> parse, identify or correct a structure taken from a passage sentence; vocabulary objectives -> meaning, synonym, antonym, plural/singular, root or word form of a word taken from the passage; rhetoric/style objectives -> identify the device or its effect in a passage phrase; spelling/punctuation objectives -> the correct spelling or punctuation of a passage sentence; comprehension objectives -> main idea, detail, cause and result, inference, best title, lesson.
+3. Proportion: at least 70% of the MCQs must test curriculum language skills (grammar, vocabulary, word forms, rhetoric, spelling, punctuation); at most 30% may be pure comprehension. Order them so that the language-skill questions come first and comprehension questions follow.
+4. Spread the MCQs over as many DIFFERENT objectives as possible; do not repeat an objective until all objectives have been used once.
+5. Do NOT ask about authors, poems, lessons or facts that are not in the passage. Stems are short and clear, in the style of the national exams. Exactly four options, one correct answer, plausible distractors of the same kind.
+Questions of other types (fill in, matching, structured) follow the curriculum objectives and may also use the passage. Follow the required section plan, types and counts exactly.${anchors.length ? `\nANCHORS (curriculum objective -> example inside the passage): build the language-skill MCQs on these examples, quoting the example in the stem, and cover as many different anchors as possible:\n${JSON.stringify(anchors)}` : ''}\nPASSAGE:\n<<<${passageText}>>>`;
   }
-  return `PASSAGE MODE (reading-passage language exam, MOST IMPORTANT): first write ONE original reading passage / story (a "passage" object with "title" and "text" next to "questions") in ${targetLanguage} ONLY. Length 250 to 350 words in 3 to 5 short paragraphs separated by a newline, suited to the class level. The passage must be built on a theme, vocabulary and language structures that come from the supplied curriculum text and blueprint topics (do not copy long sentences from the curriculum). Then write ALL questions so they are answered from the passage and still measure the blueprint learning objectives through it: main idea, details, vocabulary in context, inference, grammar/usage taken from passage sentences, opinion/evaluation, according to each objective's action verb. Question stems may say "according to the passage" naturally (in ${targetLanguage}). The passage must contain everything needed to answer, must not contain Bloom labels, and the answers must not be copied word-for-word into the options as a trick. Do not create diagrams.`;
+  return `PASSAGE MODE (reading-passage language exam, MOST IMPORTANT): first write ONE original reading passage / story (a \"passage\" object with \"title\" and \"text\" next to \"questions\") in ${targetLanguage} ONLY. Length 250 to 350 words in 3 to 5 short paragraphs separated by a newline, suited to the class level. The passage must be built on a theme, vocabulary and language structures that come from the supplied curriculum text and blueprint objectives (do not copy long sentences from it). Then write ALL multiple-choice questions so they are drawn out of the passage AND built on the curriculum objectives (grammar, vocabulary, word forms, rhetoric, spelling, punctuation first; comprehension at most 30%). The passage must contain everything needed to answer, must not contain Bloom labels, and the answers must not be copied word-for-word into the options as a trick. Do not create diagrams.`;
 }
 function remainingPlan(plan, done) {
   let skip = done;
@@ -1185,10 +1291,13 @@ async function aiGenerate(p) {
 
   const model = process.env.GEMINI_MODEL || 'gemini-2.5-flash';
   const targetLanguage = LANGUAGE_NAMES[normalizeLang(p.examLanguage)];
+  const mathMode = isMathSubject(p.subject) || isMathSubject(p.className) || isMathSubject(p.sourceTitle);
   const buildPrompt = (count, partPlan, avoid = [], passageObj = null) => `
 You are an expert secondary-school assessment designer and professional translator.
 NON-NEGOTIABLE OUTPUT LANGUAGE: ${targetLanguage}. The user explicitly selected this language. The textbook may be in a different language; translate the educational content accurately into the selected output language. NEVER use the textbook language as the exam language unless it is the selected language. Do not mix English, Somali and Arabic.
 LANGUAGE COVERAGE: Write every student-visible and teacher-visible text field in ${targetLanguage}: exam question text, all subquestions, all MCQ options, fill-in prompts and answers, matching items, matching descriptions/options, matching question instructions, topic names, section titles, answer key, marking guide, explanations, diagram labels, and any generated captions. Translate generic labels such as “Answer”, “Question”, “Column A/B”, “Instructions”, “Correct answer”, and “Marking guide”. Keep only standard scientific symbols, equations, SI unit symbols, proper names, and abbreviations that should not be translated. If source facts are technical terms, use the correct equivalent in the selected language; a short parenthetical original term may be used only when necessary for scientific clarity.
+NO SOURCE CITATIONS IN QUESTIONS (MANDATORY): the student paper must simply ASK the question. Never write a page number, a page range, a lesson/unit/book reference or any phrase that cites the source inside question, options, matching items or answers. Forbidden examples: \"Bogga 5aad ...\", \"Sida ku xusan bogga 12...\", \"Su’aasha bogga 5aad\", \"(p. 7)\", \"According to page 5\", \"Sida buugga ku qoran\", \"As stated in the textbook\", \"في الصفحة 5\", \"حسب الكتاب\". The [PAGE n] markers in the source text are ONLY for filling the \\\"sourcePages\\\" field; they must never be copied into any other field. Write each question as a direct, self-contained question (the only allowed reference is to the reading passage in passage mode, e.g. \\\"sheekada\\\").${mathMode ? `
+MATHEMATICS WRITING RULES (MANDATORY, this is a mathematics exam): write every number, expression, equation, unit, term and problem EXACTLY the way the textbook writes it (same notation, same order, same wording style, same number format); use the textbook's examples as the model. Use plain readable text only: digits, letters, + − × ÷ = < > ≤ ≥ ≠ ≈ ( ) [ ] { } / √ π ° % and Unicode superscripts/subscripts (x², x³, a₁). Write fractions as a/b (use ½ ¼ ¾ only if the textbook does). NEVER use LaTeX or code notation (no $ signs, no backslashes, no \\\\frac, \\\\sqrt, \\\\times, no ^ or _ or curly-brace commands), no markdown (no *, **, #, backticks), no emoji, no decorative arrows/bullets, no unnecessary symbols, brackets, units or repeated punctuation. Do not add symbols that the textbook does not use. Keep each problem short and clear, giving only the data needed. Compute every answer carefully and verify it twice before returning: an MCQ has exactly one correct option with plausible numeric distractors; in the answer key give the final answer first, then the short working in plain text, one step per line.` : ''}
 Create exactly ${count} questions using ONLY facts and concepts supported by the supplied source text. Translate supported source content into the selected language; do not invent facts or repeat questions.
 ${passageInstructions(p, passageObj, targetLanguage)}
 OBJECTIVE-FIRST DESIGN (MOST IMPORTANT RULE): the learning objectives (learningOutcomes) in the blueprint below are exactly what this exam must measure. Before writing each question, choose ONE objective from the blueprint topic it belongs to, then write a question that directly measures that objective. The action verb of the objective decides what the student must do (define/state → recall; identify/classify → recognise; explain/describe → explanation; calculate/solve → computation; compare/analyse → comparison or analysis; justify/evaluate → reasoned judgement). Copy the chosen objective text, in ${targetLanguage}, into the question's \"objective\" field. Rules: (1) every question maps to exactly one objective; (2) spread questions across as many DIFFERENT objectives as the question count allows, and do not assess an objective a second time until every objective of that topic has been assessed once; (3) do not write questions on trivia, side facts, dates or examples unless an objective requires them; (4) the question must be answerable from the source text and must not test anything outside its objective; (5) if the blueprint has no objectives, first derive measurable objectives from the source text and use them the same way.
@@ -1269,6 +1378,12 @@ ${String(p.sourceText || p.text || '').slice(0, 70000)}
   } else {
     for (const q of questions) { q.diagramSvg = ''; q.diagram = ''; }
   }
+  // Final clean-up of everything the student reads: no source citations; plain textbook-style notation in mathematics.
+  questions.forEach(q => {
+    stripCitationsFromQuestion(q);
+    if (mathMode) mapQuestionText(q, cleanMathText);
+  });
+  if (p.passage && passage) passage.text = stripSourceCitations(passage.text);
   questions.languageReport = languageReport;
   questions.passageCheck = passageCheck;
   questions.passage = p.passage ? passage : null;
@@ -1321,7 +1436,7 @@ app.post('/api/blueprint', async (req, res) => {
     const totalQuestions = Math.max(4, Math.min(50, Number(p.count || p.questionCount) || defaultCount));
     const lang = p.examLanguage || 'en';
     const languageName = lang === 'so' ? 'Somali (Af-Soomaali)' : lang === 'ar' ? 'Arabic (العربية)' : 'English';
-    const prompt = `You are an expert secondary-school assessment designer. Create an EXAM BLUEPRINT / TABLE OF SPECIFICATIONS before the questions are generated. Use ONLY topics, headings, facts and learning outcomes supported by the supplied OCR text. Do not invent units or learning outcomes.\nMANDATORY OUTPUT LANGUAGE: ${languageName}. Translate all displayed blueprint fields including unit, topic, learning outcomes, notes and section names into this language, even when the OCR source uses another language. Do not mix languages; only JSON keys and scientific symbols may remain unchanged. Subject: ${p.subject || ''}. Class: ${p.className || ''}. Source book: ${p.sourceTitle || ''}. Selected pages: ${JSON.stringify(p.pageRange || {})}. Total marks: ${totalMarks}. Total questions: ${totalQuestions}. Format: ${p.format || 'four-part'}.\n${p.passage ? `PASSAGE-BASED LANGUAGE EXAM: this exam will begin with an original reading passage built from the curriculum, and every question will be answered through that passage. Write the learningOutcomes as language-skill objectives taken from the curriculum text (for example reading comprehension: main idea, details, inference; vocabulary in context; grammar, structure and usage; writing conventions; opinion and evaluation) so they can be tested through a passage.\n` : ''}OBJECTIVE-FIRST BLUEPRINT (MOST IMPORTANT): the blueprint is built around learning objectives. If the source text itself states objectives (for example headings such as Objectives, Learning outcomes, Learning objectives, \"By the end of this unit/lesson students should be able to\", \"After studying this chapter you should...\"), use those objectives first and translate them faithfully into ${languageName}. Otherwise derive 2 to 5 measurable objectives per topic from the headings and content that are really present. Each objective is ONE testable statement that starts with an observable action verb (define, state, identify, describe, explain, calculate, compare, classify, interpret, justify...) and can be answered from the supplied source text. learningOutcomes must contain only such objectives, never vague aims like \"understand the topic\". Give every topic a questionCount big enough to assess its objectives (at least one question per objective when the total number of questions allows). The Bloom distribution of a topic must follow the action verbs of its objectives. Bloom levels are teacher-only information inside this blueprint and must never appear in student-facing text.\nUse Bloom levels ${JSON.stringify(p.levels || blooms)}. Spread topics across distinct headings and pages; do not base adjacent questions on the same paragraph. Determine topic/unit, measurable learning outcomes, source pages, Bloom distribution, planned question count and marks per topic. Counts must add to exactly ${totalQuestions}; marks must add to exactly ${totalMarks}. Section counts should match this section plan: ${JSON.stringify(p.partPlan || [])}. Return valid JSON only. Set the language field to exactly English, Somali, or Arabic according to the selected language. Schema: {"subject":"","language":"","totalMarks":${totalMarks},"totalQuestions":${totalQuestions},"coverage":[{"unit":"","topic":"","learningOutcomes":[""],"sourcePages":"","bloomDistribution":{"Remember":0,"Understand":0,"Apply":0,"Analyze":0,"Evaluate":0,"Create":0},"questionCount":0,"marks":0}],"sectionDistribution":[{"section":"","questionCount":0,"marks":0}],"qualityRules":["source traceability","no duplicate questions","marks sum exactly","Bloom alignment"],"notes":[]}.\nOCR SOURCE TEXT:\n${sourceText.slice(0,70000)}`;
+    const prompt = `You are an expert secondary-school assessment designer. Create an EXAM BLUEPRINT / TABLE OF SPECIFICATIONS before the questions are generated. Use ONLY topics, headings, facts and learning outcomes supported by the supplied OCR text. Do not invent units or learning outcomes.\nMANDATORY OUTPUT LANGUAGE: ${languageName}. Translate all displayed blueprint fields including unit, topic, learning outcomes, notes and section names into this language, even when the OCR source uses another language. Do not mix languages; only JSON keys and scientific symbols may remain unchanged. Subject: ${p.subject || ''}. Class: ${p.className || ''}. Source book: ${p.sourceTitle || ''}. Selected pages: ${JSON.stringify(p.pageRange || {})}. Total marks: ${totalMarks}. Total questions: ${totalQuestions}. Format: ${p.format || 'four-part'}.\n${p.passage ? `PASSAGE-BASED LANGUAGE EXAM: this exam will begin with an original reading passage built from the curriculum, and every question will be answered through that passage. Write the learningOutcomes as language-skill objectives taken from the CURRICULUM text itself (grammar/naxwaha and sentence structure, vocabulary and word meaning, synonyms and antonyms, plurals and word forms, rhetoric and style, spelling and punctuation) so each can be tested through a passage; reading comprehension (main idea, details, inference) may take at most 30% of the objectives.\n` : ''}OBJECTIVE-FIRST BLUEPRINT (MOST IMPORTANT): the blueprint is built around learning objectives. If the source text itself states objectives (for example headings such as Objectives, Learning outcomes, Learning objectives, \"By the end of this unit/lesson students should be able to\", \"After studying this chapter you should...\"), use those objectives first and translate them faithfully into ${languageName}. Otherwise derive 2 to 5 measurable objectives per topic from the headings and content that are really present. Each objective is ONE testable statement that starts with an observable action verb (define, state, identify, describe, explain, calculate, compare, classify, interpret, justify...) and can be answered from the supplied source text. learningOutcomes must contain only such objectives, never vague aims like \"understand the topic\". Give every topic a questionCount big enough to assess its objectives (at least one question per objective when the total number of questions allows). The Bloom distribution of a topic must follow the action verbs of its objectives. Bloom levels are teacher-only information inside this blueprint and must never appear in student-facing text.\nUse Bloom levels ${JSON.stringify(p.levels || blooms)}. Spread topics across distinct headings and pages; do not base adjacent questions on the same paragraph. Determine topic/unit, measurable learning outcomes, source pages, Bloom distribution, planned question count and marks per topic. Counts must add to exactly ${totalQuestions}; marks must add to exactly ${totalMarks}. Section counts should match this section plan: ${JSON.stringify(p.partPlan || [])}. Return valid JSON only. Set the language field to exactly English, Somali, or Arabic according to the selected language. Schema: {"subject":"","language":"","totalMarks":${totalMarks},"totalQuestions":${totalQuestions},"coverage":[{"unit":"","topic":"","learningOutcomes":[""],"sourcePages":"","bloomDistribution":{"Remember":0,"Understand":0,"Apply":0,"Analyze":0,"Evaluate":0,"Create":0},"questionCount":0,"marks":0}],"sectionDistribution":[{"section":"","questionCount":0,"marks":0}],"qualityRules":["source traceability","no duplicate questions","marks sum exactly","Bloom alignment"],"notes":[]}.\nOCR SOURCE TEXT:\n${sourceText.slice(0,70000)}`;
 
     const models = [...new Set([process.env.GEMINI_MODEL || 'gemini-2.5-flash', 'gemini-3.5-flash-lite', 'gemini-2.5-flash'])];
     let blueprint = null, lastError = '';
