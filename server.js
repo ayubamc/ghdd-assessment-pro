@@ -183,17 +183,62 @@ function parseQuestionsJson(raw) {
   if (pm) { try { passage = normalizePassage(JSON.parse(pm[1])); } catch (_) {} }
   return { questions: out, passage, truncated: true };
 }
+function validAnchors(list, text) {
+  const hay = String(text || '').replace(/\s+/g, ' ');
+  return (Array.isArray(list) ? list : [])
+    .map(a => ({ objective: String(a?.objective || '').trim(), example: String(a?.example || '').trim() }))
+    .filter(a => a.objective && a.example && hay.includes(a.example.replace(/\s+/g, ' ')))
+    .slice(0, 40);
+}
 function normalizePassage(p) {
   if (!p || typeof p !== 'object') return null;
   const text = String(p.text || '').trim();
   if (!text) return null;
-  return { title: String(p.title || '').trim(), text };
+  return { title: String(p.title || '').trim(), text, anchors: validAnchors(p.anchors, text) };
+}
+// Themes that touch the student's own life and character (the teacher can pick one, otherwise one is chosen at random).
+const PASSAGE_THEMES = {
+  honesty: 'honesty and telling the truth (run sheegid)',
+  generosity: 'generosity and giving to others (deeqsinimo)',
+  trust: 'trustworthiness: keeping a trust (amaano)',
+  patriotism: 'love of the homeland and serving it (dal jacayl)',
+  loyalty: 'loyalty and sincerity (daacadnimo)',
+  success: 'success through hard work and perseverance (guul iyo dadaal)',
+  student: 'being a good student: discipline, respect for teachers and love of learning (ardaynimo)',
+  cooperation: 'cooperation and helping one another (iskaashi)',
+  respect: 'respect and good manners toward parents, elders and teachers (ixtiraam)',
+  patience: 'patience and self-control (samir)',
+  peace: 'forgiveness, peace and good relations between people (cafis iyo nabad)'
+};
+function pickPassageTheme(p) {
+  const key = String(p.passageTheme || '');
+  if (PASSAGE_THEMES[key]) return PASSAGE_THEMES[key];
+  const keys = Object.keys(PASSAGE_THEMES);
+  return PASSAGE_THEMES[keys[Math.floor(Math.random() * keys.length)]];
+}
+// Table of Specifications support: the Bloom counts of every topic must add up to that topic's question count.
+function normalizeBloomRow(row, levels) {
+  const allowed = (Array.isArray(levels) && levels.length ? levels : blooms).filter(l => blooms.includes(l));
+  const useLevels = allowed.length ? allowed : blooms;
+  const target = Math.max(0, Math.round(Number(row.questionCount) || 0));
+  const dist = {};
+  blooms.forEach(k => { dist[k] = useLevels.includes(k) ? Math.max(0, Math.round(Number(row.bloomDistribution?.[k]) || 0)) : 0; });
+  let sum = blooms.reduce((n, k) => n + dist[k], 0);
+  if (sum === 0 && target > 0) { let i = 0; while (sum < target) { dist[useLevels[i % useLevels.length]]++; sum++; i++; } }
+  let guard = 0;
+  while (sum !== target && guard++ < 2000) {
+    if (sum < target) { const k = useLevels.slice().sort((a, b) => dist[b] - dist[a])[0]; dist[k]++; sum++; }
+    else { const k = useLevels.filter(x => dist[x] > 0).sort((a, b) => dist[b] - dist[a])[0]; if (!k) break; dist[k]--; sum--; }
+  }
+  row.bloomDistribution = dist;
 }
 // Reading-passage mode (Arabic / Somali / English language exams): the exam starts with an original passage built from the curriculum.
-function passageInstructions(p, passageText, targetLanguage) {
+function passageInstructions(p, passageObj, targetLanguage) {
   if (!p.passage) return '';
+  const passageText = passageObj?.text || '';
+  const anchors = Array.isArray(passageObj?.anchors) ? passageObj.anchors : [];
   if (passageText) {
-    return `PASSAGE MODE: this exam starts with the reading passage below (already written). Base ALL questions on it, in ${targetLanguage}. Question stems should refer to the passage naturally. Do NOT write a new passage and do NOT repeat the passage in your answer. The exam has an open-topic reading passage, but the QUESTIONS are drawn from the CURRICULUM learning objectives of the blueprint, and they must follow the required section plan and question types exactly as given (do not change types or counts). Use the passage as the text for the questions wherever the objective allows it: reading comprehension, meaning/synonym/antonym of words in the passage, grammar, word forms, rhetoric and style taken from the passage's own words and sentences. MULTIPLE-CHOICE GROUP RULE (MOST IMPORTANT): every question of type MCQ must be answered from the PASSAGE above and from nothing else: its stem quotes or clearly refers to a word, sentence, idea or example that really appears in the passage (for example the main idea, details, cause and result, inference, the best title, the meaning, synonym or antonym of a quoted word, the grammar or rhetoric of a quoted phrase). The passage was written to carry the curriculum ideas, so these questions still measure the blueprint objectives. Do NOT ask MCQs about authors, poems, lessons or facts that do not appear in the passage. Questions of other types follow the curriculum objectives (and may also use the passage). This rule overrides the source distribution rule for the MCQ group. Keep stems short and clear in the style of national exams. Every question maps to ONE curriculum objective.\nPASSAGE:\n<<<${passageText}>>>`;
+    return `PASSAGE MODE: this exam starts with the reading passage below (already written). Base ALL questions on it, in ${targetLanguage}. Question stems should refer to the passage naturally. Do NOT write a new passage and do NOT repeat the passage in your answer. The exam has an open-topic reading passage, but the QUESTIONS are drawn from the CURRICULUM learning objectives of the blueprint, and they must follow the required section plan and question types exactly as given (do not change types or counts). Use the passage as the text for the questions wherever the objective allows it: reading comprehension, meaning/synonym/antonym of words in the passage, grammar, word forms, rhetoric and style taken from the passage's own words and sentences. MULTIPLE-CHOICE GROUP RULE (MOST IMPORTANT): every question of type MCQ must be answered from the PASSAGE above and from nothing else: its stem quotes or clearly refers to a word, sentence, idea or example that really appears in the passage (for example the main idea, details, cause and result, inference, the best title, the meaning, synonym or antonym of a quoted word, the grammar or rhetoric of a quoted phrase). The passage was written to carry the curriculum ideas, so these questions still measure the blueprint objectives. Do NOT ask MCQs about authors, poems, lessons or facts that do not appear in the passage. Questions of other types follow the curriculum objectives (and may also use the passage). This rule overrides the source distribution rule for the MCQ group. Keep stems short and clear in the style of national exams. Every question maps to ONE curriculum objective. The passage is NOT in the students' textbook: the questions measure the CURRICULUM skills (grammar, rhetoric, vocabulary, spelling and punctuation) applied to this new text, together with comprehension of it.${anchors.length ? `\nANCHORS (curriculum objective -> example inside the passage): build the grammar, rhetoric, vocabulary and language-rule questions on these examples, quoting the example in the question stem, and spread the questions across as many different objectives as possible:\n${JSON.stringify(anchors)}` : ''}\nPASSAGE:\n<<<${passageText}>>>`;
   }
   return `PASSAGE MODE (reading-passage language exam, MOST IMPORTANT): first write ONE original reading passage / story (a "passage" object with "title" and "text" next to "questions") in ${targetLanguage} ONLY. Length 250 to 350 words in 3 to 5 short paragraphs separated by a newline, suited to the class level. The passage must be built on a theme, vocabulary and language structures that come from the supplied curriculum text and blueprint topics (do not copy long sentences from the curriculum). Then write ALL questions so they are answered from the passage and still measure the blueprint learning objectives through it: main idea, details, vocabulary in context, inference, grammar/usage taken from passage sentences, opinion/evaluation, according to each objective's action verb. Question stems may say "according to the passage" naturally (in ${targetLanguage}). The passage must contain everything needed to answer, must not contain Bloom labels, and the answers must not be copied word-for-word into the options as a trick. Do not create diagrams.`;
 }
@@ -269,8 +314,13 @@ async function enforceQuestionLanguage(questions, targetCode) {
 // Step 1 of passage mode: a dedicated request just for the passage (more reliable than asking for it inside the questions JSON).
 async function generatePassage(p, targetLanguage) {
   const objectives = blueprintObjectives(p.blueprint).map(o => o.text).slice(0, 40);
+  const theme = pickPassageTheme(p);
   const prompt = `You are an expert ${targetLanguage} language teacher writing the reading passage for a school exam.
-Write ONE original reading passage in ${targetLanguage} ONLY, in the style of the Somali national examinations, for ${p.className || 'the class'} students (subject: ${p.subject || 'language'}). The topic is OPEN: choose any interesting, educational theme (for example a value such as generosity or cooperation, Somali life and culture, science, nature, health, history, or a short story); it does not have to match a textbook chapter. It is a connected text written in correct, rich, formal language, 350 to 450 words in 4 to 6 paragraphs separated by a newline. Although the topic is free, the language of the passage must serve the CURRICULUM TEXT below: deliberately include varied, clearly identifiable examples of what the curriculum teaches and these learning objectives test (for example grammar structures, word forms such as plurals and verb forms, figures of speech and rhetorical devices, punctuation, rich vocabulary with synonyms and antonyms) so that questions on those objectives can use the words and sentences of the passage. Do not copy long sentences from the curriculum text. Do not mention Bloom or cognitive levels. Objectives to be tested: ${JSON.stringify(objectives)}. Return valid JSON only: {"title":"","text":""}
+THEME: ${theme}. The passage must TOUCH the student's own life and character: an engaging short story or reflective text built around a concrete situation (use Somali names and settings where suitable) that leaves a clear moral lesson relevant to a student. It must never be a dry lecture.
+LANGUAGE AND STYLE: ${targetLanguage} ONLY, in the style of the Somali national examinations, for ${p.className || 'the class'} students (subject: ${p.subject || 'language'}). Length 350 to 450 words in 4 to 6 paragraphs separated by a newline, in correct, rich, formal language.
+CONCEPT (backward design from the curriculum): the passage is NOT in the students' textbook; it is a NEW text used to measure the curriculum skills. First decide where each learning objective below will be demonstrated, then write the passage so that every objective appears naturally in at least one clear example (a word, phrase or sentence) that a question can test: grammar structures and their parsing, word forms such as plurals and verb forms, figures of speech and rhetorical devices, rhyme and wordplay, punctuation and spelling, rich vocabulary with synonyms and antonyms. The same text must also allow comprehension questions (main idea, details, cause and result, inference, the lesson). Take vocabulary and structures from the CURRICULUM TEXT below; do not copy long sentences from it. Do not mention Bloom or cognitive levels.
+OBJECTIVES TO EMBED: ${JSON.stringify(objectives)}
+Return valid JSON only: {"title":"","text":"","anchors":[{"objective":"<objective text>","example":"<the exact word, phrase or sentence copied from your passage>"}]}. Give an anchor for as many objectives as possible (at least 8); every "example" must be copied EXACTLY from the passage text.
 CURRICULUM TEXT:
 ${String(p.sourceText || p.text || '').slice(0, 30000)}`;
   let last = '';
@@ -1135,12 +1185,12 @@ async function aiGenerate(p) {
 
   const model = process.env.GEMINI_MODEL || 'gemini-2.5-flash';
   const targetLanguage = LANGUAGE_NAMES[normalizeLang(p.examLanguage)];
-  const buildPrompt = (count, partPlan, avoid = [], passageText = '') => `
+  const buildPrompt = (count, partPlan, avoid = [], passageObj = null) => `
 You are an expert secondary-school assessment designer and professional translator.
 NON-NEGOTIABLE OUTPUT LANGUAGE: ${targetLanguage}. The user explicitly selected this language. The textbook may be in a different language; translate the educational content accurately into the selected output language. NEVER use the textbook language as the exam language unless it is the selected language. Do not mix English, Somali and Arabic.
 LANGUAGE COVERAGE: Write every student-visible and teacher-visible text field in ${targetLanguage}: exam question text, all subquestions, all MCQ options, fill-in prompts and answers, matching items, matching descriptions/options, matching question instructions, topic names, section titles, answer key, marking guide, explanations, diagram labels, and any generated captions. Translate generic labels such as “Answer”, “Question”, “Column A/B”, “Instructions”, “Correct answer”, and “Marking guide”. Keep only standard scientific symbols, equations, SI unit symbols, proper names, and abbreviations that should not be translated. If source facts are technical terms, use the correct equivalent in the selected language; a short parenthetical original term may be used only when necessary for scientific clarity.
 Create exactly ${count} questions using ONLY facts and concepts supported by the supplied source text. Translate supported source content into the selected language; do not invent facts or repeat questions.
-${passageInstructions(p, passageText, targetLanguage)}
+${passageInstructions(p, passageObj, targetLanguage)}
 OBJECTIVE-FIRST DESIGN (MOST IMPORTANT RULE): the learning objectives (learningOutcomes) in the blueprint below are exactly what this exam must measure. Before writing each question, choose ONE objective from the blueprint topic it belongs to, then write a question that directly measures that objective. The action verb of the objective decides what the student must do (define/state → recall; identify/classify → recognise; explain/describe → explanation; calculate/solve → computation; compare/analyse → comparison or analysis; justify/evaluate → reasoned judgement). Copy the chosen objective text, in ${targetLanguage}, into the question's \"objective\" field. Rules: (1) every question maps to exactly one objective; (2) spread questions across as many DIFFERENT objectives as the question count allows, and do not assess an objective a second time until every objective of that topic has been assessed once; (3) do not write questions on trivia, side facts, dates or examples unless an objective requires them; (4) the question must be answerable from the source text and must not test anything outside its objective; (5) if the blueprint has no objectives, first derive measurable objectives from the source text and use them the same way.
 Use Bloom levels: ${JSON.stringify(p.levels || blooms)}. Choose each question's \"bloom\" value so it matches the objective's action verb; keep it ONLY in the JSON \"bloom\" field. BLOOM CONFIDENTIALITY: never write the word Bloom or any cognitive-level label or tag (Remember, Understand, Apply, Analyze, Evaluate, Create, or their translations) in question text, options, matching items, topics, section titles, instructions, answers or marking guides. The student must never be able to see the cognitive level.
 Required ordered section plan: ${JSON.stringify(partPlan || [])}. Follow the exact section order and counts; translate every displayed section title into ${targetLanguage}.
@@ -1164,15 +1214,19 @@ ${String(p.sourceText || p.text || '').slice(0, 70000)}
 `;
 
   let passage = null;
-  if (p.passage) passage = await generatePassage(p, targetLanguage);
-  const firstBatch = await requestQuestionBatch(buildPrompt(p.count, p.partPlan || [], [], passage?.text || ''));
+  if (p.passage) {
+    passage = await generatePassage(p, targetLanguage);
+    await enforcePassageLanguage(passage, p.examLanguage);
+    passage.anchors = validAnchors(passage.anchors, passage.text);
+  }
+  const firstBatch = await requestQuestionBatch(buildPrompt(p.count, p.partPlan || [], [], passage));
   let questions = firstBatch.questions;
   // If the answer was cut short (long Somali/Arabic exams), ask for ONLY the missing questions and continue.
   for (let round = 0; questions.length < p.count && round < 3; round++) {
     const missing = p.count - questions.length;
     const avoid = questions.map(q => ({ question: String(q.question || '').slice(0, 140), objective: String(q.objective || '').slice(0, 140) }));
     try {
-      const extra = await requestQuestionBatch(buildPrompt(missing, remainingPlan(p.partPlan, questions.length), avoid, passage?.text || ''));
+      const extra = await requestQuestionBatch(buildPrompt(missing, remainingPlan(p.partPlan, questions.length), avoid, passage));
       questions = questions.concat(extra.questions.slice(0, missing));
     } catch (e) { console.warn('Top-up batch failed:', e.message); break; }
   }
@@ -1302,6 +1356,7 @@ app.post('/api/blueprint', async (req, res) => {
     };
     distribute('questionCount',totalQuestions);
     distribute('marks',totalMarks);
+    blueprint.coverage.forEach(row => normalizeBloomRow(row, Array.isArray(p.levels) ? p.levels : blooms));
     blueprint.totalMarks=totalMarks;
     blueprint.totalQuestions=totalQuestions;
     blueprint.subject=blueprint.subject||p.subject||'';
