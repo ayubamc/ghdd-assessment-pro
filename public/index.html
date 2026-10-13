@@ -209,6 +209,21 @@ footer{text-align:center;color:#65738a;padding:22px;font-size:13px}
 .lesson-plan-tools{display:flex;gap:8px;flex-wrap:wrap}
 @media print{.lesson-plan-card{break-inside:auto}.lesson-plan-card h3,.lesson-plan-card h4{break-after:avoid}}
 
+
+/* national-exam look: diagrams, word box, stacked fractions, radicals */
+.exam-diagram{margin:12px auto;text-align:center;break-inside:avoid;background:#fff}
+.exam-diagram svg{width:100%;max-width:560px;height:auto;max-height:360px;background:#fff}
+.word-box{border:1.4px solid #333;padding:12px 16px;margin:8px 0 16px;display:grid;grid-template-columns:repeat(5,1fr);gap:6px 18px;text-align:left;font-weight:400;break-inside:avoid}.word-box span{overflow-wrap:anywhere}
+.fill-instruction{margin:6px 0 4px;font-weight:700;font-style:normal}
+.fill-question{margin:0 0 6px}
+.fill-blank{display:inline-block;min-width:110px;border-bottom:1.4px solid #000;height:1.05em;vertical-align:baseline;margin:0 4px}
+.fill-blank.filled{border-bottom:1.4px solid #000;text-align:center;font-weight:700;padding:0 6px;height:auto}
+.frac{display:inline-flex;flex-direction:column;vertical-align:middle;text-align:center;margin:0 2px;line-height:1.15;font-size:.95em}
+.frac .num{border-bottom:1.3px solid currentColor;padding:0 3px 1px}
+.frac .den{padding:1px 3px 0}
+.rad{white-space:nowrap}
+.rad-in{border-top:1.3px solid currentColor;padding:0 2px;margin-left:1px}
+@media print{.word-box{border:1.4px solid #222}.exam-diagram svg{max-height:330px}}
 </style>
 </head>
 <body>
