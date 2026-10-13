@@ -771,6 +771,7 @@ function paperQuestionsHtml(normalized,passage,lang,withAnswers,mathMode){
        normalized.forEach((x,ix)=>{numbers[ix]=(x.type==='Matching'&&x!==firstMatch)?0:++nn;});
        return passageHtml+normalized.map((q,i)=>{
          const section=q.section||examText(lang,'questionsDefault');
+         const isFill=/fill/i.test(q.type||'');
          let sectionHtml='';
          if(section!==lastSection){sectionHtml=`<h3 class="paper-section">${esc(section)}</h3>`;lastSection=section;}
          // Teacher-only: the learning objective each question measures appears in the answer key, never on the student paper.
@@ -804,7 +805,6 @@ function paperQuestionsHtml(normalized,passage,lang,withAnswers,mathMode){
          const isDirect=/structured|direct/i.test(q.type||'')||/STRUCTURED|DIRECT/i.test(section);
          const answerSpace=(!withAnswers&&isDirect)?`<div class="student-answer-label">${examText(lang,'studentAnswer')}:</div><div class="answer-space">${Array.from({length:Math.max(2,Math.min(14,Math.ceil(Number(q.marks||1)*1.4)))},()=>'<div class="answer-line"></div>').join('')}</div>`:'';
          const answer = withAnswers ? `<div class="answer-box"><strong>${examText(lang,'markingGuide')}:</strong> ${isFill?esc(q.answer||examText(lang,'notProvided')):fmt(q.answer||examText(lang,'notProvided'))}</div>` : '';
-         const isFill=/fill/i.test(q.type||'');
          const questionLine=`<div class="mcq-question-row"><span class="question-number">${numbers[i]}.</span><span class="question-text">${isFill?fillBlankHtml(q.text,q.answer,withAnswers):fmt(q.text)}</span><span class="marks">(${q.marks} ${examText(lang,'marks')})</span></div>`;
          if(q.type==='MCQ'||q.type==='Multiple Choice'||q.type==='Multiple Choice Questions'){
            return `${sectionHtml}<div class="paper-question mcq-box">${questionLine}${options}${answer}${objectiveHtml}</div>`;
