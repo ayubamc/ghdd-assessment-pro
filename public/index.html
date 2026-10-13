@@ -66,6 +66,13 @@ textarea{min-height:90px}
 .passage-block .passage-body{padding:0 20px;line-height:1.95;font-size:1.03em}
 .passage-block .passage-body p{margin:0 0 7px;text-align:justify}
 #dashboard h3{margin-top:20px}
+.tos-title{margin:18px 0 6px}
+.tos-table .c-tos-topic{width:24%}.tos-table .c-tos-lv{width:9%}.tos-table .c-tos-n{width:7%}
+.tos-table td,.tos-table th{padding:6px 6px;font-size:12.5px}
+.tos-nums{font-size:10.5px;color:#475569;line-height:1.25;margin-top:2px}
+.tos-unit{font-size:11px;color:#64748b;margin-top:2px}
+.tos-pct td{background:#eef4ff;font-weight:600}
+.sec-table{min-width:520px}
 #dashViewer{margin-top:14px}
 #printBpRoot{display:none;padding:18px;background:#fff;color:#111;font-family:Arial,sans-serif}
 .bp-rules{font-size:12px;margin:10px 0}
@@ -302,6 +309,7 @@ PDF weyn wuxuu u baahan karaa xusuus badan, waqti dheeraad ah iyo kayd PostgreSQ
 </select></div>
 <div><label for="diagramCount">Tirada jaantusyada (0 haddii aadan rabin)</label><input id="diagramCount" type="number" min="0" max="30" value="0"><small class="muted">Geli 0, 1, 2, 5 ama tiro kale. Jaantusyada waxaa lagu xiriirinayaa su’aalaha Structured.</small></div>
 <div><label for="genPassage">Passage / Sheeko / قطعة (maaddooyinka luqadda)</label><select id="genPassage"><option value="auto">Si toos ah (haddii maaddadu tahay Carabi, Soomaali ama English)</option><option value="yes">Haa — imtixaanka ku bilow passage</option><option value="no">Maya</option></select><small class="muted">Imtixaanku wuxuu ku bilaabmayaa sheeko/qoraal akhris oo ku qoran luqadda imtixaanka, ee ku dhisan manhajka. Su’aalahana waxay ku salaysan yihiin sheekadaas iyo objectives-ka manhajka.</small></div>
+<div><label for="genPassageTheme">Mowduuca sheekada (marka passage la isticmaalo)</label><select id="genPassageTheme"><option value="">AI dooro (mid taabanaya ardayga)</option><option value="honesty">Run sheegid</option><option value="generosity">Deeqsinimo</option><option value="trust">Amaano</option><option value="patriotism">Dal jacayl</option><option value="loyalty">Daacadnimo</option><option value="success">Guul iyo dadaal</option><option value="student">Ardaynimo (edeb iyo barasho)</option><option value="cooperation">Iskaashi</option><option value="respect">Ixtiraam iyo edeb</option><option value="patience">Samir</option><option value="peace">Cafis iyo nabad</option></select><small class="muted">Sheekadu waxay ka hadlaysaa mowduuc taabanaya nolosha iyo akhlaaqda ardayga, waxaana lagu dhisayaa objectives-ka manhajka (naxwe, balaagha, mufradaad…) si su’aalaha loogu cabbiro awoodda faham ee ardayga.</small></div>
 </div>
 
 <label for="genLevels">Heerarka Bloom</label>
@@ -446,14 +454,14 @@ PDF weyn wuxuu u baahan karaa xusuus badan, waqti dheeraad ah iyo kayd PostgreSQ
 </section>
 </div>
 
-<footer>GHDD Assessment Pro · Qorshayn wanaagsan · Imtixaan tayo leh · v15</footer>
+<footer>GHDD Assessment Pro · Qorshayn wanaagsan · Imtixaan tayo leh · v16</footer>
 <div id="printRoot"></div>
 <div id="printBpRoot"></div>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
 <script>
-/* GHDD safety net: shows JS errors on screen and keeps the tabs usable even if the main script fails to load. Build r15 */
+/* GHDD safety net: shows JS errors on screen and keeps the tabs usable even if the main script fails to load. Build r16 */
 (function(){
   function banner(msg){
     var b=document.getElementById('jsErrBanner');
@@ -475,12 +483,12 @@ PDF weyn wuxuu u baahan karaa xusuus badan, waqti dheeraad ah iyo kayd PostgreSQ
         };});
       }
       if(!window.__ghddReady&&!document.getElementById('jsErrBanner')){
-        banner('⚠️ Faylka app.js lama soo rarin ama waa dhammaystirnayn (build r15). Hubi in GitHub-ka Public/ gudihiisa ay ku jiraan LABADA fayl: index.html iyo app.js, oo aad si buuxda u soo geliyay (adigoo isticmaalaya Add file → Upload files).');
+        banner('⚠️ Faylka app.js lama soo rarin ama waa dhammaystirnayn (build r16). Hubi in GitHub-ka Public/ gudihiisa ay ku jiraan LABADA fayl: index.html iyo app.js, oo aad si buuxda u soo geliyay (adigoo isticmaalaya Add file → Upload files).');
       }
     },900);
   });
 })();
 </script>
-<script src="/app.js?v=r15"></script>
+<script src="/app.js?v=r16"></script>
 </body>
 </html>
