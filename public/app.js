@@ -389,7 +389,7 @@ function localizeExamSections(questions, lang){
 function sanitizeDiagramSvg(svg){
   if(!svg||typeof svg!=='string')return '';
   let s=svg.replace(/<script[\s\S]*?<\/script>/gi,'')
-    .replace(/<\/?(?:foreignObject|iframe|object|embed|image|use|marker)\b[^>]*>/gi,'')
+    .replace(/<\/?(?:foreignObject|iframe|object|embed|image|use)\b[^>]*>/gi,'')
     .replace(/\son\w+\s*=\s*(?:"[^"]*"|'[^']*'|[^\s>]+)/gi,'')
     .replace(/\s(?:href|xlink:href)\s*=\s*(?:"[^"]*"|'[^']*'|[^\s>]+)/gi,'')
     .replace(/url\s*\([^)]*\)/gi,'none');
@@ -686,7 +686,6 @@ $('generateExam').onclick=async()=>{
       options:Array.isArray(q.options)?q.options.map(o=>noBloom(String(o))):[],
       matches:Array.isArray(q.matches)?q.matches.map(m=>({...m,question:noBloom(String(m?.question||'')),answer:noBloom(String(m?.answer||''))})):[],
       diagram:q.diagram||'',diagramSvg:q.diagramSvg||'',
-      distractor:noBloom(String(q.distractor||'')),
       sourcePages:q.sourcePages||''
     }));
     // The generated questions are added automatically; no per-question "add" step is required.
@@ -696,7 +695,7 @@ $('generateExam').onclick=async()=>{
     $('className').value=className;
     renderQuestions();
 
-    const renderPaperQuestions=(withAnswers)=>paperQuestionsHtml(normalized,passage,lang,withAnswers,isMathSubjectClient(subject));
+    const renderPaperQuestions=(withAnswers)=>paperQuestionsHtml(normalized,passage,lang,withAnswers);
     const total=buildPrintRoot({lang,examTitle,subject,className,normalized,passage,instructions:$('examInstructions').value});
     lastGenerated={lang,passage};
     if(currentExamBlueprint&&Array.isArray(currentExamBlueprint.coverage)){computeTos(currentExamBlueprint,normalized);renderExamBlueprint(currentExamBlueprint,lastBlueprintValidation||{marksMatch:true,questionsMatch:true});}
@@ -723,48 +722,7 @@ $('generateExam').onclick=async()=>{
   }
 };
 
-
-// ---------- Math typesetting for the printed paper (stacked fractions, radicals with overline) ----------
-function isMathSubjectClient(subject){return /xisaab|math|رياضيات|حساب|algebra|geometry|joometri|هندسة|جبر/i.test(String(subject||''));}
-function mathHtml(escaped){
-  let t=String(escaped);
-  // radicals: √(expr), √number, √letter  ->  √ with a bar over the radicand
-  t=t.replace(/([∛∜]|√)\(([^()]+)\)/g,(m,r,x)=>`<span class="rad">${r}<span class="rad-in">${x}</span></span>`);
-  t=t.replace(/([∛∜]|√)(\d+(?:\.\d+)?[²³]?|[A-Za-zπ][²³]?)/g,(m,r,x)=>`<span class="rad">${r}<span class="rad-in">${x}</span></span>`);
-  // stacked fractions: 3/4, x/2, (x+1)/2 ; letters/letters stay as units (m/s, km/h)
-  const op='(\\d+(?:\\.\\d+)?[²³]?|[A-Za-z]{1,2}[²³]?|\\([^()<>]+\\))';
-  const re=new RegExp('(?<![\\p{L}\\p{N}/>])'+op+'/'+op+'(?![\\p{L}\\p{N}/])','gu');
-  t=t.replace(re,(m,a,b)=>{
-    if(!/[\d(]/.test(a+b))return m;
-    const strip=x=>x.startsWith('(')&&x.endsWith(')')?x.slice(1,-1):x;
-    return `<span class="frac"><span class="num">${strip(a)}</span><span class="den">${strip(b)}</span></span>`;
-  });
-  return t;
-}
-function fillWordBox(group,lang){
-  // Word box = every correct answer + the distractors, in a fixed pseudo-random order (same on paper and key).
-  const words=[];
-  group.forEach(g=>{const a=String(g.answer||'').trim();if(a&&!words.includes(a))words.push(a);});
-  const answers=new Set(words);
-  const extra=[];
-  group.forEach(g=>{const d=String(g.distractor||'').trim();if(d&&!answers.has(d)&&!extra.includes(d))extra.push(d);});
-  const all=words.concat(extra.slice(0,Math.max(1,Math.ceil(group.length/4))));
-  let seed=0;all.forEach(w=>{for(const c of w)seed=(seed*31+c.codePointAt(0))>>>0;});
-  const rnd=()=>{seed=(seed*1664525+1013904223)>>>0;return seed/4294967296;};
-  for(let i=all.length-1;i>0;i--){const j=Math.floor(rnd()*(i+1));[all[i],all[j]]=[all[j],all[i]];}
-  return all;
-}
-function fillBlankHtml(text,answer,withAnswers){
-  // Every kind of blank the AI may write becomes one clean blank on the line.
-  let t=String(text||'').replace(/_{2,}|\.{4,}|…{2,}|\[\s{2,}\]|\(\s{3,}\)|\[\s*\.{2,}\s*\]|\(\s*\.{2,}\s*\)/g,'\u0001');
-  if(!t.includes('\u0001'))t=t.replace(/\s*$/,' \u0001');
-  const parts=esc(t).split('\u0001');
-  const blank=withAnswers?`<span class="fill-blank filled">${esc(answer||'')}</span>`:'<span class="fill-blank"></span>';
-  return parts[0]+blank+parts.slice(1).join('<span class="fill-blank"></span>');
-}
-
-function paperQuestionsHtml(normalized,passage,lang,withAnswers,mathMode){
-       const fmt=v=>mathMode?mathHtml(esc(v)):esc(v);
+function paperQuestionsHtml(normalized,passage,lang,withAnswers){
        let lastSection='';
        const passageHtml=passage?`<div class="passage-block"><div class="passage-head">${esc(examText(lang,'passageLabel'))}</div>${passage.title?`<p class="passage-title">${esc(passage.title)}</p>`:''}<div class="passage-body">${String(passage.text).split(/\n+/).filter(x=>x.trim()).map(x=>`<p>${esc(x)}</p>`).join('')}</div></div>`:'';
        const numbers=[];let nn=0;const firstMatch=normalized.find(x=>x.type==='Matching');
@@ -787,8 +745,8 @@ function paperQuestionsHtml(normalized,passage,lang,withAnswers,mathMode){
            const letterOf=ans=>{const t=String(ans||'').replace(/^[A-Z]\.\s*/i,'').trim();const k=choices.indexOf(t);return k>=0?String.fromCharCode(65+k):'';};
            const rows=pairs.map((pair,j)=>{
              const answerCell=withAnswers?esc(letterOf(pair.answer)||String(pair.answer||'')):'[       ]';
-             const choiceCell=j===0?`<td rowspan="${Math.max(1,pairs.length)}" class="matching-choice-cell"><div class="matching-options">${choices.map((c,k)=>`<div><b>${String.fromCharCode(65+k)}.</b> ${fmt(c)}</div>`).join('')}</div></td>`:'';
-             return `<tr><td class="match-no">${j+1}</td><td>${fmt(pair.question||'')}</td><td class="match-answer">${answerCell}</td>${choiceCell}</tr>`;
+             const choiceCell=j===0?`<td rowspan="${Math.max(1,pairs.length)}" class="matching-choice-cell"><div class="matching-options">${choices.map((c,k)=>`<div><b>${String.fromCharCode(65+k)}.</b> ${esc(c)}</div>`).join('')}</div></td>`:'';
+             return `<tr><td class="match-no">${j+1}</td><td>${esc(pair.question||'')}</td><td class="match-answer">${answerCell}</td>${choiceCell}</tr>`;
            }).join('');
            const groupMarks=group.reduce((sum,g)=>sum+(Number(g.marks)||0),0);
            const heading=group.length>1?examText(lang,'matchPrompt'):(q.text||examText(lang,'matchPrompt'));
@@ -798,26 +756,15 @@ function paperQuestionsHtml(normalized,passage,lang,withAnswers,mathMode){
            const warning=choices.length>=pairs.length+group.length?'':(withAnswers?`<p class="muted"><em>${lang==='ar'?'تنبيه: يجب أن يزيد عدد الخيارات عن عدد العناصر.':lang==='so'?'Hubi: doorashooyinku waa inay ka badan yihiin tirada erayada.':'Check: provide more options than matching items.'}</em></p>`:'');
            return `${sectionHtml}<div class="paper-question matching-question"><p class="question-line"><strong>${numbers[i]}. ${esc(heading)}</strong><span class="marks">(${groupMarks} ${examText(lang,'marks')})</span></p><div class="table-wrap"><table class="matching-table"><thead><tr><th>${examText(lang,'number')}</th><th>${examText(lang,'columnA')}</th><th>${examText(lang,'answerLetter')}</th><th>${examText(lang,'columnB')}</th></tr></thead><tbody>${rows}</tbody></table></div>${correct}${mObj}${warning}</div>`;
          }
-         const options=q.options?.length?`<table class="mcq-options-table"><tbody><tr>${q.options.slice(0,4).map((opt,k)=>`<td><strong>${String.fromCharCode(65+k)}.</strong> ${fmt(String(opt).replace(/^[A-D]\.\s*/i,''))}</td>`).join('')}</tr></tbody></table>`:'';
+         const options=q.options?.length?`<table class="mcq-options-table"><tbody><tr>${q.options.slice(0,4).map((opt,k)=>`<td><strong>${String.fromCharCode(65+k)}.</strong> ${esc(String(opt).replace(/^[A-D]\.\s*/i,''))}</td>`).join('')}</tr></tbody></table>`:'';
          const safeSvg=q.diagramSvg?sanitizeDiagramSvg(q.diagramSvg):'';
          const diagram=safeSvg?`<div class="exam-diagram">${safeSvg}</div>`:(q.diagram&&q.diagram!=='undefined'?`<div class="diagram-note"><strong>${lang==='ar'?'الرسم التوضيحي':lang==='so'?'Jaantus / sawir':'Diagram'}:</strong> ${esc(q.diagram)}</div>`:'');
          const isDirect=/structured|direct/i.test(q.type||'')||/STRUCTURED|DIRECT/i.test(section);
          const answerSpace=(!withAnswers&&isDirect)?`<div class="student-answer-label">${examText(lang,'studentAnswer')}:</div><div class="answer-space">${Array.from({length:Math.max(2,Math.min(14,Math.ceil(Number(q.marks||1)*1.4)))},()=>'<div class="answer-line"></div>').join('')}</div>`:'';
-         const answer = withAnswers ? `<div class="answer-box"><strong>${examText(lang,'markingGuide')}:</strong> ${isFill?esc(q.answer||examText(lang,'notProvided')):fmt(q.answer||examText(lang,'notProvided'))}</div>` : '';
-         const isFill=/fill/i.test(q.type||'');
-         const questionLine=`<div class="mcq-question-row"><span class="question-number">${numbers[i]}.</span><span class="question-text">${isFill?fillBlankHtml(q.text,q.answer,withAnswers):fmt(q.text)}</span><span class="marks">(${q.marks} ${examText(lang,'marks')})</span></div>`;
+         const answer = withAnswers ? `<div class="answer-box"><strong>${examText(lang,'markingGuide')}:</strong> ${esc(q.answer||examText(lang,'notProvided'))}</div>` : '';
+         const questionLine=`<div class="mcq-question-row"><span class="question-number">${numbers[i]}.</span><span class="question-text">${esc(q.text)}</span><span class="marks">(${q.marks} ${examText(lang,'marks')})</span></div>`;
          if(q.type==='MCQ'||q.type==='Multiple Choice'||q.type==='Multiple Choice Questions'){
            return `${sectionHtml}<div class="paper-question mcq-box">${questionLine}${options}${answer}${objectiveHtml}</div>`;
-         }
-         if(isFill){
-           const group=normalized.filter(x=>/fill/i.test(x.type||''));
-           let boxHtml='';
-           if(group[0]===q){
-             const words=fillWordBox(group,lang);
-             const instr={en:'Choose the correct word from the box and write it in the blank space.',so:'Ka dooro erayga saxda ah sanduuqa, kuna qor meesha banaan.',ar:'اختر الكلمة المناسبة من الصندوق واكتبها في الفراغ.'}[lang]||'';
-             boxHtml=`<p class="fill-instruction">${esc(instr)}</p><div class="word-box">${words.map(w=>`<span>${esc(w)}</span>`).join('')}</div>`;
-           }
-           return `${sectionHtml}${boxHtml}<div class="paper-question fill-question">${questionLine}${answer}${objectiveHtml}</div>`;
          }
          return `${sectionHtml}<div class="paper-question structured-box">${questionLine}${diagram}${answerSpace}${answer}${objectiveHtml}</div>`;
        }).join('');
@@ -831,8 +778,8 @@ function buildPrintRoot(pkg){
   const total=normalized.reduce((sum,q)=>sum+(Number(q.marks)||0),0);
   const header=`<div class="paper-head" ${lang==='ar'?'dir="rtl" lang="ar"':''}><img class="exam-logo" src="/letterhead.jpg" alt="GHDD logo"><h1>${esc(schoolName)}</h1><h2>${esc(examTitle)}</h2><p>${esc(subject)} · ${esc(className)}</p></div>`;
   const meta=`<div class="paper-meta"><div><strong>${examText(lang,'name')}:</strong> ________________________</div><div><strong>${examText(lang,'date')}:</strong> ________________________</div><div><strong>${examText(lang,'class')}:</strong> ${esc(className)}</div><div><strong>${examText(lang,'total')}:</strong> ${total}</div></div>`;
-  const examPaper=`<div class="student-paper-no-solutions" ${lang==='ar'?'dir="rtl" lang="ar"':''}>${header}${meta}<p><strong>${examText(lang,'instructions')}:</strong> ${esc(instructions)}${passage?' '+esc(examText(lang,'passageInstruction')):''}</p>${paperQuestionsHtml(normalized,passage,lang,false,isMathSubjectClient(subject))}<p><strong>${examText(lang,'total')}: ${total} ${examText(lang,'marks')}</strong></p></div>`;
-  const answerPaper=`<div ${lang==='ar'?'dir="rtl" lang="ar"':''}>${header}<h2>${examText(lang,'answer')}</h2><p><strong>${examText(lang,'total')}:</strong> ${total} ${examText(lang,'marks')}</p>${paperQuestionsHtml(normalized,passage,lang,true,isMathSubjectClient(subject))}</div>`;
+  const examPaper=`<div class="student-paper-no-solutions" ${lang==='ar'?'dir="rtl" lang="ar"':''}>${header}${meta}<p><strong>${examText(lang,'instructions')}:</strong> ${esc(instructions)}${passage?' '+esc(examText(lang,'passageInstruction')):''}</p>${paperQuestionsHtml(normalized,passage,lang,false)}<p><strong>${examText(lang,'total')}: ${total} ${examText(lang,'marks')}</strong></p></div>`;
+  const answerPaper=`<div ${lang==='ar'?'dir="rtl" lang="ar"':''}>${header}<h2>${examText(lang,'answer')}</h2><p><strong>${examText(lang,'total')}:</strong> ${total} ${examText(lang,'marks')}</p>${paperQuestionsHtml(normalized,passage,lang,true)}</div>`;
   $('printRoot').innerHTML=`<div class="paper-tools no-print"><button id="printExamOnly">Daabac imtixaanka (jawaabaha ma muuqdaan)</button><button id="printAnswerKey">Daabac answer key</button></div><div id="studentPaper">${examPaper}</div><div id="keyPaper" style="margin-top:35px;border-top:3px double #333;padding-top:18px">${answerPaper}</div>`;
   $('printExamOnly').onclick=()=>printSelection('exam');
   $('printAnswerKey').onclick=()=>printSelection('key');
