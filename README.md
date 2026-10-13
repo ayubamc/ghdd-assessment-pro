@@ -125,3 +125,9 @@ Su'aalaha uu nidaamku diyaariyo waa in macallin ama guddi imtixaan dib u eego ka
 **Hay'adda:** Golaha Horumarinta Dugsiyada Dadweynaha (GHDD)
 
 Ujeeddada guud waa in la horumariyo tayada, caddaaladda iyo isku-habboonaanta imtixaannada dugsiyada dadweynaha.
+
+## 11. Xeerarka Qoritaanka Su'aalaha (cusub)
+
+- **Xisaabta:** su'aalaha maadada xisaabta waxaa lagu qoraa qaab nadiif ah, sida buugga manhajka ugu qoran (tusaale: `x²`, `3/4`, `√16`, `45°`). Lama oggola LaTeX (`$`, `\frac`), markdown (`**`) ama calaamado aan loo baahnayn; server-ku wuu nadiifiyaa haddii AI-gu soo geliyo.
+- **Xigasho la'aan:** su'aasha waxaa la weydiiyaa si toos ah. Lama oggola "bogga 5aad", "(p. 7)", "sida buugga ku qoran" iwm. Bogagga isha waxay ku jiraan xogta macallinka (`sourcePages`) oo keliya, kamana soo muuqdaan warqadda ardayga.
+- **Qidcada (passage):** MCQ-yada qaybta 1aad waxaa laga soo saaraa qidcada, iyadoo lagu saleynayo ujeeddooyinka manhajka (naxwaha, ereyada, isku-micnaha iyo ka-soo-horjeedka, balaaqada, higgaadda iyo calaamadaynta). Ugu yaraan 70% waa xirfado luqadeed; ugu badnaan 30% waa faham guud.
