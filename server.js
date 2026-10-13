@@ -354,7 +354,7 @@ function remainingPlan(plan, done) {
 }
 // Gemini model list. gemini-2.5-flash is retired for new users, so it is filtered out even if GEMINI_MODEL still points to it on Railway.
 const RETIRED_GEMINI_MODELS = new Set(['gemini-2.5-flash', 'models/gemini-2.5-flash']);
-const DEFAULT_GEMINI_MODELS = ['gemini-3.8-flash', 'gemini-3.5-flash-lite', 'gemini-3.1-flash-lite'];
+const DEFAULT_GEMINI_MODELS = ['gemini-3.8-flash', 'gemini-3.5-flash', 'gemini-3.5-flash-lite', 'gemini-3.1-flash-lite'];
 function geminiModels(preferred) {
   const env = String(process.env.GEMINI_MODEL || '').trim().replace(/^models\//, '');
   const list = [preferred, env, ...DEFAULT_GEMINI_MODELS].filter(Boolean).map(m => String(m).replace(/^models\//, ''));
@@ -365,7 +365,8 @@ async function requestQuestionBatch(prompt) {
   const models = geminiModels();
   let lastError = '';
   for (const model of models) {
-    for (let attempt = 0; attempt < 2; attempt++) {
+    for (let attempt = 0; attempt < 4; attempt++) {
+      if (attempt > 0) await new Promise(res => setTimeout(res, 2000 * attempt * attempt));
       try {
         const r = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`, {
           method: 'POST', headers: { 'content-type': 'application/json', 'x-goog-api-key': key },
@@ -389,16 +390,19 @@ async function callGeminiJson(prompt, { maxTokens = 9000, temperature = 0.1 } = 
   const models = geminiModels();
   let lastError = '';
   for (const model of models) {
-    try {
-      const r = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`, {
-        method: 'POST', headers: { 'content-type': 'application/json', 'x-goog-api-key': key },
-        body: JSON.stringify({ contents: [{ role: 'user', parts: [{ text: prompt }] }], generationConfig: { responseMimeType: 'application/json', temperature, maxOutputTokens: maxTokens } })
-      });
-      const data = await r.json();
-      if (!r.ok) { lastError = data?.error?.message || `AI request failed (${r.status})`; continue; }
-      const raw = (data.candidates?.[0]?.content?.parts || []).map(x => x.text || '').join('').replace(/^```json|```$/g, '').trim();
-      return JSON.parse(raw);
-    } catch (e) { lastError = e.message; }
+    for (let attempt = 0; attempt < 3; attempt++) {
+      if (attempt > 0) await new Promise(res => setTimeout(res, 2000 * attempt * attempt));
+      try {
+        const r = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`, {
+          method: 'POST', headers: { 'content-type': 'application/json', 'x-goog-api-key': key },
+          body: JSON.stringify({ contents: [{ role: 'user', parts: [{ text: prompt }] }], generationConfig: { responseMimeType: 'application/json', temperature, maxOutputTokens: maxTokens } })
+        });
+        const data = await r.json();
+        if (!r.ok) { lastError = data?.error?.message || `AI request failed (${r.status})`; if ([429, 500, 502, 503, 504].includes(r.status)) continue; break; }
+        const raw = (data.candidates?.[0]?.content?.parts || []).map(x => x.text || '').join('').replace(/^```json|```$/g, '').trim();
+        return JSON.parse(raw);
+      } catch (e) { lastError = e.message; }
+    }
   }
   throw new Error(lastError || 'AI request failed');
 }
