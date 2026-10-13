@@ -354,7 +354,7 @@ function remainingPlan(plan, done) {
 }
 // Gemini model list. gemini-2.5-flash is retired for new users, so it is filtered out even if GEMINI_MODEL still points to it on Railway.
 const RETIRED_GEMINI_MODELS = new Set(['gemini-2.5-flash', 'models/gemini-2.5-flash']);
-const DEFAULT_GEMINI_MODELS = ['gemini-3.8-flash', 'gemini-3.5-flash', 'gemini-3.5-flash-lite', 'gemini-3.1-flash-lite'];
+const DEFAULT_GEMINI_MODELS = ['gemini-3.8-flash', 'gemini-3.5-flash', 'gemini-3.5-flash-lite', 'gemini-3.1-flash-lite', 'gemini-2.5-flash-lite'];
 function geminiModels(preferred) {
   const env = String(process.env.GEMINI_MODEL || '').trim().replace(/^models\//, '');
   const list = [preferred, env, ...DEFAULT_GEMINI_MODELS].filter(Boolean).map(m => String(m).replace(/^models\//, ''));
@@ -373,7 +373,7 @@ async function requestQuestionBatch(prompt) {
           body: JSON.stringify({ contents: [{ role: 'user', parts: [{ text: prompt }] }], generationConfig: { responseMimeType: 'application/json', temperature: 0.25, maxOutputTokens: 32000 } })
         });
         const data = await r.json();
-        if (!r.ok) { lastError = data?.error?.message || `AI request failed (${r.status})`; if ([429, 500, 502, 503, 504].includes(r.status)) continue; break; }
+        if (!r.ok) { lastError = data?.error?.message || `AI request failed (${r.status})`; console.error(`[gemini] ${model} attempt ${attempt + 1} -> ${r.status}: ${lastError}`); if ([429, 500, 502, 503, 504].includes(r.status)) continue; break; }
         const raw = (data.candidates?.[0]?.content?.parts || []).map(x => x.text || '').join('');
         const parsed = parseQuestionsJson(raw);
         if (parsed.questions.length) return parsed;
