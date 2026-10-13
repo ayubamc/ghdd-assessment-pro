@@ -1,4 +1,3 @@
-
 import express from 'express';
 import pg from 'pg';
 import crypto from 'crypto';
@@ -63,6 +62,67 @@ const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || 'change-me';
 const MAX_PDF_BYTES = 500 * 1024 * 1024;
 const CHUNK_BYTES = 4 * 1024 * 1024;
 const blooms = ['Remember', 'Understand', 'Apply', 'Analyze', 'Evaluate', 'Create'];
+
+// ───────────────────────── Gemini helper: retry + backoff + timeout + model fallback ─────────────────────────
+// Dhammaan wicitaannada AI waxay maraan halkan. Marka model-ku mashquulsan yahay (429/5xx), fetch-ku fashilmo
+// ama waqtigu dhammaado, waxaa dib loo isku dayaa (1.5s, 4s) kadibna model kale ayaa la isticmaalaa.
+const sleep = ms => new Promise(r => setTimeout(r, ms));
+
+function geminiModels() {
+  return [...new Set([
+    process.env.GEMINI_MODEL,
+    ...(process.env.GEMINI_FALLBACK_MODELS || '').split(',').map(s => s.trim()),
+    'gemini-3.8-flash',
+    'gemini-3.5-flash-lite',
+    'gemini-3.1-flash-lite'
+  ].filter(Boolean))];
+}
+
+// Soo celisa qoraalka AI-ga. Haddii ay fashilmaan dhammaan isku-dayada, waxay tuurtaa Error leh err.busy:
+//   true  = AI-gu mashquulsan yahay / shabakad (retryable, 503)
+//   false = khalad joogto ah (key khaldan, request xun, iwm.)
+async function geminiGenerate(prompt, { maxTokens = 9000, temperature = 0.2, json = true, timeoutMs = 90000 } = {}) {
+  const key = process.env.GEMINI_API_KEY;
+  if (!key) { const err = new Error('GEMINI_API_KEY is missing'); err.busy = false; throw err; }
+  const delays = [0, 1500, 4000];
+  let lastError = '', busy = false;
+  for (const model of geminiModels()) {
+    for (const delay of delays) {
+      if (delay) await sleep(delay);
+      try {
+        const r = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`, {
+          method: 'POST',
+          headers: { 'content-type': 'application/json', 'x-goog-api-key': key },
+          signal: AbortSignal.timeout(timeoutMs),
+          body: JSON.stringify({
+            contents: [{ role: 'user', parts: [{ text: prompt }] }],
+            generationConfig: { ...(json ? { responseMimeType: 'application/json' } : {}), temperature, maxOutputTokens: maxTokens }
+          })
+        });
+        const data = await r.json().catch(() => ({}));
+        if (r.ok) {
+          const text = (data.candidates?.[0]?.content?.parts || []).map(x => x.text || '').join('');
+          if (text.trim()) return text;
+          lastError = 'AI returned empty response'; busy = true; continue;
+        }
+        lastError = data?.error?.message || `AI request failed (${r.status})`;
+        if ([429, 500, 502, 503, 504].includes(r.status)) { busy = true; console.warn(`[${model}] ${r.status}: ${lastError}`); continue; }
+        if (r.status === 404) { console.warn(`[${model}] not found, trying next model`); break; }
+        const err = new Error(lastError); err.busy = false; throw err;   // 400/401/403: ha isku dayin
+      } catch (e) {
+        if (e.busy === false) throw e;
+        lastError = e.message; busy = true;                              // fetch failed / timeout
+        console.warn(`[${model}] ${lastError}`);
+      }
+    }
+  }
+  const err = new Error(lastError || 'AI request failed');
+  err.busy = busy;
+  throw err;
+}
+
+function aiErrorStatus(e) { return e && e.busy ? 503 : 502; }
+const AI_BUSY_MESSAGE = 'AI-gu wuu mashquulsan yahay. Fadlan daqiiqad kadib isku day mar kale.';
 
 // ───────────────────────── Language, Bloom-confidentiality and objective helpers ─────────────────────────
 const LANGUAGE_NAMES = { en: 'ENGLISH', so: 'AF-SOOMAALI (SOMALI)', ar: 'ARABIC (العربية)' };
@@ -352,47 +412,28 @@ function remainingPlan(plan, done) {
   let skip = done;
   return (Array.isArray(plan) ? plan : []).map(x => { const c = Number(x.count) || 0; const used = Math.min(c, skip); skip -= used; return { ...x, count: c - used }; }).filter(x => x.count > 0);
 }
+
+// Waxay isticmaashaa geminiGenerate (retry + backoff + timeout + model fallback).
+// Khaladaadka AI-ga (err.busy oo la taxaday) waa la tuurayaa; khaladaadka JSON-ka waa la isku dayayaa mar kale.
 async function requestQuestionBatch(prompt) {
-  const key = process.env.GEMINI_API_KEY;
-  const models = [...new Set([process.env.GEMINI_MODEL || 'gemini-3.8-flash', 'gemini-3.5-flash-lite', 'gemini-3.8-flash'])];
-  let lastError = '', firstError = '';
-  for (const model of models) {
-    for (let attempt = 0; attempt < 2; attempt++) {
-      try {
-        const r = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`, {
-          method: 'POST', headers: { 'content-type': 'application/json', 'x-goog-api-key': key },
-          body: JSON.stringify({ contents: [{ role: 'user', parts: [{ text: prompt }] }], generationConfig: { responseMimeType: 'application/json', temperature: 0.25, maxOutputTokens: 32000 } })
-        });
-        const data = await r.json();
-        if (!r.ok) { lastError = data?.error?.message || `AI request failed (${r.status})`; if (!firstError) firstError = `[${model}] ${lastError}`; if ([429, 500, 502, 503, 504].includes(r.status)) continue; break; }
-        const raw = (data.candidates?.[0]?.content?.parts || []).map(x => x.text || '').join('');
-        const parsed = parseQuestionsJson(raw);
-        if (parsed.questions.length) return parsed;
-        lastError = 'AI returned no questions';
-      } catch (e) { lastError = e.message; }
+  let lastError = '';
+  for (let attempt = 0; attempt < 2; attempt++) {
+    try {
+      const raw = await geminiGenerate(prompt, { maxTokens: 32000, temperature: 0.25, timeoutMs: 150000 });
+      const parsed = parseQuestionsJson(raw);
+      if (parsed.questions.length) return parsed;
+      lastError = 'AI returned no questions';
+    } catch (e) {
+      if (e.busy !== undefined) throw e;   // khalad AI/shabakad: horey ayaa loo isku dayay
+      lastError = e.message;               // JSON xun: isku day mar kale
     }
   }
-  throw new Error(firstError || lastError || 'AI request failed');
+  throw new Error(lastError || 'AI request failed');
 }
 
 async function callGeminiJson(prompt, { maxTokens = 9000, temperature = 0.1 } = {}) {
-  const key = process.env.GEMINI_API_KEY;
-  if (!key) throw new Error('GEMINI_API_KEY is missing');
-  const models = [...new Set([process.env.GEMINI_MODEL || 'gemini-3.8-flash', 'gemini-3.5-flash-lite', 'gemini-3.8-flash'])];
-  let lastError = '';
-  for (const model of models) {
-    try {
-      const r = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`, {
-        method: 'POST', headers: { 'content-type': 'application/json', 'x-goog-api-key': key },
-        body: JSON.stringify({ contents: [{ role: 'user', parts: [{ text: prompt }] }], generationConfig: { responseMimeType: 'application/json', temperature, maxOutputTokens: maxTokens } })
-      });
-      const data = await r.json();
-      if (!r.ok) { lastError = data?.error?.message || `AI request failed (${r.status})`; continue; }
-      const raw = (data.candidates?.[0]?.content?.parts || []).map(x => x.text || '').join('').replace(/^```json|```$/g, '').trim();
-      return JSON.parse(raw);
-    } catch (e) { lastError = e.message; }
-  }
-  throw new Error(lastError || 'AI request failed');
+  const text = await geminiGenerate(prompt, { maxTokens, temperature });
+  return JSON.parse(text.replace(/^\s*```json\s*|```\s*$/g, '').trim());
 }
 
 // If any question still contains another language, ask the AI to rewrite only those questions in the selected language.
@@ -436,7 +477,10 @@ ${String(p.sourceText || p.text || '').slice(0, 30000)}`;
       const cand = normalizePassage(out && out.passage ? out.passage : out);
       if (cand && cand.text.split(/\s+/).length >= 60) return cand;
       last = 'passage empty or too short';
-    } catch (e) { last = e.message; }
+    } catch (e) {
+      if (e.busy !== undefined) throw e;   // AI mashquul: ha dib u isku dayin halkan, geminiGenerate ayaa horey u isku dayay
+      last = e.message;
+    }
   }
   throw new Error('AI did not return a reading passage (' + last + '). Try again.');
 }
@@ -626,6 +670,8 @@ const dbReady = initDb()
     console.error('Database initialization failed:', err.message);
     throw err;
   });
+// Ka hortag unhandled rejection haddii database-ku hore u fashilmo.
+dbReady.catch(() => {});
 
 app.get('/api/health', async (req, res) => {
   try {
@@ -1289,7 +1335,6 @@ async function aiGenerate(p) {
   const key = process.env.GEMINI_API_KEY;
   if (!key) return null;
 
-  const model = process.env.GEMINI_MODEL || 'gemini-3.8-flash';
   const targetLanguage = LANGUAGE_NAMES[normalizeLang(p.examLanguage)];
   const mathMode = isMathSubject(p.subject) || isMathSubject(p.className) || isMathSubject(p.sourceTitle);
   const buildPrompt = (count, partPlan, avoid = [], passageObj = null) => `
@@ -1353,7 +1398,7 @@ ${String(p.sourceText || p.text || '').slice(0, 70000)}
   // Never expose "undefined" or text-only placeholders as diagrams.
   for (const q of questions) {
     if (typeof q.diagram !== 'string' || q.diagram.trim().toLowerCase() === 'undefined') q.diagram = '';
-    if (typeof q.diagramSvg !== 'string' || !/<svg\\b/i.test(q.diagramSvg)) q.diagramSvg = '';
+    if (typeof q.diagramSvg !== 'string' || !/<svg\b/i.test(q.diagramSvg)) q.diagramSvg = '';   // FIXED: was /<svg\\b/i (matched a literal backslash)
   }
   if (requestedDiagrams > 0) {
     const candidates = questions.filter(q => /structured|direct/i.test(String(q.type || '')) || /STRUCTURED|DIRECT/i.test(String(q.section || '')));
@@ -1392,9 +1437,6 @@ ${String(p.sourceText || p.text || '').slice(0, 70000)}
 
 
 async function aiGenerateDiagram(p, question, index) {
-  const key = process.env.GEMINI_API_KEY;
-  if (!key) throw new Error('GEMINI_API_KEY is missing; cannot create requested diagrams.');
-  const model = process.env.GEMINI_MODEL || 'gemini-3.5-flash-lite';
   const lang = p.examLanguage === 'ar' ? 'Arabic' : p.examLanguage === 'so' ? 'Somali' : 'English';
   const prompt = `Create one accurate, student-exam-ready educational diagram as SVG for this question. Diagram labels must be in ${lang}. Use only source-supported information; if the source does not support exact details, make a clearly schematic diagram and avoid invented labels.
 Question: ${String(question.question || question.text || '')}
@@ -1402,25 +1444,15 @@ Topic: ${String(question.topic || '')}
 Source pages: ${String(question.sourcePages || '')}
 Source text: ${String(p.sourceText || '').slice(0, 18000)}
 Return ONLY a single standalone SVG element, no markdown or explanation. Requirements: viewBox="0 0 640 300", width="100%", height="auto"; clear readable labels; simple shapes/lines; white background; no scripts, no external links, no images, no foreignObject, no CSS imports.`;
-  const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`, {
-    method: 'POST',
-    headers: {'content-type':'application/json','x-goog-api-key':key},
-    body: JSON.stringify({
-      contents:[{role:'user',parts:[{text:prompt}]}],
-      generationConfig:{temperature:0.2,maxOutputTokens:3000}
-    })
-  });
-  const data = await response.json();
-  if (!response.ok) throw new Error(data?.error?.message || 'Diagram generation request failed.');
-  const raw=(data.candidates?.[0]?.content?.parts||[]).map(x=>x.text||'').join('').trim();
-  const svgMatch=raw.match(/<svg\b[\s\S]*?<\/svg>/i);
+  const raw = (await geminiGenerate(prompt, { maxTokens: 3000, temperature: 0.2, json: false, timeoutMs: 60000 })).trim();
+  const svgMatch = raw.match(/<svg\b[\s\S]*?<\/svg>/i);
   if (!svgMatch) throw new Error(`AI did not return a valid SVG for diagram ${index}.`);
-  const svg=svgMatch[0]
-    .replace(/<script[\s\S]*?<\/script>/gi,'')
-    .replace(/<\/?(?:foreignObject|iframe|object|embed|image|use)\b[^>]*>/gi,'')
-    .replace(/\son\w+\s*=\s*(?:"[^"]*"|'[^']*'|[^\s>]+)/gi,'')
-    .replace(/\s(?:href|xlink:href)\s*=\s*(?:"[^"]*"|'[^']*'|[^\s>]+)/gi,'')
-    .replace(/url\s*\([^)]*\)/gi,'none');
+  const svg = svgMatch[0]
+    .replace(/<script[\s\S]*?<\/script>/gi, '')
+    .replace(/<\/?(?:foreignObject|iframe|object|embed|image|use)\b[^>]*>/gi, '')
+    .replace(/\son\w+\s*=\s*(?:"[^"]*"|'[^']*'|[^\s>]+)/gi, '')
+    .replace(/\s(?:href|xlink:href)\s*=\s*(?:"[^"]*"|'[^']*'|[^\s>]+)/gi, '')
+    .replace(/url\s*\([^)]*\)/gi, 'none');
   return svg;
 }
 
@@ -1429,8 +1461,7 @@ app.post('/api/blueprint', async (req, res) => {
     const p = req.body || {};
     const sourceText = String(p.sourceText || '').trim();
     if (!sourceText) return res.status(400).json({error:'Qoraalka OCR ee buugga ayaa loo baahan yahay.'});
-    const key = process.env.GEMINI_API_KEY;
-    if (!key) return res.status(503).json({error:'GEMINI_API_KEY laguma dejin Railway.'});
+    if (!process.env.GEMINI_API_KEY) return res.status(503).json({error:'GEMINI_API_KEY laguma dejin Railway.'});
     const totalMarks = Math.max(10, Math.min(300, Number(p.totalMarks) || 100));
     const defaultCount = Math.min(50, Math.max(10, Math.round(totalMarks * 0.44)));
     const totalQuestions = Math.max(4, Math.min(50, Number(p.count || p.questionCount) || defaultCount));
@@ -1438,21 +1469,14 @@ app.post('/api/blueprint', async (req, res) => {
     const languageName = lang === 'so' ? 'Somali (Af-Soomaali)' : lang === 'ar' ? 'Arabic (العربية)' : 'English';
     const prompt = `You are an expert secondary-school assessment designer. Create an EXAM BLUEPRINT / TABLE OF SPECIFICATIONS before the questions are generated. Use ONLY topics, headings, facts and learning outcomes supported by the supplied OCR text. Do not invent units or learning outcomes.\nMANDATORY OUTPUT LANGUAGE: ${languageName}. Translate all displayed blueprint fields including unit, topic, learning outcomes, notes and section names into this language, even when the OCR source uses another language. Do not mix languages; only JSON keys and scientific symbols may remain unchanged. Subject: ${p.subject || ''}. Class: ${p.className || ''}. Source book: ${p.sourceTitle || ''}. Selected pages: ${JSON.stringify(p.pageRange || {})}. Total marks: ${totalMarks}. Total questions: ${totalQuestions}. Format: ${p.format || 'four-part'}.\n${p.passage ? `PASSAGE-BASED LANGUAGE EXAM: this exam will begin with an original reading passage built from the curriculum, and every question will be answered through that passage. Write the learningOutcomes as language-skill objectives taken from the CURRICULUM text itself (grammar/naxwaha and sentence structure, vocabulary and word meaning, synonyms and antonyms, plurals and word forms, rhetoric and style, spelling and punctuation) so each can be tested through a passage; reading comprehension (main idea, details, inference) may take at most 30% of the objectives.\n` : ''}OBJECTIVE-FIRST BLUEPRINT (MOST IMPORTANT): the blueprint is built around learning objectives. If the source text itself states objectives (for example headings such as Objectives, Learning outcomes, Learning objectives, \"By the end of this unit/lesson students should be able to\", \"After studying this chapter you should...\"), use those objectives first and translate them faithfully into ${languageName}. Otherwise derive 2 to 5 measurable objectives per topic from the headings and content that are really present. Each objective is ONE testable statement that starts with an observable action verb (define, state, identify, describe, explain, calculate, compare, classify, interpret, justify...) and can be answered from the supplied source text. learningOutcomes must contain only such objectives, never vague aims like \"understand the topic\". Give every topic a questionCount big enough to assess its objectives (at least one question per objective when the total number of questions allows). The Bloom distribution of a topic must follow the action verbs of its objectives. Bloom levels are teacher-only information inside this blueprint and must never appear in student-facing text.\nUse Bloom levels ${JSON.stringify(p.levels || blooms)}. Spread topics across distinct headings and pages; do not base adjacent questions on the same paragraph. Determine topic/unit, measurable learning outcomes, source pages, Bloom distribution, planned question count and marks per topic. Counts must add to exactly ${totalQuestions}; marks must add to exactly ${totalMarks}. Section counts should match this section plan: ${JSON.stringify(p.partPlan || [])}. Return valid JSON only. Set the language field to exactly English, Somali, or Arabic according to the selected language. Schema: {"subject":"","language":"","totalMarks":${totalMarks},"totalQuestions":${totalQuestions},"coverage":[{"unit":"","topic":"","learningOutcomes":[""],"sourcePages":"","bloomDistribution":{"Remember":0,"Understand":0,"Apply":0,"Analyze":0,"Evaluate":0,"Create":0},"questionCount":0,"marks":0}],"sectionDistribution":[{"section":"","questionCount":0,"marks":0}],"qualityRules":["source traceability","no duplicate questions","marks sum exactly","Bloom alignment"],"notes":[]}.\nOCR SOURCE TEXT:\n${sourceText.slice(0,70000)}`;
 
-    const models = [...new Set([process.env.GEMINI_MODEL || 'gemini-3.8-flash', 'gemini-3.5-flash-lite', 'gemini-3.8-flash'])];
-    let blueprint = null, lastError = '';
-    for (const model of models) {
-      try {
-        const r = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`, {
-          method:'POST', headers:{'content-type':'application/json','x-goog-api-key':key},
-          body:JSON.stringify({contents:[{role:'user',parts:[{text:prompt}]}],generationConfig:{responseMimeType:'application/json',temperature:0.15,maxOutputTokens:9000}})
-        });
-        const data = await r.json();
-        if (!r.ok) { lastError = data?.error?.message || `AI request failed (${r.status})`; if ([429,500,502,503,504].includes(r.status)) continue; throw new Error(lastError); }
-        const raw=(data.candidates?.[0]?.content?.parts||[]).map(x=>x.text||'').join('').replace(/^```json|```$/g,'').trim();
-        blueprint=JSON.parse(raw); break;
-      } catch (e) { lastError=e.message; }
+    // Retry + backoff + timeout + model fallback (geminiGenerate). JSON xun = isku day 2 jeer.
+    let blueprint = null, parseError = '';
+    for (let attempt = 0; attempt < 2 && !blueprint; attempt++) {
+      const text = await geminiGenerate(prompt, { maxTokens: 9000, temperature: 0.15 });
+      try { blueprint = JSON.parse(text.replace(/^\s*```json\s*|```\s*$/g, '').trim()); }
+      catch (e) { parseError = 'AI returned invalid JSON'; }
     }
-    if (!blueprint) throw new Error(lastError || 'AI Blueprint lama helin.');
+    if (!blueprint) throw new Error(parseError || 'AI Blueprint lama helin.');
     if (!Array.isArray(blueprint.coverage) || !blueprint.coverage.length) throw new Error('AI-gu ma aqoonsan mawduucyo ku filan qoraalka OCR.');
 
     // Reconcile AI rounding so displayed Blueprint totals always equal the selected exam totals.
@@ -1491,7 +1515,11 @@ app.post('/api/blueprint', async (req, res) => {
     res.json({ok:true,blueprint,validation:{marksSum,countSum,marksMatch:marksSum===totalMarks,questionsMatch:countSum===totalQuestions}});
   } catch(e) {
     console.error('AI Blueprint failed:',e.message);
-    res.status(502).json({error:'AI Blueprint lama samayn: '+e.message});
+    // 503 + retryable = AI mashquul; frontend-ku waa inuu tusaa "Isku day mar kale" (ma aha 502 ceeriin ah).
+    res.status(aiErrorStatus(e)).json({
+      error: e.busy ? AI_BUSY_MESSAGE : 'AI Blueprint lama samayn: '+e.message,
+      retryable: !!e.busy
+    });
   }
 });
 
@@ -1513,8 +1541,9 @@ app.post('/api/generate', async (req, res) => {
       if (Array.isArray(generated)) { languageReport = generated.languageReport || null; passage = generated.passage || null; questions = generated.slice(0, count); }
     } catch (e) {
       console.error('AI generation failed:', e.message);
-      return res.status(502).json({
-        error: 'AI-gu ma samayn su’aalaha: ' + e.message
+      return res.status(aiErrorStatus(e)).json({
+        error: e.busy ? AI_BUSY_MESSAGE : 'AI-gu ma samayn su’aalaha: ' + e.message,
+        retryable: !!e.busy
       });
     }
 
@@ -1596,8 +1625,7 @@ app.post('/api/lesson-plan/generate', async (req, res) => {
     const textbookText = String(p.textbookText || '').trim();
     if (!schemeText || schemeText.length < 80) return res.status(400).json({ error: 'Fadlan soo qaado Scheme of Work OCR oo dhammaystiran; isagaa go’aaminaya kala-horraynta casharrada sannadka.' });
     if (!textbookText || textbookText.length < 80) return res.status(400).json({ error: 'Fadlan soo qaado qoraalka buugga maaddada OCR; isagaa laga diyaarinayaa objectives, sharaxaadda iyo Lesson Note.' });
-    const key = process.env.GEMINI_API_KEY;
-    if (!key) return res.status(503).json({ error: 'GEMINI_API_KEY laguma dejin Railway.' });
+    if (!process.env.GEMINI_API_KEY) return res.status(503).json({ error: 'GEMINI_API_KEY laguma dejin Railway.' });
 
     const language = String(p.language || 'auto');
     const subject = String(p.subject || 'Not specified');
@@ -1607,7 +1635,6 @@ app.post('/api/lesson-plan/generate', async (req, res) => {
     const lessonDuration = Math.min(180, Math.max(20, Number(p.lessonDuration || 40)));
     const lessonsPerWeek = Math.min(10, Math.max(1, Number(p.lessonsPerWeek || 3)));
     const termCount = Math.min(4, Math.max(1, Number(p.termCount || 3)));
-    const modelCandidates = [...new Set([process.env.GEMINI_MODEL, 'gemini-3.5-flash-lite', 'gemini-3.1-flash-lite', 'gemini-3.8-flash'].filter(Boolean))];
     const langInstruction = language === 'auto'
       ? 'Detect the dominant language of the scheme of work and use that same language consistently for all lesson-plan and lesson-note content. Do not mix languages.'
       : `Write all generated material in ${language === 'so' ? 'Somali' : language === 'ar' ? 'Arabic' : 'English'} only. Do not mix languages.`;
@@ -1646,54 +1673,47 @@ OCR TEXTBOOK — SOURCE FOR OBJECTIVES, TEACHING CONTENT, EXPLANATIONS, EXAMPLES
 ${textbookText.slice(0, 55000)}
 `;
     let lastError = 'AI generation failed';
-    for (const model of modelCandidates) {
+    let parsed = null;
+    for (let attempt = 0; attempt < 2 && !parsed; attempt++) {
+      let raw;
       try {
-        const r = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${encodeURIComponent(key)}`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            contents: [{ parts: [{ text: prompt }] }],
-            generationConfig: { temperature: 0.2, responseMimeType: 'application/json', maxOutputTokens: 16000 }
-          })
-        });
-        const data = await r.json().catch(() => ({}));
-        if (!r.ok) {
-          lastError = data?.error?.message || `AI service returned ${r.status}`;
-          if ([429, 500, 502, 503].includes(r.status)) continue;
-          return res.status(502).json({ error: `AI: ${lastError}` });
-        }
-        const raw = data?.candidates?.[0]?.content?.parts?.map(x => x.text || '').join('') || '';
-        if (!raw.trim()) { lastError = 'AI jawaab madhan ayuu soo celiyey.'; continue; }
-        let parsed;
-        try { parsed = JSON.parse(raw.replace(/^```(?:json)?/i, '').replace(/```$/,'').trim()); }
-        catch (_) { lastError = 'Jawaabta AI ma ahayn JSON dhammaystiran. Isku day Scheme of Work ka gaaban.'; continue; }
-        if (!Array.isArray(parsed.lessons) || !parsed.lessons.length) { lastError = 'AI ma soo saarin casharro qorshaysan.'; continue; }
-        parsed.lessons = parsed.lessons.map((l, i) => {
-          const tm = Array.isArray(l.timeManagement) ? l.timeManagement : [];
-          const sum = tm.reduce((n, t) => n + Number(t.minutes || 0), 0);
-          if (!tm.length || sum !== lessonDuration) {
-            l.timeManagement = [
-              { stage: 'Review / introduction', minutes: 5 },
-              { stage: 'Attendance / settling', minutes: 3 },
-              { stage: 'Teaching and learning activities', minutes: lessonDuration - 10 },
-              { stage: 'Evaluation and homework', minutes: 2 }
-            ];
-          }
-          l.lessonNumber = Number(l.lessonNumber || i + 1);
-          l.durationMinutes = lessonDuration;
-          l.objectives = Array.isArray(l.objectives) ? l.objectives : [];
-          l.teachingMethods = Array.isArray(l.teachingMethods) ? l.teachingMethods : [];
-          l.learningAids = Array.isArray(l.learningAids) ? l.learningAids : [];
-          l.evaluationQuestions = Array.isArray(l.evaluationQuestions) ? l.evaluationQuestions : [];
-          l.noteHeadings = Array.isArray(l.noteHeadings) ? l.noteHeadings : [];
-          return l;
-        });
-        return res.json(parsed);
+        raw = await geminiGenerate(prompt, { maxTokens: 16000, temperature: 0.2, timeoutMs: 150000 });
       } catch (e) {
-        lastError = e.message || String(e);
+        console.error('Lesson-plan AI failed:', e.message);
+        return res.status(aiErrorStatus(e)).json({
+          error: e.busy ? AI_BUSY_MESSAGE : `AI ma dhammaystirin qorshaha: ${e.message}`,
+          retryable: !!e.busy
+        });
       }
+      let candidate;
+      try { candidate = JSON.parse(raw.replace(/^\s*```(?:json)?/i, '').replace(/```\s*$/, '').trim()); }
+      catch (_) { lastError = 'Jawaabta AI ma ahayn JSON dhammaystiran. Isku day Scheme of Work ka gaaban.'; continue; }
+      if (!Array.isArray(candidate.lessons) || !candidate.lessons.length) { lastError = 'AI ma soo saarin casharro qorshaysan.'; continue; }
+      parsed = candidate;
     }
-    return res.status(502).json({ error: `AI ma dhammaystirin qorshaha: ${lastError}` });
+    if (!parsed) return res.status(502).json({ error: `AI ma dhammaystirin qorshaha: ${lastError}` });
+
+    parsed.lessons = parsed.lessons.map((l, i) => {
+      const tm = Array.isArray(l.timeManagement) ? l.timeManagement : [];
+      const sum = tm.reduce((n, t) => n + Number(t.minutes || 0), 0);
+      if (!tm.length || sum !== lessonDuration) {
+        l.timeManagement = [
+          { stage: 'Review / introduction', minutes: 5 },
+          { stage: 'Attendance / settling', minutes: 3 },
+          { stage: 'Teaching and learning activities', minutes: lessonDuration - 10 },
+          { stage: 'Evaluation and homework', minutes: 2 }
+        ];
+      }
+      l.lessonNumber = Number(l.lessonNumber || i + 1);
+      l.durationMinutes = lessonDuration;
+      l.objectives = Array.isArray(l.objectives) ? l.objectives : [];
+      l.teachingMethods = Array.isArray(l.teachingMethods) ? l.teachingMethods : [];
+      l.learningAids = Array.isArray(l.learningAids) ? l.learningAids : [];
+      l.evaluationQuestions = Array.isArray(l.evaluationQuestions) ? l.evaluationQuestions : [];
+      l.noteHeadings = Array.isArray(l.noteHeadings) ? l.noteHeadings : [];
+      return l;
+    });
+    return res.json(parsed);
   } catch (e) {
     console.error('Lesson-plan generation failed:', e);
     return res.status(500).json({ error: e.message || 'Khalad ayaa dhacay.' });
@@ -1707,5 +1727,12 @@ app.get('*', (req, res) => {
   res.status(500).send('Public/index.html lama helin. Hubi faylka GitHub.');
 });
 
+// Ka hortag in app-ku dhinto marka ay jirto khalad aan la qabsan.
+process.on('unhandledRejection', err => console.error('Unhandled rejection:', err?.message || err));
+
 const port = process.env.PORT || 3000;
-app.listen(port, () => console.log(`GHDD Assessment Pro running on ${port}`));
+const server = app.listen(port, () => console.log(`GHDD Assessment Pro running on ${port}`));
+// Generation-ka AI wuxuu qaadan karaa daqiiqado; ha u daynin Node inuu xiro connection-ka hore.
+server.requestTimeout = 0;
+server.headersTimeout = 65000;
+server.keepAliveTimeout = 65000;
