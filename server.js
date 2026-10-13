@@ -1,3 +1,4 @@
+
 import express from 'express';
 import pg from 'pg';
 import crypto from 'crypto';
@@ -62,67 +63,6 @@ const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || 'change-me';
 const MAX_PDF_BYTES = 500 * 1024 * 1024;
 const CHUNK_BYTES = 4 * 1024 * 1024;
 const blooms = ['Remember', 'Understand', 'Apply', 'Analyze', 'Evaluate', 'Create'];
-
-// ───────────────────────── Gemini helper: retry + backoff + timeout + model fallback ─────────────────────────
-// Dhammaan wicitaannada AI waxay maraan halkan. Marka model-ku mashquulsan yahay (429/5xx), fetch-ku fashilmo
-// ama waqtigu dhammaado, waxaa dib loo isku dayaa (1.5s, 4s) kadibna model kale ayaa la isticmaalaa.
-const sleep = ms => new Promise(r => setTimeout(r, ms));
-
-function geminiModels() {
-  return [...new Set([
-    process.env.GEMINI_MODEL,
-    ...(process.env.GEMINI_FALLBACK_MODELS || '').split(',').map(s => s.trim()),
-    'gemini-3.8-flash',
-    'gemini-3.5-flash-lite',
-    'gemini-3.1-flash-lite'
-  ].filter(Boolean))];
-}
-
-// Soo celisa qoraalka AI-ga. Haddii ay fashilmaan dhammaan isku-dayada, waxay tuurtaa Error leh err.busy:
-//   true  = AI-gu mashquulsan yahay / shabakad (retryable, 503)
-//   false = khalad joogto ah (key khaldan, request xun, iwm.)
-async function geminiGenerate(prompt, { maxTokens = 9000, temperature = 0.2, json = true, timeoutMs = 90000 } = {}) {
-  const key = process.env.GEMINI_API_KEY;
-  if (!key) { const err = new Error('GEMINI_API_KEY is missing'); err.busy = false; throw err; }
-  const delays = [0, 1500, 4000];
-  let lastError = '', busy = false;
-  for (const model of geminiModels()) {
-    for (const delay of delays) {
-      if (delay) await sleep(delay);
-      try {
-        const r = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`, {
-          method: 'POST',
-          headers: { 'content-type': 'application/json', 'x-goog-api-key': key },
-          signal: AbortSignal.timeout(timeoutMs),
-          body: JSON.stringify({
-            contents: [{ role: 'user', parts: [{ text: prompt }] }],
-            generationConfig: { ...(json ? { responseMimeType: 'application/json' } : {}), temperature, maxOutputTokens: maxTokens }
-          })
-        });
-        const data = await r.json().catch(() => ({}));
-        if (r.ok) {
-          const text = (data.candidates?.[0]?.content?.parts || []).map(x => x.text || '').join('');
-          if (text.trim()) return text;
-          lastError = 'AI returned empty response'; busy = true; continue;
-        }
-        lastError = data?.error?.message || `AI request failed (${r.status})`;
-        if ([429, 500, 502, 503, 504].includes(r.status)) { busy = true; console.warn(`[${model}] ${r.status}: ${lastError}`); continue; }
-        if (r.status === 404) { console.warn(`[${model}] not found, trying next model`); break; }
-        const err = new Error(lastError); err.busy = false; throw err;   // 400/401/403: ha isku dayin
-      } catch (e) {
-        if (e.busy === false) throw e;
-        lastError = e.message; busy = true;                              // fetch failed / timeout
-        console.warn(`[${model}] ${lastError}`);
-      }
-    }
-  }
-  const err = new Error(lastError || 'AI request failed');
-  err.busy = busy;
-  throw err;
-}
-
-function aiErrorStatus(e) { return e && e.busy ? 503 : 502; }
-const AI_BUSY_MESSAGE = 'AI-gu wuu mashquulsan yahay. Fadlan daqiiqad kadib isku day mar kale.';
 
 // ───────────────────────── Language, Bloom-confidentiality and objective helpers ─────────────────────────
 const LANGUAGE_NAMES = { en: 'ENGLISH', so: 'AF-SOOMAALI (SOMALI)', ar: 'ARABIC (العربية)' };
@@ -217,6 +157,20 @@ function cleanMathText(text) {
   t = t.replace(/(?<=[\p{L}\p{N})\]])\^(-?[0-9n])(?![\p{L}\p{N}])/gu, (m, x) => toScript(x, SUP) || m);
   t = t.replace(/_\{([^{}]*)\}/g, (m, x) => toScript(x, SUB) || x);
   t = t.replace(/(?<=[\p{L}])_([0-9])/gu, (m, x) => SUB[x]);
+  // plain-text / code style math -> textbook symbols
+  for (let i = 0; i < 3; i++) {
+    t = t.replace(/\b(?:sqrt|SQRT)\s*\(([^()]*)\)/g, (_, x) => `√${wrapIfComplex(x)}`);
+    t = t.replace(/\b(?:cbrt|cuberoot)\s*\(([^()]*)\)/gi, (_, x) => `∛${wrapIfComplex(x)}`);
+  }
+  t = t.replace(/\b(?:square\s+root\s+of|xididka\s+labaad\s+ee)\s+(\d+(?:\.\d+)?|[A-Za-z])\b/gi, '√$1');
+  t = t.replace(/<=/g, '≤').replace(/>=/g, '≥').replace(/!=/g, '≠').replace(/=\/=/g, '≠').replace(/\+\/-/g, '±').replace(/-->|->/g, '→');
+  t = t.replace(/(?<![\p{L}\p{N}])pi(?![\p{L}\p{N}])/giu, 'π');
+  t = t.replace(/(\d)\s*(?:degrees?|deg)\b/gi, '$1°');
+  t = t.replace(/(?<![\p{L}\p{N}])theta(?![\p{L}\p{N}])/giu, 'θ');
+  t = t.replace(/(?<=\d)\s+[xX]\s+(?=\d)/g, ' × ');
+  t = t.replace(/\^\(([^()]*)\)/g, (m, x) => toScript(x, SUP) || m);
+  t = t.replace(/(?<=[\p{L}\p{N})\]])\^(-?\d{1,3})(?![\p{L}\p{N}])/gu, (m, x) => toScript(x, SUP) || m);
+  t = t.replace(/(?<=\d)\s*%\s*/g, '%').replace(/\s+%/g, '%');
   // markdown and decorative symbols
   t = t.replace(/\*\*([^*]+)\*\*/g, '$1').replace(/`+/g, '').replace(/^\s{0,3}#{1,6}\s+/gm, '');
   t = t.replace(/(?<=[0-9A-Za-z)\]])\s*\*\s*(?=[0-9A-Za-z(\[])/g, ' × ').replace(/(?<=[0-9A-Za-z)\]])\s*\*\s*(?=[0-9A-Za-z(\[])/g, ' × ');
@@ -227,7 +181,7 @@ function cleanMathText(text) {
   return t.trim();
 }
 function mapQuestionText(q, fn) {
-  for (const k of ['question', 'text', 'answer', 'topic', 'objective']) if (typeof q[k] === 'string') q[k] = fn(q[k]);
+  for (const k of ['question', 'text', 'answer', 'topic', 'objective', 'distractor']) if (typeof q[k] === 'string') q[k] = fn(q[k]);
   if (Array.isArray(q.options)) q.options = q.options.map(o => fn(String(o)));
   if (Array.isArray(q.matches)) q.matches = q.matches.map(m => (m && typeof m === 'object') ? { ...m, question: fn(String(m.question || '')), answer: fn(String(m.answer || '')) } : m);
   return q;
@@ -412,28 +366,47 @@ function remainingPlan(plan, done) {
   let skip = done;
   return (Array.isArray(plan) ? plan : []).map(x => { const c = Number(x.count) || 0; const used = Math.min(c, skip); skip -= used; return { ...x, count: c - used }; }).filter(x => x.count > 0);
 }
-
-// Waxay isticmaashaa geminiGenerate (retry + backoff + timeout + model fallback).
-// Khaladaadka AI-ga (err.busy oo la taxaday) waa la tuurayaa; khaladaadka JSON-ka waa la isku dayayaa mar kale.
 async function requestQuestionBatch(prompt) {
+  const key = process.env.GEMINI_API_KEY;
+  const models = [...new Set([process.env.GEMINI_MODEL || 'gemini-2.5-flash', 'gemini-3.5-flash-lite', 'gemini-2.5-flash'])];
   let lastError = '';
-  for (let attempt = 0; attempt < 2; attempt++) {
-    try {
-      const raw = await geminiGenerate(prompt, { maxTokens: 32000, temperature: 0.25, timeoutMs: 150000 });
-      const parsed = parseQuestionsJson(raw);
-      if (parsed.questions.length) return parsed;
-      lastError = 'AI returned no questions';
-    } catch (e) {
-      if (e.busy !== undefined) throw e;   // khalad AI/shabakad: horey ayaa loo isku dayay
-      lastError = e.message;               // JSON xun: isku day mar kale
+  for (const model of models) {
+    for (let attempt = 0; attempt < 2; attempt++) {
+      try {
+        const r = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`, {
+          method: 'POST', headers: { 'content-type': 'application/json', 'x-goog-api-key': key },
+          body: JSON.stringify({ contents: [{ role: 'user', parts: [{ text: prompt }] }], generationConfig: { responseMimeType: 'application/json', temperature: 0.25, maxOutputTokens: 32000 } })
+        });
+        const data = await r.json();
+        if (!r.ok) { lastError = data?.error?.message || `AI request failed (${r.status})`; if ([429, 500, 502, 503, 504].includes(r.status)) continue; break; }
+        const raw = (data.candidates?.[0]?.content?.parts || []).map(x => x.text || '').join('');
+        const parsed = parseQuestionsJson(raw);
+        if (parsed.questions.length) return parsed;
+        lastError = 'AI returned no questions';
+      } catch (e) { lastError = e.message; }
     }
   }
   throw new Error(lastError || 'AI request failed');
 }
 
 async function callGeminiJson(prompt, { maxTokens = 9000, temperature = 0.1 } = {}) {
-  const text = await geminiGenerate(prompt, { maxTokens, temperature });
-  return JSON.parse(text.replace(/^\s*```json\s*|```\s*$/g, '').trim());
+  const key = process.env.GEMINI_API_KEY;
+  if (!key) throw new Error('GEMINI_API_KEY is missing');
+  const models = [...new Set([process.env.GEMINI_MODEL || 'gemini-2.5-flash', 'gemini-3.5-flash-lite', 'gemini-2.5-flash'])];
+  let lastError = '';
+  for (const model of models) {
+    try {
+      const r = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`, {
+        method: 'POST', headers: { 'content-type': 'application/json', 'x-goog-api-key': key },
+        body: JSON.stringify({ contents: [{ role: 'user', parts: [{ text: prompt }] }], generationConfig: { responseMimeType: 'application/json', temperature, maxOutputTokens: maxTokens } })
+      });
+      const data = await r.json();
+      if (!r.ok) { lastError = data?.error?.message || `AI request failed (${r.status})`; continue; }
+      const raw = (data.candidates?.[0]?.content?.parts || []).map(x => x.text || '').join('').replace(/^```json|```$/g, '').trim();
+      return JSON.parse(raw);
+    } catch (e) { lastError = e.message; }
+  }
+  throw new Error(lastError || 'AI request failed');
 }
 
 // If any question still contains another language, ask the AI to rewrite only those questions in the selected language.
@@ -477,10 +450,7 @@ ${String(p.sourceText || p.text || '').slice(0, 30000)}`;
       const cand = normalizePassage(out && out.passage ? out.passage : out);
       if (cand && cand.text.split(/\s+/).length >= 60) return cand;
       last = 'passage empty or too short';
-    } catch (e) {
-      if (e.busy !== undefined) throw e;   // AI mashquul: ha dib u isku dayin halkan, geminiGenerate ayaa horey u isku dayay
-      last = e.message;
-    }
+    } catch (e) { last = e.message; }
   }
   throw new Error('AI did not return a reading passage (' + last + '). Try again.');
 }
@@ -670,8 +640,6 @@ const dbReady = initDb()
     console.error('Database initialization failed:', err.message);
     throw err;
   });
-// Ka hortag unhandled rejection haddii database-ku hore u fashilmo.
-dbReady.catch(() => {});
 
 app.get('/api/health', async (req, res) => {
   try {
@@ -1335,6 +1303,7 @@ async function aiGenerate(p) {
   const key = process.env.GEMINI_API_KEY;
   if (!key) return null;
 
+  const model = process.env.GEMINI_MODEL || 'gemini-2.5-flash';
   const targetLanguage = LANGUAGE_NAMES[normalizeLang(p.examLanguage)];
   const mathMode = isMathSubject(p.subject) || isMathSubject(p.className) || isMathSubject(p.sourceTitle);
   const buildPrompt = (count, partPlan, avoid = [], passageObj = null) => `
@@ -1342,7 +1311,7 @@ You are an expert secondary-school assessment designer and professional translat
 NON-NEGOTIABLE OUTPUT LANGUAGE: ${targetLanguage}. The user explicitly selected this language. The textbook may be in a different language; translate the educational content accurately into the selected output language. NEVER use the textbook language as the exam language unless it is the selected language. Do not mix English, Somali and Arabic.
 LANGUAGE COVERAGE: Write every student-visible and teacher-visible text field in ${targetLanguage}: exam question text, all subquestions, all MCQ options, fill-in prompts and answers, matching items, matching descriptions/options, matching question instructions, topic names, section titles, answer key, marking guide, explanations, diagram labels, and any generated captions. Translate generic labels such as “Answer”, “Question”, “Column A/B”, “Instructions”, “Correct answer”, and “Marking guide”. Keep only standard scientific symbols, equations, SI unit symbols, proper names, and abbreviations that should not be translated. If source facts are technical terms, use the correct equivalent in the selected language; a short parenthetical original term may be used only when necessary for scientific clarity.
 NO SOURCE CITATIONS IN QUESTIONS (MANDATORY): the student paper must simply ASK the question. Never write a page number, a page range, a lesson/unit/book reference or any phrase that cites the source inside question, options, matching items or answers. Forbidden examples: \"Bogga 5aad ...\", \"Sida ku xusan bogga 12...\", \"Su’aasha bogga 5aad\", \"(p. 7)\", \"According to page 5\", \"Sida buugga ku qoran\", \"As stated in the textbook\", \"في الصفحة 5\", \"حسب الكتاب\". The [PAGE n] markers in the source text are ONLY for filling the \\\"sourcePages\\\" field; they must never be copied into any other field. Write each question as a direct, self-contained question (the only allowed reference is to the reading passage in passage mode, e.g. \\\"sheekada\\\").${mathMode ? `
-MATHEMATICS WRITING RULES (MANDATORY, this is a mathematics exam): write every number, expression, equation, unit, term and problem EXACTLY the way the textbook writes it (same notation, same order, same wording style, same number format); use the textbook's examples as the model. Use plain readable text only: digits, letters, + − × ÷ = < > ≤ ≥ ≠ ≈ ( ) [ ] { } / √ π ° % and Unicode superscripts/subscripts (x², x³, a₁). Write fractions as a/b (use ½ ¼ ¾ only if the textbook does). NEVER use LaTeX or code notation (no $ signs, no backslashes, no \\\\frac, \\\\sqrt, \\\\times, no ^ or _ or curly-brace commands), no markdown (no *, **, #, backticks), no emoji, no decorative arrows/bullets, no unnecessary symbols, brackets, units or repeated punctuation. Do not add symbols that the textbook does not use. Keep each problem short and clear, giving only the data needed. Compute every answer carefully and verify it twice before returning: an MCQ has exactly one correct option with plausible numeric distractors; in the answer key give the final answer first, then the short working in plain text, one step per line.` : ''}
+MATHEMATICS WRITING RULES (MANDATORY, this is a mathematics exam): write every number, expression, equation, unit, term and problem EXACTLY the way the textbook writes it (same notation, same order, same wording style, same number format); use the textbook's examples as the model. Use plain readable text only: digits, letters, + − × ÷ = < > ≤ ≥ ≠ ≈ ( ) [ ] { } / √ π ° % and Unicode superscripts/subscripts (x², x³, a₁). Write fractions as a/b with plain digits (the paper turns them into stacked fractions), roots as √ followed by the number or the bracketed expression (√16, √(x+1), ∛27), powers with Unicode superscripts (x², 10³) and degrees with ° (45°, ∠ABC = 60°); use × and ÷ (never * or x for multiplication), π, ≤ ≥ ≠ ≈ ± exactly as printed exam papers do. Never write the words sqrt, pi, degrees, square root or ^. NEVER use LaTeX or code notation (no $ signs, no backslashes, no \\\\frac, \\\\sqrt, \\\\times, no ^ or _ or curly-brace commands), no markdown (no *, **, #, backticks), no emoji, no decorative arrows/bullets, no unnecessary symbols, brackets, units or repeated punctuation. Do not add symbols that the textbook does not use. Keep each problem short and clear, giving only the data needed. Compute every answer carefully and verify it twice before returning: an MCQ has exactly one correct option with plausible numeric distractors; in the answer key give the final answer first, then the short working in plain text, one step per line.` : ''}
 Create exactly ${count} questions using ONLY facts and concepts supported by the supplied source text. Translate supported source content into the selected language; do not invent facts or repeat questions.
 ${passageInstructions(p, passageObj, targetLanguage)}
 OBJECTIVE-FIRST DESIGN (MOST IMPORTANT RULE): the learning objectives (learningOutcomes) in the blueprint below are exactly what this exam must measure. Before writing each question, choose ONE objective from the blueprint topic it belongs to, then write a question that directly measures that objective. The action verb of the objective decides what the student must do (define/state → recall; identify/classify → recognise; explain/describe → explanation; calculate/solve → computation; compare/analyse → comparison or analysis; justify/evaluate → reasoned judgement). Copy the chosen objective text, in ${targetLanguage}, into the question's \"objective\" field. Rules: (1) every question maps to exactly one objective; (2) spread questions across as many DIFFERENT objectives as the question count allows, and do not assess an objective a second time until every objective of that topic has been assessed once; (3) do not write questions on trivia, side facts, dates or examples unless an objective requires them; (4) the question must be answerable from the source text and must not test anything outside its objective; (5) if the blueprint has no objectives, first derive measurable objectives from the source text and use them the same way.
@@ -1352,13 +1321,13 @@ AI-GENERATED TOPIC BLUEPRINT (use for coverage only; translate all displayed top
 SOURCE DISTRIBUTION RULE: ${p.sourceSelectionRule || 'Spread questions across different headings/topics; do not take consecutive questions from the same paragraph or heading. Prefer passages separated by at least two headings or at least one full page.'}
 Do not create consecutive questions from the same paragraph or heading. Spread questions across the selected page range and distinct topics. Every question must include sourcePages and topic/heading. topic/heading text must be in ${targetLanguage}; sourcePages may use page numbers.
 MCQ: exactly four options A, B, C, D and one correct answer. Translate the option wording into ${targetLanguage}; retain the option letters A-D for answer selection.
-Fill in the Blanks: one clear blank and a clear answer, entirely in ${targetLanguage}.
+Fill in the Blanks (NATIONAL-EXAM WORD-BOX STYLE, MANDATORY): the paper shows a WORD BANK (one word per item, exactly as many words as items) above the items and the student writes the correct word from the box into the blank. So every Fill in the Blank question must be a short, complete statement (a definition, a key term, a rule, a fact, a sentence from the topic) with EXACTLY ONE blank written as ________ (eight underscores); the blank may sit in the middle of the sentence (for example My dog ________ short because she was very shy.). The \"answer\" field contains ONLY the missing word or short term (1 to 3 words, no sentence, no letter label), taken from the source text, so it fits the blank both in meaning and in grammar. Style models: \"________ waa qaybta yar ee nolosha ee dhisa unugga.\" / \"The process by which plants make food is called ________.\" / \"A triangle with three equal sides is called ________ triangle.\" Vary the forms (definition, concept, process, comparison, example); never leave the blank at a place that makes the answer guessable from grammar alone; the answers of one section must all be different words. Leave \"options\" empty for this type. Write everything in ${targetLanguage}.
 Matching: create each matching question as ONE table group, not one separate mini-question per row. Return matches as [{"question":"item/term for Column A in selected language","answer":"exact matching Column B option text in selected language"}]. options must list all correct answers plus exactly ONE plausible extra distractor (so 5 items in Column A require 6 options A-F). All item and option text must be in ${targetLanguage}. On the student paper, render one four-column table: localized number; Column A item; blank for answer letter; Column B options/descriptions. Put the complete A, B, C, D, E, F option list together in the rightmost Column B cell spanning all rows. Students write only the option letter in Column 3. Never reveal correct letters or answers in the student paper.
 Structured/direct questions: include clear subparts in ${targetLanguage} and a teacher-only model answer/marking guide in ${targetLanguage}. The student paper must show no solutions or model answers.
-DIAGRAM RULE: Requested number of diagrams is ${Number(p.diagramCount || 0)}. Create exactly this number of diagrams across Structured questions. If it is 0, every diagram and diagramSvg field must be empty. If greater than 0, create actual, visible, accurate SVG diagrams in diagramSvg—not instructions, not placeholders, and never the word "undefined". Use standalone SVG with viewBox="0 0 640 300", width="100%", height="auto", all visible labels in ${targetLanguage}, basic shapes/lines only. No scripts, external links, images, foreignObject, or CSS imports. Diagrams must be based only on supplied source content and relevant to the question.
+DIAGRAM RULE: Requested number of diagrams is ${Number(p.diagramCount || 0)}. Create exactly this number of diagrams across Structured questions. If it is 0, every diagram and diagramSvg field must be empty. If greater than 0, create actual, visible, accurate SVG diagrams in diagramSvg—not instructions, not placeholders, and never the word "undefined". Use a standalone SVG in the style of the NATIONAL EXAMINATIONS (see DIAGRAM STYLE rules below), all visible labels in ${targetLanguage}. No scripts, external links, images, foreignObject, markers or CSS imports. The question text must refer to the diagram in the exam way (for example \"Eeg jaantuska hoose\" / \"Study the diagram below\" / \"ادرس الشكل أدناه\") and ask something that can be answered by looking at it (label the parts, name the part marked X, read a value, find an angle or length). Diagrams must be based only on supplied source content and relevant to the question.
 FINAL LANGUAGE CHECK BEFORE RETURNING: review every string that could appear on either paper. Rewrite any stray phrase in another language into ${targetLanguage}. JSON keys may remain English for the app, but their values must follow the language rules above. Return valid JSON only.
 Return JSON only:
-{"questions":[{"question":"","answer":"","type":"","section":"","options":[],"matches":[{"question":"","answer":""}],"diagram":"","diagramSvg":"","objective":"","bloom":"","difficulty":"","marks":1,"topic":"","sourcePages":""}]}
+{"questions":[{"question":"","answer":"","distractor":"","type":"","section":"","options":[],"matches":[{"question":"","answer":""}],"diagram":"","diagramSvg":"","objective":"","bloom":"","difficulty":"","marks":1,"topic":"","sourcePages":""}]}
 Subject: ${p.subject || ''}
 Class: ${p.className || p.klass || ''}
 Source title: ${p.sourceTitle || ''}
@@ -1398,7 +1367,7 @@ ${String(p.sourceText || p.text || '').slice(0, 70000)}
   // Never expose "undefined" or text-only placeholders as diagrams.
   for (const q of questions) {
     if (typeof q.diagram !== 'string' || q.diagram.trim().toLowerCase() === 'undefined') q.diagram = '';
-    if (typeof q.diagramSvg !== 'string' || !/<svg\b/i.test(q.diagramSvg)) q.diagramSvg = '';   // FIXED: was /<svg\\b/i (matched a literal backslash)
+    if (typeof q.diagramSvg !== 'string' || !/<svg\\b/i.test(q.diagramSvg)) q.diagramSvg = '';
   }
   if (requestedDiagrams > 0) {
     const candidates = questions.filter(q => /structured|direct/i.test(String(q.type || '')) || /STRUCTURED|DIRECT/i.test(String(q.section || '')));
@@ -1436,24 +1405,87 @@ ${String(p.sourceText || p.text || '').slice(0, 70000)}
 }
 
 
-async function aiGenerateDiagram(p, question, index) {
-  const lang = p.examLanguage === 'ar' ? 'Arabic' : p.examLanguage === 'so' ? 'Somali' : 'English';
-  const prompt = `Create one accurate, student-exam-ready educational diagram as SVG for this question. Diagram labels must be in ${lang}. Use only source-supported information; if the source does not support exact details, make a clearly schematic diagram and avoid invented labels.
-Question: ${String(question.question || question.text || '')}
-Topic: ${String(question.topic || '')}
-Source pages: ${String(question.sourcePages || '')}
-Source text: ${String(p.sourceText || '').slice(0, 18000)}
-Return ONLY a single standalone SVG element, no markdown or explanation. Requirements: viewBox="0 0 640 300", width="100%", height="auto"; clear readable labels; simple shapes/lines; white background; no scripts, no external links, no images, no foreignObject, no CSS imports.`;
-  const raw = (await geminiGenerate(prompt, { maxTokens: 3000, temperature: 0.2, json: false, timeoutMs: 60000 })).trim();
-  const svgMatch = raw.match(/<svg\b[\s\S]*?<\/svg>/i);
-  if (!svgMatch) throw new Error(`AI did not return a valid SVG for diagram ${index}.`);
-  const svg = svgMatch[0]
+const DIAGRAM_STYLE_RULES = `DIAGRAM STYLE (copy the look of printed NATIONAL EXAMINATION papers, black on white):
+- Canvas: viewBox="0 0 640 320", width="100%", height="auto", background white (<rect width="640" height="320" fill="#ffffff"/>). Leave a 20 px margin; nothing may touch or cross the edge; no text may overlap a line or another label.
+- Colours: black strokes (#000) with white or very light pastel fills only. No saturated colours, no gradients, no shadows, no border around the whole drawing.
+- Lines: stroke-width 1.6 for the main outline, 1 for construction/dimension/leader lines; fill="none" for outlines; dashed lines (stroke-dasharray="5,4") only for hidden or auxiliary lines.
+- Text: font-family="Arial, Helvetica, sans-serif", font-size 16 for labels, never smaller than 14 and never overlapping lines or other text, text-anchor set correctly, fill="#000".
+- LABEL-THE-PARTS questions (sample style): when the question asks the student to label/name parts, draw EMPTY white rectangular answer boxes (about 100 x 32, stroke #000, stroke-width 1.4) placed around the drawing, each joined to its part by a straight arrow whose tip ends exactly on the part (arrow head = small filled <polygon>). Boxes stay empty (no text inside), are the same size, never overlap the drawing or each other, and their number equals the number of parts asked.
+- The drawing itself may use soft light fills (#f4d6d6, #fde9c8, #dfe9f5) with a thin black outline so parts are easy to tell apart; boxes, arrows and text stay black.
+- Labelling: label parts with capital letters A, B, C, ... (or P, Q, R / X, Y) placed beside the part, joined by a thin straight leader line when the part is inside a shape. If the question asks the student to NAME the parts, draw only the letter (or a number) on the diagram and NEVER write the part name; put a short empty answer line only if the question needs it. Write names on the drawing only when the question does not ask for them.
+- Geometry: draw to scale; mark right angles with a small square, equal sides/angles with tick marks, parallel lines with arrow ticks, angles with small arcs and the given values (45°, 60°), lengths with their numbers and units on the side. Vertices are labelled with capital letters outside the shape. Graphs/number lines: straight axes with arrow heads drawn as small filled triangles, evenly spaced scale marks with numbers, plotted points as small filled circles.
+- Science/biology/geography: clean outline drawing with straight leader lines ending exactly on the part; flows and forces as lines with arrow heads drawn as small filled <polygon> triangles (never <marker>).
+- Tables/circuits/charts: simple, aligned, with ruler-straight lines.
+- Never use <image>, <use>, <marker>, <foreignObject>, <script>, url(...), external links, filters or CSS imports. Use only <rect>, <line>, <polyline>, <polygon>, <circle>, <ellipse>, <path>, <text>, <g>.`;
+
+function extractSvg(raw) {
+  const m = String(raw || '').match(/<svg\b[\s\S]*?<\/svg>/i);
+  if (!m) return '';
+  let svg = m[0]
     .replace(/<script[\s\S]*?<\/script>/gi, '')
-    .replace(/<\/?(?:foreignObject|iframe|object|embed|image|use)\b[^>]*>/gi, '')
+    .replace(/<\/?(?:foreignObject|iframe|object|embed|image|use|marker)\b[^>]*>/gi, '')
     .replace(/\son\w+\s*=\s*(?:"[^"]*"|'[^']*'|[^\s>]+)/gi, '')
     .replace(/\s(?:href|xlink:href)\s*=\s*(?:"[^"]*"|'[^']*'|[^\s>]+)/gi, '')
+    .replace(/\s?marker-(?:start|mid|end)\s*=\s*(?:"[^"]*"|'[^']*')/gi, '')
     .replace(/url\s*\([^)]*\)/gi, 'none');
+  if (!/viewBox\s*=/i.test(svg)) svg = svg.replace(/<svg\b/i, '<svg viewBox="0 0 640 320"');
+  if (!/xmlns\s*=/i.test(svg)) svg = svg.replace(/<svg\b/i, '<svg xmlns="http://www.w3.org/2000/svg"');
   return svg;
+}
+// Cheap structural check: balanced tags and enough drawing content, so broken/truncated SVG is retried instead of shown.
+function svgLooksValid(svg) {
+  if (!svg || svg.length < 200) return false;
+  const stripped = svg.replace(/<!--[\s\S]*?-->/g, '');
+  const stack = [];
+  const re = /<\/?([a-zA-Z][\w:-]*)\b[^>]*?(\/?)>/g;
+  let m;
+  while ((m = re.exec(stripped))) {
+    const tag = m[1].toLowerCase();
+    if (m[0].startsWith('</')) { if (stack.pop() !== tag) return false; }
+    else if (m[2] !== '/') stack.push(tag);
+  }
+  if (stack.length) return false;
+  const shapes = (stripped.match(/<(?:line|polyline|polygon|circle|ellipse|path|rect)\b/gi) || []).length;
+  return shapes >= 3;
+}
+
+async function aiGenerateDiagram(p, question, index) {
+  const key = process.env.GEMINI_API_KEY;
+  if (!key) throw new Error('GEMINI_API_KEY is missing; cannot create requested diagrams.');
+  const lang = p.examLanguage === 'ar' ? 'Arabic' : p.examLanguage === 'so' ? 'Somali' : 'English';
+  const models = [...new Set([process.env.GEMINI_MODEL || 'gemini-2.5-flash', 'gemini-3.5-flash-lite', 'gemini-2.5-flash'])];
+  const prompt = `You are an exam illustrator who draws the diagrams printed in national examination papers.
+TASK: draw ONE exam-ready diagram for the question below, then output it as SVG. Think first about exactly what has to be drawn (shape, parts, values) so that the diagram matches the question precisely: every letter, length, angle or value mentioned in the question must be visible in the drawing, and nothing in the drawing may contradict the question. Use only information supported by the source text; if the source gives no exact detail, draw a clearly schematic version and do not invent facts.
+All visible words in the diagram are in ${lang}; letters, numbers and symbols stay as they are.
+${DIAGRAM_STYLE_RULES}
+QUESTION: ${String(question.question || question.text || '')}
+MODEL ANSWER (for your reference only; never write the answer on the diagram): ${String(question.answer || '').slice(0, 400)}
+TOPIC: ${String(question.topic || '')}
+SOURCE PAGES: ${String(question.sourcePages || '')}
+SOURCE TEXT: ${String(p.sourceText || '').slice(0, 16000)}
+OUTPUT: ONLY the single <svg>...</svg> element, complete and closed, no markdown fences, no explanation.`;
+  let lastError = '';
+  for (const model of models) {
+    for (let attempt = 0; attempt < 2; attempt++) {
+      try {
+        const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`, {
+          method: 'POST',
+          headers: { 'content-type': 'application/json', 'x-goog-api-key': key },
+          body: JSON.stringify({
+            contents: [{ role: 'user', parts: [{ text: prompt }] }],
+            generationConfig: { temperature: attempt ? 0.3 : 0.15, maxOutputTokens: 10000 }
+          })
+        });
+        const data = await response.json();
+        if (!response.ok) { lastError = data?.error?.message || 'Diagram generation request failed.'; if ([429, 500, 502, 503, 504].includes(response.status)) continue; break; }
+        const raw = (data.candidates?.[0]?.content?.parts || []).map(x => x.text || '').join('').trim();
+        const svg = extractSvg(raw);
+        if (svgLooksValid(svg)) return svg;
+        lastError = `AI did not return a complete SVG for diagram ${index}.`;
+      } catch (e) { lastError = e.message; }
+    }
+  }
+  throw new Error(lastError || `Diagram ${index} could not be created.`);
 }
 
 app.post('/api/blueprint', async (req, res) => {
@@ -1461,7 +1493,8 @@ app.post('/api/blueprint', async (req, res) => {
     const p = req.body || {};
     const sourceText = String(p.sourceText || '').trim();
     if (!sourceText) return res.status(400).json({error:'Qoraalka OCR ee buugga ayaa loo baahan yahay.'});
-    if (!process.env.GEMINI_API_KEY) return res.status(503).json({error:'GEMINI_API_KEY laguma dejin Railway.'});
+    const key = process.env.GEMINI_API_KEY;
+    if (!key) return res.status(503).json({error:'GEMINI_API_KEY laguma dejin Railway.'});
     const totalMarks = Math.max(10, Math.min(300, Number(p.totalMarks) || 100));
     const defaultCount = Math.min(50, Math.max(10, Math.round(totalMarks * 0.44)));
     const totalQuestions = Math.max(4, Math.min(50, Number(p.count || p.questionCount) || defaultCount));
@@ -1469,14 +1502,21 @@ app.post('/api/blueprint', async (req, res) => {
     const languageName = lang === 'so' ? 'Somali (Af-Soomaali)' : lang === 'ar' ? 'Arabic (العربية)' : 'English';
     const prompt = `You are an expert secondary-school assessment designer. Create an EXAM BLUEPRINT / TABLE OF SPECIFICATIONS before the questions are generated. Use ONLY topics, headings, facts and learning outcomes supported by the supplied OCR text. Do not invent units or learning outcomes.\nMANDATORY OUTPUT LANGUAGE: ${languageName}. Translate all displayed blueprint fields including unit, topic, learning outcomes, notes and section names into this language, even when the OCR source uses another language. Do not mix languages; only JSON keys and scientific symbols may remain unchanged. Subject: ${p.subject || ''}. Class: ${p.className || ''}. Source book: ${p.sourceTitle || ''}. Selected pages: ${JSON.stringify(p.pageRange || {})}. Total marks: ${totalMarks}. Total questions: ${totalQuestions}. Format: ${p.format || 'four-part'}.\n${p.passage ? `PASSAGE-BASED LANGUAGE EXAM: this exam will begin with an original reading passage built from the curriculum, and every question will be answered through that passage. Write the learningOutcomes as language-skill objectives taken from the CURRICULUM text itself (grammar/naxwaha and sentence structure, vocabulary and word meaning, synonyms and antonyms, plurals and word forms, rhetoric and style, spelling and punctuation) so each can be tested through a passage; reading comprehension (main idea, details, inference) may take at most 30% of the objectives.\n` : ''}OBJECTIVE-FIRST BLUEPRINT (MOST IMPORTANT): the blueprint is built around learning objectives. If the source text itself states objectives (for example headings such as Objectives, Learning outcomes, Learning objectives, \"By the end of this unit/lesson students should be able to\", \"After studying this chapter you should...\"), use those objectives first and translate them faithfully into ${languageName}. Otherwise derive 2 to 5 measurable objectives per topic from the headings and content that are really present. Each objective is ONE testable statement that starts with an observable action verb (define, state, identify, describe, explain, calculate, compare, classify, interpret, justify...) and can be answered from the supplied source text. learningOutcomes must contain only such objectives, never vague aims like \"understand the topic\". Give every topic a questionCount big enough to assess its objectives (at least one question per objective when the total number of questions allows). The Bloom distribution of a topic must follow the action verbs of its objectives. Bloom levels are teacher-only information inside this blueprint and must never appear in student-facing text.\nUse Bloom levels ${JSON.stringify(p.levels || blooms)}. Spread topics across distinct headings and pages; do not base adjacent questions on the same paragraph. Determine topic/unit, measurable learning outcomes, source pages, Bloom distribution, planned question count and marks per topic. Counts must add to exactly ${totalQuestions}; marks must add to exactly ${totalMarks}. Section counts should match this section plan: ${JSON.stringify(p.partPlan || [])}. Return valid JSON only. Set the language field to exactly English, Somali, or Arabic according to the selected language. Schema: {"subject":"","language":"","totalMarks":${totalMarks},"totalQuestions":${totalQuestions},"coverage":[{"unit":"","topic":"","learningOutcomes":[""],"sourcePages":"","bloomDistribution":{"Remember":0,"Understand":0,"Apply":0,"Analyze":0,"Evaluate":0,"Create":0},"questionCount":0,"marks":0}],"sectionDistribution":[{"section":"","questionCount":0,"marks":0}],"qualityRules":["source traceability","no duplicate questions","marks sum exactly","Bloom alignment"],"notes":[]}.\nOCR SOURCE TEXT:\n${sourceText.slice(0,70000)}`;
 
-    // Retry + backoff + timeout + model fallback (geminiGenerate). JSON xun = isku day 2 jeer.
-    let blueprint = null, parseError = '';
-    for (let attempt = 0; attempt < 2 && !blueprint; attempt++) {
-      const text = await geminiGenerate(prompt, { maxTokens: 9000, temperature: 0.15 });
-      try { blueprint = JSON.parse(text.replace(/^\s*```json\s*|```\s*$/g, '').trim()); }
-      catch (e) { parseError = 'AI returned invalid JSON'; }
+    const models = [...new Set([process.env.GEMINI_MODEL || 'gemini-2.5-flash', 'gemini-3.5-flash-lite', 'gemini-2.5-flash'])];
+    let blueprint = null, lastError = '';
+    for (const model of models) {
+      try {
+        const r = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`, {
+          method:'POST', headers:{'content-type':'application/json','x-goog-api-key':key},
+          body:JSON.stringify({contents:[{role:'user',parts:[{text:prompt}]}],generationConfig:{responseMimeType:'application/json',temperature:0.15,maxOutputTokens:9000}})
+        });
+        const data = await r.json();
+        if (!r.ok) { lastError = data?.error?.message || `AI request failed (${r.status})`; if ([429,500,502,503,504].includes(r.status)) continue; throw new Error(lastError); }
+        const raw=(data.candidates?.[0]?.content?.parts||[]).map(x=>x.text||'').join('').replace(/^```json|```$/g,'').trim();
+        blueprint=JSON.parse(raw); break;
+      } catch (e) { lastError=e.message; }
     }
-    if (!blueprint) throw new Error(parseError || 'AI Blueprint lama helin.');
+    if (!blueprint) throw new Error(lastError || 'AI Blueprint lama helin.');
     if (!Array.isArray(blueprint.coverage) || !blueprint.coverage.length) throw new Error('AI-gu ma aqoonsan mawduucyo ku filan qoraalka OCR.');
 
     // Reconcile AI rounding so displayed Blueprint totals always equal the selected exam totals.
@@ -1515,11 +1555,7 @@ app.post('/api/blueprint', async (req, res) => {
     res.json({ok:true,blueprint,validation:{marksSum,countSum,marksMatch:marksSum===totalMarks,questionsMatch:countSum===totalQuestions}});
   } catch(e) {
     console.error('AI Blueprint failed:',e.message);
-    // 503 + retryable = AI mashquul; frontend-ku waa inuu tusaa "Isku day mar kale" (ma aha 502 ceeriin ah).
-    res.status(aiErrorStatus(e)).json({
-      error: e.busy ? AI_BUSY_MESSAGE : 'AI Blueprint lama samayn: '+e.message,
-      retryable: !!e.busy
-    });
+    res.status(502).json({error:'AI Blueprint lama samayn: '+e.message});
   }
 });
 
@@ -1541,9 +1577,8 @@ app.post('/api/generate', async (req, res) => {
       if (Array.isArray(generated)) { languageReport = generated.languageReport || null; passage = generated.passage || null; questions = generated.slice(0, count); }
     } catch (e) {
       console.error('AI generation failed:', e.message);
-      return res.status(aiErrorStatus(e)).json({
-        error: e.busy ? AI_BUSY_MESSAGE : 'AI-gu ma samayn su’aalaha: ' + e.message,
-        retryable: !!e.busy
+      return res.status(502).json({
+        error: 'AI-gu ma samayn su’aalaha: ' + e.message
       });
     }
 
@@ -1625,7 +1660,8 @@ app.post('/api/lesson-plan/generate', async (req, res) => {
     const textbookText = String(p.textbookText || '').trim();
     if (!schemeText || schemeText.length < 80) return res.status(400).json({ error: 'Fadlan soo qaado Scheme of Work OCR oo dhammaystiran; isagaa go’aaminaya kala-horraynta casharrada sannadka.' });
     if (!textbookText || textbookText.length < 80) return res.status(400).json({ error: 'Fadlan soo qaado qoraalka buugga maaddada OCR; isagaa laga diyaarinayaa objectives, sharaxaadda iyo Lesson Note.' });
-    if (!process.env.GEMINI_API_KEY) return res.status(503).json({ error: 'GEMINI_API_KEY laguma dejin Railway.' });
+    const key = process.env.GEMINI_API_KEY;
+    if (!key) return res.status(503).json({ error: 'GEMINI_API_KEY laguma dejin Railway.' });
 
     const language = String(p.language || 'auto');
     const subject = String(p.subject || 'Not specified');
@@ -1635,6 +1671,7 @@ app.post('/api/lesson-plan/generate', async (req, res) => {
     const lessonDuration = Math.min(180, Math.max(20, Number(p.lessonDuration || 40)));
     const lessonsPerWeek = Math.min(10, Math.max(1, Number(p.lessonsPerWeek || 3)));
     const termCount = Math.min(4, Math.max(1, Number(p.termCount || 3)));
+    const modelCandidates = [...new Set([process.env.GEMINI_MODEL, 'gemini-3.5-flash-lite', 'gemini-3.1-flash-lite', 'gemini-2.5-flash'].filter(Boolean))];
     const langInstruction = language === 'auto'
       ? 'Detect the dominant language of the scheme of work and use that same language consistently for all lesson-plan and lesson-note content. Do not mix languages.'
       : `Write all generated material in ${language === 'so' ? 'Somali' : language === 'ar' ? 'Arabic' : 'English'} only. Do not mix languages.`;
@@ -1646,93 +1683,4 @@ SOURCE B — OCR TEXTBOOK: The source for subject-matter explanations, lesson-sp
 LANGUAGE: ${langInstruction}
 Create a complete lesson-planning package for academic year ${academicYear}.
 School lesson-plan template to follow:
-- Teacher name, class, subject, date, day, unit, lesson title, lesson duration, lesson/session number.
-- Introduction.
-- Lesson objectives beginning "By the end of the lesson, learners should be able to..." with observable verbs.
-- Teaching methods.
-- Learning aids/resources.
-- Evaluation questions.
-- Time management table totaling exactly ${lessonDuration} minutes (opening/previous-lesson review, attendance or settling, explanation/activity, evaluation/homework). Do not include impossible or negative time values.
-- Lesson Note following the lesson plan, including the lesson title, short explanatory summary, headings/key points, examples or activities where the scheme supports them, and a concise final summary.
-Requirements:
-1. Plan every topic/lesson stated in the Scheme of Work across the year, keeping its order and term/week sequence. Do not skip units.
-2. Use ${lessonsPerWeek} lesson sessions per week and ${lessonDuration} minutes per session unless the Scheme of Work specifies otherwise.
-3. Split large topics across appropriate sessions; do not repeat identical objectives or notes.
-4. Include a short, usable lesson note summary for EVERY lesson plan and align the note directly with that lesson's objectives.
-5. Each session needs: week, term, unit, lessonNumber, lessonTitle, date (blank if not stated in scheme), durationMinutes, introduction, objectives (array), teachingMethods (array), learningAids (array), evaluationQuestions (array), timeManagement (array of {stage, minutes}, sum exactly ${lessonDuration}), noteSummary, noteHeadings (array of {heading, content}), homework, sourceTopic.
-6. Avoid claiming that dates are fixed if the scheme gives no dates. Provide week/term placement and leave date blank when unavailable.
-7. Provide a brief yearly overview and any scheme gaps/assumptions separately; do not change the scheme sequence. Term count: ${termCount}.
-8. Keep the content practical, classroom-ready, and aligned to the supplied sample template. The sample lesson plan is a formatting model, not a source for subject facts.
-9. Respond with valid JSON only, no markdown, no text outside JSON.
-JSON shape:
-{"academicYear":"${academicYear}","subject":"${subject}","className":"${className}","teacherName":"${teacherName}","language":"...","yearOverview":"...","assumptions":["..."],"lessons":[{"term":1,"week":1,"unit":"...","lessonNumber":1,"lessonTitle":"...","date":"","durationMinutes":${lessonDuration},"introduction":"...","objectives":["..."],"teachingMethods":["..."],"learningAids":["..."],"evaluationQuestions":["..."],"timeManagement":[{"stage":"...","minutes":5}],"noteSummary":"...","noteHeadings":[{"heading":"...","content":"..."}],"homework":"...","sourceTopic":"..."}]}
-SCHEME OF WORK — SOURCE OF TRUTH FOR SEQUENCE, TERM, WEEK AND TOPIC ORDER:
-${schemeText.slice(0, 30000)}
-
-OCR TEXTBOOK — SOURCE FOR OBJECTIVES, TEACHING CONTENT, EXPLANATIONS, EXAMPLES, SUMMARIES AND LESSON NOTES:
-${textbookText.slice(0, 55000)}
-`;
-    let lastError = 'AI generation failed';
-    let parsed = null;
-    for (let attempt = 0; attempt < 2 && !parsed; attempt++) {
-      let raw;
-      try {
-        raw = await geminiGenerate(prompt, { maxTokens: 16000, temperature: 0.2, timeoutMs: 150000 });
-      } catch (e) {
-        console.error('Lesson-plan AI failed:', e.message);
-        return res.status(aiErrorStatus(e)).json({
-          error: e.busy ? AI_BUSY_MESSAGE : `AI ma dhammaystirin qorshaha: ${e.message}`,
-          retryable: !!e.busy
-        });
-      }
-      let candidate;
-      try { candidate = JSON.parse(raw.replace(/^\s*```(?:json)?/i, '').replace(/```\s*$/, '').trim()); }
-      catch (_) { lastError = 'Jawaabta AI ma ahayn JSON dhammaystiran. Isku day Scheme of Work ka gaaban.'; continue; }
-      if (!Array.isArray(candidate.lessons) || !candidate.lessons.length) { lastError = 'AI ma soo saarin casharro qorshaysan.'; continue; }
-      parsed = candidate;
-    }
-    if (!parsed) return res.status(502).json({ error: `AI ma dhammaystirin qorshaha: ${lastError}` });
-
-    parsed.lessons = parsed.lessons.map((l, i) => {
-      const tm = Array.isArray(l.timeManagement) ? l.timeManagement : [];
-      const sum = tm.reduce((n, t) => n + Number(t.minutes || 0), 0);
-      if (!tm.length || sum !== lessonDuration) {
-        l.timeManagement = [
-          { stage: 'Review / introduction', minutes: 5 },
-          { stage: 'Attendance / settling', minutes: 3 },
-          { stage: 'Teaching and learning activities', minutes: lessonDuration - 10 },
-          { stage: 'Evaluation and homework', minutes: 2 }
-        ];
-      }
-      l.lessonNumber = Number(l.lessonNumber || i + 1);
-      l.durationMinutes = lessonDuration;
-      l.objectives = Array.isArray(l.objectives) ? l.objectives : [];
-      l.teachingMethods = Array.isArray(l.teachingMethods) ? l.teachingMethods : [];
-      l.learningAids = Array.isArray(l.learningAids) ? l.learningAids : [];
-      l.evaluationQuestions = Array.isArray(l.evaluationQuestions) ? l.evaluationQuestions : [];
-      l.noteHeadings = Array.isArray(l.noteHeadings) ? l.noteHeadings : [];
-      return l;
-    });
-    return res.json(parsed);
-  } catch (e) {
-    console.error('Lesson-plan generation failed:', e);
-    return res.status(500).json({ error: e.message || 'Khalad ayaa dhacay.' });
-  }
-});
-
-app.get('*', (req, res) => {
-  if (PUBLIC_DIR && fs.existsSync(path.join(PUBLIC_DIR, 'index.html'))) {
-    return res.sendFile(path.join(PUBLIC_DIR, 'index.html'));
-  }
-  res.status(500).send('Public/index.html lama helin. Hubi faylka GitHub.');
-});
-
-// Ka hortag in app-ku dhinto marka ay jirto khalad aan la qabsan.
-process.on('unhandledRejection', err => console.error('Unhandled rejection:', err?.message || err));
-
-const port = process.env.PORT || 3000;
-const server = app.listen(port, () => console.log(`GHDD Assessment Pro running on ${port}`));
-// Generation-ka AI wuxuu qaadan karaa daqiiqado; ha u daynin Node inuu xiro connection-ka hore.
-server.requestTimeout = 0;
-server.headersTimeout = 65000;
-server.keepAliveTimeout = 65000;
+- Teacher name, class, subject, date, day, unit, lesson title,
