@@ -853,15 +853,33 @@ function allocKeyPoints(q){
   return use.map((p,i)=>({point:p,marks:base+(i<extra?1:0)}));
 }
 
-function chemistryHtml(value){
-  // Keep chemistry formulas as text (not an image) so they remain sharp in print/Word.
-  // Format carbon-group digits as subscripts and preserve intentional branch line breaks.
+function chemTextHtml(value){
+  // Plain chemistry text (H2O, CO2 ...): digits after element groups become subscripts.
   let t=esc(value);
   if(!/(?:CH[₀-₉0-9]?|OH|COOH|NH[₀-₉0-9]?|C[₀-₉0-9]?H)/i.test(String(value||''))) return t;
   t=t.replace(/(CH|OH|COOH|NH|H|O|N|Cl|Br)(\d+)/g,'$1<sub>$2</sub>');
   t=t.replace(/([–—-])/g,'<span class="chem-bond">$1</span>');
   if(String(value).includes('\n')) t=t.replace(/\n/g,'<br>');
   return `<span class="chem-formula">${t}</span>`;
+}
+function chemistryHtml(value){
+  // Branched/condensed structural formulas such as CH3-CH(CH3)-C(CH3)(OH)-CH=CH2 are drawn as a clean
+  // vector structure (chem-struct.js): main chain on one line, branches above/below. Everything else stays text.
+  const raw=String(value??'');
+  const C=window.GHDDChem;
+  if(!C||!/[-–—−=≡(]/.test(raw)) return chemTextHtml(raw);
+  let segs;
+  try{segs=C.split(raw);}catch(_){return chemTextHtml(raw);}
+  if(!segs.some(x=>x.type==='svg')) return chemTextHtml(raw);
+  // A structure written inside a sentence gets its own centred line (before/after the words); a lone structure
+  // (an option, an answer) stays inline so options can sit side by side.
+  return segs.map((x,k)=>{
+    if(x.type!=='svg')return chemTextHtml(x.value);
+    const before=segs.slice(0,k).some(y=>y.type==='text'&&y.value.trim());
+    const after=segs.slice(k+1).some(y=>y.type==='text'&&y.value.trim());
+    if(!before&&!after)return `<span class="chem-struct-wrap">${x.svg}</span>`;
+    return `<span class="chem-struct-wrap chem-struct-block"${before?' data-br-before="1"':''}${after?' data-br-after="1"':''}>${x.svg}</span>`;
+  }).join('');
 }
 function paperQuestionsHtml(normalized,passage,lang,withAnswers,mathMode){
        const fmt=v=>{const raw=String(v??'');return mathMode?mathHtml(esc(raw)):chemistryHtml(raw);};
