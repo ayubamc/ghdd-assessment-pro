@@ -90,9 +90,10 @@
   function textRun(text, st) {
     const rtl = !!st.rtl && AR_RE.test(text);
     return new D.TextRun({
-      text, font: FONT,
+      text, font: st.font ? { ascii: st.font, hAnsi: st.font, cs: st.font, eastAsia: st.font } : FONT,
       bold: !!st.bold, boldComplexScript: !!st.bold,
       italics: !!st.italics, italicsComplexScript: !!st.italics,
+      subScript: st.sub || undefined, superScript: st.sup || undefined,
       underline: st.underline ? { type: D.UnderlineType.SINGLE } : undefined,
       size: st.size || SZ.body, sizeComplexScript: st.size || SZ.body,
       color: st.color, rightToLeft: rtl || undefined
@@ -144,6 +145,8 @@
     if (tag === 'strong' || tag === 'b' || cls.contains('marks') || cls.contains('question-number')) s = { ...s, bold: true };
     if (tag === 'em' || tag === 'i') s = { ...s, italics: true };
     if (tag === 'u') s = { ...s, underline: true };
+    if (tag === 'sub') s = { ...s, sub: true };
+    if (tag === 'sup') s = { ...s, sup: true };
     if (tag === 'small') s = { ...s, size: SZ.small };
     if (cls.contains('fill-blank')) {
       if (cls.contains('filled')) { s = { ...s, bold: true, underline: true }; }
@@ -151,6 +154,9 @@
     }
     for (const ch of node.childNodes) collectInline(ch, s, out, env);
   }
+  const SYM_CHARS = '∠∡∢⊥∥∦∴∵∈∉∋∪∩⊂⊃⊆⊇⊄≅≡∼∝∛∜△▵▭◯⇒⇔⟹⟺∧∨¬∀∃∘⊕⊗≪≫ℝℕℤℚ‖⟂⌒';
+  const SYM_SPLIT = new RegExp('([' + SYM_CHARS.replace(/[\]\\^-]/g, '\\$&') + ']+)');
+  const SYM_RE = new RegExp('^[' + SYM_CHARS.replace(/[\]\\^-]/g, '\\$&') + ']+$');
   function finalizeInline(items) {
     const kids = [];
     let first = true;
@@ -166,7 +172,8 @@
       first = false;
       if (!t) continue;
       prevEndsSpace = / $/.test(t);
-      kids.push(textRun(t, it.st));
+      // Math symbols that Arial does not contain (∠ △ ⊥ ∥ ∴ ∈ ∪ ≅ ∛ ...) are set in Cambria Math so Word never shows boxes.
+      t.split(SYM_SPLIT).forEach(seg => { if (seg) kids.push(textRun(seg, SYM_RE.test(seg) ? { ...it.st, font: 'Cambria Math' } : it.st)); });
     }
     return kids;
   }
