@@ -853,21 +853,48 @@ function allocKeyPoints(q){
   return use.map((p,i)=>({point:p,marks:base+(i<extra?1:0)}));
 }
 
+const CHEM_EL=new Set('H He Li Be B C N O F Ne Na Mg Al Si P S Cl Ar K Ca Sc Ti V Cr Mn Fe Co Ni Cu Zn Ga Ge As Se Br Kr Rb Sr Y Zr Nb Mo Tc Ru Rh Pd Ag Cd In Sn Sb Te I Xe Cs Ba La Ce Pt Au Hg Tl Pb Bi U'.split(' '));
+function chemWordHtml(word){
+  // One word such as CH4, H2O, Ca(OH)2, Na2CO3: digits after an element or ")" become subscripts.
+  // Only words made entirely of real element symbols are touched, so normal words, "Form 4" or "A1" stay as they are.
+  if(!/\d/.test(word)||!/^[A-Z(]/.test(word))return null;
+  const toks=word.match(/[A-Z][a-z]?|\d+|\(|\)/g);
+  if(!toks||toks.join('')!==word)return null;
+  let depth=0,elements=0,prev='';
+  for(const t of toks){
+    if(/^[A-Z]/.test(t)){if(!CHEM_EL.has(t))return null;elements++;}
+    else if(t==='(')depth++;
+    else if(t===')'){depth--;if(depth<0)return null;}
+    else if(!prev||prev==='('||/^\d/.test(prev))return null;      // a number must follow an element or ")"
+    prev=t;
+  }
+  if(depth!==0)return null;
+  if(elements<2&&!/^(?:H|N|O|F|Cl|Br|I)\d$/.test(word))return null;  // lone C4, B2, P1... are not formulas
+  return word.replace(/(\d+)/g,'<sub>$1</sub>');
+}
 function chemTextHtml(value){
-  // Plain chemistry text (H2O, CO2 ...): digits after element groups become subscripts.
   let t=esc(value);
-  if(!/(?:CH[₀-₉0-9]?|OH|COOH|NH[₀-₉0-9]?|C[₀-₉0-9]?H)/i.test(String(value||''))) return t;
-  t=t.replace(/(CH|OH|COOH|NH|H|O|N|Cl|Br)(\d+)/g,'$1<sub>$2</sub>');
+  // general formulas with n: CnH2n+2, CnH2n-2, CnH2n+1OH ...
+  t=t.replace(/\bC(n|x)H(2n(?:[+\-−–]\d+)?|\d+)((?:[A-Z][a-z]?\d*)*)/g,(m,v,h,rest)=>`C<sub>${v}</sub>H<sub>${h}</sub>${rest.replace(/(\d+)/g,'<sub>$1</sub>')}`);
+  // ordinary formulas: H2O, CO2, CH4, Ca(OH)2 ... (+ ion charge like NH4+)
+  t=t.replace(/(?<![A-Za-z0-9<\/&#;])[A-Za-z0-9()]+(?![A-Za-z0-9])([+−](?![A-Za-z0-9]))?/g,(m)=>{
+    const ch=/[+−]$/.exec(m);const body=ch?m.slice(0,-1):m;
+    const lead=/^\d+(?=[A-Z(])/.exec(body);          // reaction coefficient: 2H2, 3CO2
+    const core=lead?body.slice(lead[0].length):body;
+    const r=chemWordHtml(core);
+    return r?(lead?lead[0]:'')+r+(ch?'<sup>'+ch[0]+'</sup>':''):m;
+  });
   t=t.replace(/([–—-])/g,'<span class="chem-bond">$1</span>');
   if(String(value).includes('\n')) t=t.replace(/\n/g,'<br>');
-  return `<span class="chem-formula">${t}</span>`;
+  return /<su[bp]>|chem-bond/.test(t)?`<span class="chem-formula">${t}</span>`:t;
 }
-function chemistryHtml(value){
+function chemistryHtml(value,opts){
   // Branched/condensed structural formulas such as CH3-CH(CH3)-C(CH3)(OH)-CH=CH2 are drawn as a clean
   // vector structure (chem-struct.js): main chain on one line, branches above/below. Everything else stays text.
+  // opts.plain=true (matching tables): keep the formula as one text line so table rows stay even.
   const raw=String(value??'');
   const C=window.GHDDChem;
-  if(!C||!/[-–—−=≡(]/.test(raw)) return chemTextHtml(raw);
+  if((opts&&opts.plain)||!C||!/[-–—−=≡(]/.test(raw)) return chemTextHtml(raw);
   let segs;
   try{segs=C.split(raw);}catch(_){return chemTextHtml(raw);}
   if(!segs.some(x=>x.type==='svg')) return chemTextHtml(raw);
@@ -883,6 +910,7 @@ function chemistryHtml(value){
 }
 function paperQuestionsHtml(normalized,passage,lang,withAnswers,mathMode){
        const fmt=v=>{const raw=String(v??'');return mathMode?mathHtml(esc(raw)):chemistryHtml(raw);};
+       const fmtPlain=v=>{const raw=String(v??'');return mathMode?mathHtml(esc(raw)):chemistryHtml(raw,{plain:true});};
        let lastSection='';
        const passageHtml=passage?`<div class="passage-block"><div class="passage-head">${esc(examText(lang,'passageLabel'))}</div>${passage.title?`<p class="passage-title">${esc(passage.title)}</p>`:''}<div class="passage-body">${String(passage.text).split(/\n+/).filter(x=>x.trim()).map(x=>`<p>${esc(x)}</p>`).join('')}</div></div>`:'';
        const numbers=[];let nn=0;const firstMatch=normalized.find(x=>x.type==='Matching');
@@ -906,8 +934,8 @@ function paperQuestionsHtml(normalized,passage,lang,withAnswers,mathMode){
            const letterOf=ans=>{const t=String(ans||'').replace(/^[A-Z][\.\):]\s*/i,'').trim();const k=choices.indexOf(t);return k>=0?String.fromCharCode(65+k):'';};
            const rows=pairs.map((pair,j)=>{
              const answerCell=withAnswers?esc(letterOf(pair.answer)||String(pair.answer||'')):'[       ]';
-             const choiceCell=j===0?`<td rowspan="${Math.max(1,pairs.length)}" class="matching-choice-cell"><div class="matching-options">${choices.map((c,k)=>`<div><b>${String.fromCharCode(65+k)}.</b> ${fmt(c)}</div>`).join('')}</div></td>`:'';
-             return `<tr><td class="match-no">${j+1}</td><td>${fmt(pair.question||'')}</td><td class="match-answer">${answerCell}</td>${choiceCell}</tr>`;
+             const choiceCell=j===0?`<td rowspan="${Math.max(1,pairs.length)+1}" class="matching-choice-cell"><div class="matching-options">${choices.map((c,k)=>`<div><b>${String.fromCharCode(65+k)}.</b> ${fmtPlain(c)}</div>`).join('')}</div></td>`:'';
+             return `<tr><td class="match-no">${j+1}</td><td>${fmtPlain(pair.question||'')}</td><td class="match-answer">${answerCell}</td>${choiceCell}</tr>`;
            }).join('');
            const groupMarks=group.reduce((sum,g)=>sum+(Number(g.marks)||0),0);
            const heading=group.length>1?examText(lang,'matchPrompt'):(q.text||examText(lang,'matchPrompt'));
@@ -915,7 +943,7 @@ function paperQuestionsHtml(normalized,passage,lang,withAnswers,mathMode){
            const objs=[...new Set(group.map(g=>g.objective).filter(Boolean))];
            const mObj=(withAnswers&&objs.length)?`<div class="answer-box objective-box"><strong>${examText(lang,'objectiveLabel')}:</strong> ${objs.map(esc).join('; ')}</div>`:'';
            const warning=choices.length>=pairs.length+group.length?'':(withAnswers?`<p class="muted"><em>${lang==='ar'?'تنبيه: يجب أن يزيد عدد الخيارات عن عدد العناصر.':lang==='so'?'Hubi: doorashooyinku waa inay ka badan yihiin tirada erayada.':'Check: provide more options than matching items.'}</em></p>`:'');
-           return `${sectionHtml}<div class="paper-question matching-question"><p class="question-line"><strong>${numbers[i]}. ${esc(heading)}</strong><span class="marks">(${groupMarks} ${examText(lang,'marks')})</span></p><div class="table-wrap"><table class="matching-table"><thead><tr><th>${examText(lang,'number')}</th><th>${examText(lang,'columnA')}</th><th>${examText(lang,'answerLetter')}</th><th>${examText(lang,'columnB')}</th></tr></thead><tbody>${rows}</tbody></table></div>${correct}${mObj}${warning}</div>`;
+           return `${sectionHtml}<div class="paper-question matching-question"><p class="question-line"><strong>${numbers[i]}. ${esc(heading)}</strong><span class="marks">(${groupMarks} ${examText(lang,'marks')})</span></p><div class="table-wrap"><table class="matching-table"><thead><tr><th>${examText(lang,'number')}</th><th>${examText(lang,'columnA')}</th><th>${examText(lang,'answerLetter')}</th><th>${examText(lang,'columnB')}</th></tr></thead><tbody>${rows}<tr class="match-filler"><td colspan="3"></td></tr></tbody></table></div>${correct}${mObj}${warning}</div>`;
          }
          const isMcqQ=/^(mcq|multiple choice)/i.test(q.type||'');
          if(withAnswers&&(isMcqQ||isFill)){
@@ -1428,7 +1456,7 @@ async function ensureDocxExporter(){
     catch(_){try{await loadJsText('https://cdn.jsdelivr.net/npm/docx@9.8.1/dist/index.iife.js');}catch(__){}}
   }
   if(!window.docx)throw new Error('Maktabadda docx lama helin. Geli faylka public/vendor/docx.iife.js oo dib u deploy garee.');
-  try{await loadJsText('/docx-export.js?v=r22');}
+  try{await loadJsText('/docx-export.js?v=r24');}
   catch(e){throw new Error('Hubi in faylka public/docx-export.js la geliyay. '+e.message);}
   if(typeof window.buildExamDocx!=='function')throw new Error('docx-export.js si sax uma shaqeynin.');
 }
