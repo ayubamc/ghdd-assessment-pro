@@ -1,4 +1,3 @@
-
 import express from 'express';
 import pg from 'pg';
 import crypto from 'crypto';
@@ -183,6 +182,22 @@ function stripBloomFromQuestion(q) {
 
 
 // ───────────────────────── Math notation, source-citation and passage-MCQ helpers ─────────────────────────
+function isChemSubject(subject) {
+  return /kimi|chem|كيمياء|كيميا/i.test(String(subject || ''));
+}
+// Chemistry: structures must reach the paper as plain condensed formulas (CH3-CH(CH3)-CH2-OH) that the browser draws as a
+// branched structure. Remove LaTeX / mhchem / markdown leftovers and turn CH_3, CH₃, \ce{...} into CH3.
+function cleanChemText(text) {
+  if (typeof text !== 'string' || !text) return text;
+  let t = text;
+  t = t.replace(/\$\$([\s\S]*?)\$\$/g, '$1').replace(/\$([^$\n]*)\$/g, '$1').replace(/\\\(|\\\)|\\\[|\\\]/g, '');
+  t = t.replace(/\\(?:ce|text|mathrm|textbf|mathbf)\s*\{([^{}]*)\}/g, '$1');
+  t = t.replace(/_\{([^{}]*)\}/g, '$1').replace(/(?<=[A-Za-z)])_(\d)/g, '$1');
+  t = t.replace(/[₀-₉]/g, d => String(d.charCodeAt(0) - 8320));
+  t = t.replace(/\\(?:rightarrow|to)\b/g, '→').replace(/\\(?:longrightarrow)\b/g, '→').replace(/\\[,;:! ]/g, ' ');
+  t = t.replace(/\*\*([^*]+)\*\*/g, '$1').replace(/`+/g, '');
+  return t.trim();
+}
 function isMathSubject(subject) {
   return /xisaab|math|رياضيات|حساب|algebra|geometry|joometri|هندسة|جبر/i.test(String(subject || ''));
 }
@@ -1572,6 +1587,7 @@ async function aiGenerate(p) {
   const model = process.env.GEMINI_MODEL || 'gemini-2.5-flash';
   const targetLanguage = LANGUAGE_NAMES[normalizeLang(p.examLanguage)];
   const mathMode = isMathSubject(p.subject) || isMathSubject(p.className) || isMathSubject(p.sourceTitle);
+  const chemMode = !mathMode && (isChemSubject(p.subject) || isChemSubject(p.className) || isChemSubject(p.sourceTitle));
   const buildPrompt = (count, partPlan, avoid = [], passageObj = null) => `
 You are an expert secondary-school assessment designer and professional translator.
 ${normalizeLang(p.examLanguage) === 'so' ? SOMALI_STYLE : ''}
@@ -1580,6 +1596,8 @@ NON-NEGOTIABLE OUTPUT LANGUAGE: ${targetLanguage}. The user explicitly selected 
 LANGUAGE COVERAGE: Write every student-visible and teacher-visible text field in ${targetLanguage}: exam question text, all subquestions, all MCQ options, fill-in prompts and answers, matching items, matching descriptions/options, matching question instructions, topic names, section titles, answer key, marking guide, explanations, diagram labels, and any generated captions. Translate generic labels such as “Answer”, “Question”, “Column A/B”, “Instructions”, “Correct answer”, and “Marking guide”. Keep only standard scientific symbols, equations, SI unit symbols, proper names, and abbreviations that should not be translated. If source facts are technical terms, use the correct equivalent in the selected language; a short parenthetical original term may be used only when necessary for scientific clarity.
 NO SOURCE CITATIONS IN QUESTIONS (MANDATORY): the student paper must simply ASK the question. Never write a page number, a page range, a lesson/unit/book reference or any phrase that cites the source inside question, options, matching items or answers. Forbidden examples: \"Bogga 5aad ...\", \"Sida ku xusan bogga 12...\", \"Su’aasha bogga 5aad\", \"(p. 7)\", \"According to page 5\", \"Sida buugga ku qoran\", \"As stated in the textbook\", \"في الصفحة 5\", \"حسب الكتاب\". The [PAGE n] markers in the source text are ONLY for filling the \\\"sourcePages\\\" field; they must never be copied into any other field. Write each question as a direct, self-contained question (the only allowed reference is to the reading passage in passage mode, e.g. \\\"sheekada\\\").${mathMode ? `
 MATHEMATICS WRITING RULES (MANDATORY, this is a mathematics exam): write every number, expression, equation, unit, term and problem EXACTLY the way the textbook writes it (same notation, same order, same wording style, same number format); use the textbook's examples as the model. Use plain readable text only: digits, letters, + − × ÷ = < > ≤ ≥ ≠ ≈ ( ) [ ] { } / √ π ° % and Unicode superscripts/subscripts (x², x³, a₁). Write fractions as a/b with plain digits (the paper turns them into stacked fractions), roots as √ followed by the number or the bracketed expression (√16, √(x+1), ∛27), powers with Unicode superscripts (x², 10³) and degrees with ° (45°, ∠ABC = 60°); use × and ÷ (never * or x for multiplication), π, ≤ ≥ ≠ ≈ ± exactly as printed exam papers do. Never write the words sqrt, pi, degrees, square root or ^. NEVER use LaTeX or code notation (no $ signs, no backslashes, no \\\\frac, \\\\sqrt, \\\\times, no ^ or _ or curly-brace commands), no markdown (no *, **, #, backticks), no emoji, no decorative arrows/bullets, no unnecessary symbols, brackets, units or repeated punctuation. Do not add symbols that the textbook does not use. Keep each problem short and clear, giving only the data needed. Compute every answer carefully and verify it twice before returning: an MCQ has exactly one correct option with plausible numeric distractors; in the answer key give the final answer first, then the short working in plain text, one step per line.` : ''}
+${chemMode ? `
+CHEMISTRY WRITING RULES (MANDATORY when the subject is chemistry): write organic structures as ONE-LINE CONDENSED FORMULAS with plain digits (CH3, CH2, OH, COOH, Br). The exam paper draws them automatically as a branched-chain structure exactly like the school textbook (main chain on one line, branches above/below). Rules: (1) join the atoms of the MAIN (longest) chain with a hyphen: CH3-CH2-CH2-OH; (2) write every branch in round brackets right after the carbon it hangs on: CH3-CH(CH3)-C(CH3)(OH)-CH2-CH3; two identical branches may be written C(CH3)2; (3) double and triple bonds use = and ≡ : CH2=C(CH3)-CH2-OH; a branch with a double bond: CH3-C(=O)-CH3; (4) never use LaTeX, $, \\ce{}, underscores, Unicode subscripts, ASCII art, SMILES or images for formulas; (5) put a structure in the question text or in an option on its own, separated by spaces from normal words, e.g. \"Give the IUPAC name of the compound CH3-CH(CH3)-CH2-OH.\"; (6) the structure must be chemically valid (carbon has four bonds) and the answer/IUPAC name must match it exactly; (7) simple molecules (H2O, CO2, NaCl) are written normally.` : ''}
 Create exactly ${count} questions using ONLY facts and concepts supported by the supplied source text. Translate supported source content into the selected language; do not invent facts or repeat questions.
 ${passageInstructions(p, passageObj, targetLanguage)}
 OBJECTIVE-FIRST DESIGN (MOST IMPORTANT RULE): the learning objectives (learningOutcomes) in the blueprint below are exactly what this exam must measure. Before writing each question, choose ONE objective from the blueprint topic it belongs to, then write a question that directly measures that objective. The action verb of the objective decides what the student must do (define/state → recall; identify/classify → recognise; explain/describe → explanation; calculate/solve → computation; compare/analyse → comparison or analysis; justify/evaluate → reasoned judgement). Copy the chosen objective text, in ${targetLanguage}, into the question's \"objective\" field. Rules: (1) every question maps to exactly one objective; (2) spread questions across as many DIFFERENT objectives as the question count allows, and do not assess an objective a second time until every objective of that topic has been assessed once; (3) do not write questions on trivia, side facts, dates or examples unless an objective requires them; (4) the question must be answerable from the source text and must not test anything outside its objective; (5) if the blueprint has no objectives, first derive measurable objectives from the source text and use them the same way.
@@ -1683,6 +1701,7 @@ ${String(p.sourceText || p.text || '').slice(0, 70000)}
   questions.forEach(q => {
     stripCitationsFromQuestion(q);
     if (mathMode) mapQuestionText(q, cleanMathText);
+    if (chemMode) mapQuestionText(q, cleanChemText);
   });
   if (p.passage && passage) passage.text = stripSourceCitations(passage.text);
   questions.languageReport = languageReport;
