@@ -130,7 +130,12 @@
     if (tag === 'br') { out.push({ raw: new D.TextRun({ break: 1 }) }); return; }
     if (tag === 'svg' || tag === 'img') {
       const im = env.images.get(node);
-      if (im && !im.failed) out.push({ raw: imageRun(im, node) });
+      const wrap = node.parentNode && node.parentNode.nodeType === 1 && node.parentNode.classList.contains('chem-struct-wrap') ? node.parentNode : null;
+      if (im && !im.failed) {
+        if (wrap && wrap.hasAttribute('data-br-before') && out.length) out.push({ raw: new D.TextRun({ break: 1 }) });
+        out.push({ raw: imageRun(im, node, env.maxW) });
+        if (wrap && wrap.hasAttribute('data-br-after')) out.push({ raw: new D.TextRun({ break: 1 }) });
+      }
       return;
     }
     const cls = node.classList;
@@ -339,7 +344,7 @@
     const row1 = new D.TableRow({ cantSplit: true, children: [mk(numEl, 0, 1, undefined, true, true), mk(txtEl, 1, 5, undefined, false, true), mk(mkEl, 5, 6, 'end', true, true)] });
     const optCell = (td, a, b) => new D.TableCell({
       width: { size: W(a, b), type: D.WidthType.DXA }, columnSpan: b - a > 1 ? b - a : undefined, verticalAlign: D.VerticalAlign.TOP, borders: bord,
-      children: fixCellBlocks(blocksFromChildren(td, ctx, env, {}), ctx)
+      children: (() => { const keep = env.maxW; env.maxW = Math.max(60, Math.floor(W(a, b) / 15) - 18); try { return fixCellBlocks(blocksFromChildren(td, ctx, env, {}), ctx); } finally { env.maxW = keep; } })()
     });
     const row2 = new D.TableRow({ cantSplit: true, children: [optCell(opts[0], 0, 2), optCell(opts[1], 2, 3), optCell(opts[2], 3, 4), optCell(opts[3], 4, 6)] });
     return new D.Table({
@@ -442,7 +447,7 @@
       if (!im) return;
       if (im.failed) { out.push(para([textRun('[Diagram]', { italics: true })], ctx, { align: 'center' })); return; }
       const logo = cls.contains('exam-logo');
-      out.push(para([imageRun(im, el, logo ? 650 : 560, logo ? 115 : 400)], ctx, { align: 'center', after: logo ? 60 : 120, before: logo ? 0 : 60, keepLines: true, keepNext: !logo }));
+      out.push(para([imageRun(im, el, logo ? 650 : Math.min(560, env.maxW || 560), logo ? 115 : 400)], ctx, { align: 'center', after: logo ? 60 : 120, before: logo ? 0 : 60, keepLines: true, keepNext: !logo }));
       return;
     }
     if (cls.contains('paper-meta')) { out.push(metaTable(el, ctx, env), spacer()); return; }
