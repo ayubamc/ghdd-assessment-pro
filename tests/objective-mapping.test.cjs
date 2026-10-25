@@ -72,3 +72,11 @@ test('objective page matching rejects invented or missing source page references
 test('PDF/OCR page ranges expand every page inclusively', () => {
   assert.deepEqual(Array.from(api.parsePageRefs('3, 7–9, 12 to 13')), [3,7,8,9,12,13]);
 });
+
+test('English Form 4 composition formatting is not a hard validation gate', () => {
+  // Q50 must remain a Composition question, but wording/number-of-topic-label checks
+  // must not reject the whole exam; these are advisory generation preferences only.
+  assert.match(source, /Q50: must be the Composition question\./);
+  assert.doesNotMatch(source, /Q50: Composition must offer exactly three clearly labelled topic choices/);
+  assert.doesNotMatch(source, /Q50: Composition instructions must clearly tell the student to choose ONE topic/);
+});
