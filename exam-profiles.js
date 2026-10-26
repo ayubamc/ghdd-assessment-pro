@@ -27,7 +27,7 @@ export const KINDS = {
 
 // Noocyada sawirka ee uu app-ku si deterministic ah u sameyn karo (sax 100%)
 export const DETERMINISTIC_FIGURES = [
-  'network_topology', 'vt_graph', 'wave', 'forces', 'right_triangle', 'bar_chart', 'line_chart',
+  'network_topology', 'spring_mass', 'pendulum', 'vt_graph', 'wave', 'forces', 'right_triangle', 'bar_chart', 'line_chart',
   'pie_chart', 'data_table', 'logic_gate', 'flowchart', 'resistor_circuit', 'coord_line'
 ];
 // Noocyada u baahan sawir AI/buug (biology, geography, map)
@@ -41,7 +41,7 @@ export const NATIONAL_PROFILES = {
     label: 'Physics', basis: 'sampled', language: 'en', letters: 'latin',
     mcq: { count: 40, marks: 40 }, structured: { marks: 60, count: 8 },
     figureShare: [0.35, 0.5],
-    figures: ['vt_graph', 'wave', 'forces', 'resistor_circuit', 'logic_gate', 'coord_line', 'textbook_diagram'],
+    figures: ['vt_graph', 'wave', 'forces', 'spring_mass', 'pendulum', 'resistor_circuit', 'logic_gate', 'coord_line', 'textbook_diagram'],
     notes: 'MCQ-yada waxaa ku jira v-t graph, wave, circuit, force, logic gate, sawirro buug'
   }),
   chemistry: P({
@@ -165,6 +165,8 @@ export function getProfile(subject, className, sourceTitle) {
 // Ujeeddada (objective) iyo ereyga ficilka ayaa go'aamiya nooca su'aasha + nooca sawirka.
 const FIGURE_RULES = [
   // [subjects, regex on objective/topic, figureKind, askFacts]
+  [['physics'], /pendulum/i, 'pendulum', ['period', 'frequency']],
+  [['physics'], /spring|hooke|restoring force|elastic potential|mass-?spring/i, 'spring_mass', ['restoring_force', 'potential_energy']],
   [['physics'], /velocity.?time|v-?t graph|speed.?time|displacement.?time|acceler|uniform motion|kinematic|dhaqdhaqaaq/i, 'vt_graph', ['constant_interval', 'max_value', 'acceleration']],
   [['physics'], /amplitude|wavelength|frequency|period|wave|hirar|mowjad|sound|light wave/i, 'wave', ['amplitude', 'period', 'frequency']],
   [['physics'], /resultant|net force|balanced|unbalanced|tug|newton'?s (first|second|third)|force/i, 'forces', ['resultant', 'direction']],
@@ -238,6 +240,18 @@ export function planSlots({ profileKey, items, seed = 1 }) {
     const drop = figSlots.slice(targetFigs).filter((_, i) => i % 1 === 0);
     for (const s of drop) { s.kind = KINDS.MCQ_TEXT; delete s.figure; delete s.askFacts; delete s.deterministic; }
   }
+  // 2b) Kala-duwanaansho: hal nooc sawir ma badnaan karo (sample-ka qaranka wuxuu isku daraa noocyo kala duwan)
+  const capKind = () => Math.max(2, Math.ceil(slots.filter((x) => x.kind === KINDS.MCQ_FIGURE).length / 3));
+  const used = {}; const detPool = prof.figures.filter((f) => DETERMINISTIC_FIGURES.includes(f));
+  for (const sl of slots.filter((x) => x.kind === KINDS.MCQ_FIGURE)) {
+    used[sl.figure] = (used[sl.figure] || 0) + 1;
+    if (used[sl.figure] > capKind()) {
+      used[sl.figure]--;
+      const alt = detPool.filter((f) => f !== sl.figure && (used[f] || 0) < capKind()).sort((x, y) => (used[x] || 0) - (used[y] || 0))[0];
+      if (alt && sl.forced) { sl.figure = alt; sl.askFacts = defaultFacts(alt); sl.deterministic = true; used[alt] = (used[alt] || 0) + 1; }
+      else { sl.kind = KINDS.MCQ_TEXT; delete sl.figure; delete sl.askFacts; delete sl.deterministic; }
+    }
+  }
   // 2) Haddii ay yar yihiin, ka dhig kuwa u dhow sawir (kaliya haddii maadadu sawir leedahay)
   const have = slots.filter((s) => s.kind === KINDS.MCQ_FIGURE).length;
   if (have < targetFigs && prof.figures.length) {
@@ -247,11 +261,18 @@ export function planSlots({ profileKey, items, seed = 1 }) {
     // kala firdhi: ha la isku xirin su'aalo is-xigta
     for (let i = 0; i < pool.length && need > 0; i += Math.max(1, Math.floor(pool.length / (need + 1)))) {
       const s = pool[i]; if (!s || s.kind === KINDS.MCQ_FIGURE) continue;
-      const f = preferred.length ? preferred[Math.floor(rnd() * preferred.length)] : (prof.figures[0] || null);
+      const cnt = (k) => slots.filter((x) => x.figure === k).length;
+      const f = preferred.length ? [...preferred].sort((x, y) => cnt(x) - cnt(y) || rnd() - 0.5)[0] : (prof.figures[0] || null);
       if (!f) break;
       Object.assign(s, { kind: KINDS.MCQ_FIGURE, figure: f, askFacts: defaultFacts(f), deterministic: DETERMINISTIC_FIGURES.includes(f), forced: true });
       need--;
     }
+  }
+  // Mid kasta oo isku nooc ah wuxuu su'aal kala duwan ka weydiinayaa (amplitude, ka dibna period, ...) iyo qiimayaal kala duwan
+  const seenKind = {};
+  for (const sl of slots.filter((x) => x.figure && /figure/.test(x.kind))) {
+    const n = (seenKind[sl.figure] = (seenKind[sl.figure] || 0) + 1); sl.variant = n;
+    const f = sl.askFacts || []; if (f.length > 1) { const r = (n - 1) % f.length; sl.askFacts = [...f.slice(r), ...f.slice(0, r)]; }
   }
   // 3) Su'aalaha qoran (structured): sawirrada ha ka badnaan ~25% (sample-ka qaranka sawirrada badankoodu waa MCQ)
   const structFig = slots.filter((s) => s.kind === KINDS.STRUCT_FIGURE);

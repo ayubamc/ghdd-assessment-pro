@@ -12,8 +12,9 @@ const r2 = (n) => Math.round(n * 100) / 100;
 const num = (v, d = 0) => (Number.isFinite(Number(v)) ? Number(v) : d);
 
 // ---------- SVG primitives --------------------------------------------------------------------------------------
-function svgWrap(body) {
-  return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${W} ${H}" width="100%" height="auto"><rect width="${W}" height="${H}" fill="#ffffff"/>${body}</svg>`;
+function svgWrap(body, h = H, dy = 0) {
+  const g = dy ? `<g data-dy="${dy}" transform="translate(0,${dy})">` : '', ge = dy ? '</g>' : '';
+  return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${W} ${h}" width="100%" height="auto"><rect width="${W}" height="${h}" fill="#ffffff"/>${g}${body}${ge}</svg>`;
 }
 // role: tick (hirka dhululubada) | id (xarfaha A,B,K..) | data (xog la siiyey) | annot (qoraal sharaxaad - waa la hubiyaa leak)
 function T(x, y, s, { size = 16, anchor = 'middle', role = 'data', weight = '' } = {}) {
@@ -78,7 +79,7 @@ RENDERERS.vt_graph = (spec) => {
   }
   const constant = segs.filter((g) => g.type === 'constant' && g.v > 0);
   const facts = { segments: segs, constant_intervals: constant.map((g) => ({ from: g.from, to: g.to })), max_value: vMax, acceleration: segs.find((g) => g.type === 'accelerating') ? segs.find((g) => g.type === 'accelerating').accel : null };
-  return { svg: svgWrap(s), facts };
+  return { svg: svgWrap(s, 322, -12), facts };
 };
 
 RENDERERS.wave = (spec) => {
@@ -93,12 +94,12 @@ RENDERERS.wave = (spec) => {
   let d = '';
   for (let i = 0; i <= 160; i++) { const t = (i / 160) * total; d += (i ? ' L' : 'M') + r2(sx(t)) + ' ' + r2(sy(A * Math.sin((2 * Math.PI * t) / P))); }
   s += PATH(d, { sw: 2 });
-  for (let k = 1; k <= cycles * 2; k++) { const t = (k * P) / 2; s += L(sx(t), yc, sx(t), yc + 6, { w: 1 }) + T(sx(t), yc + 22, fmtNum(t), { size: 14, role: 'tick' }); }
+  for (let k = 1; k <= cycles * 2; k++) { const t = (k * P) / 2; s += L(sx(t), yc, sx(t), yc + 6, { w: 1 }) + T(sx(t) + (k % 2 ? -13 : 13), yc + 22, fmtNum(t), { size: 14, role: 'tick' }); }
   s += L(x0, sy(A), x0 - 6, sy(A), { w: 1 }) + T(x0 - 10, sy(A) + 5, fmtNum(A), { size: 14, anchor: 'end', role: 'tick' });
   s += L(x0, sy(-A), x0 - 6, sy(-A), { w: 1 }) + T(x0 - 10, sy(-A) + 5, '-' + fmtNum(A), { size: 14, anchor: 'end', role: 'tick' });
   s += T(x0 - 10, yc + 5, '0', { size: 14, anchor: 'end', role: 'tick' });
   const freqHz = tUnit === 'ms' ? 1000 / P : tUnit === 's' ? 1 / P : null;
-  return { svg: svgWrap(s), facts: { amplitude: A, period: P, frequency: freqHz === null ? null : r2(freqHz), wavelength: null } };
+  return { svg: svgWrap(s, 310, -30), facts: { amplitude: A, period: P, frequency: freqHz === null ? null : r2(freqHz), wavelength: null } };
 };
 
 RENDERERS.forces = (spec) => {
@@ -113,7 +114,8 @@ RENDERERS.forces = (spec) => {
   });
   draw(left, -1); draw(right, 1);
   const res = right.reduce((a, b) => a + b, 0) - left.reduce((a, b) => a + b, 0);
-  return { svg: svgWrap(s), facts: { resultant: Math.abs(res), direction: res === 0 ? 'balanced' : res > 0 ? 'right' : 'left', unit } };
+  const ext = Math.max(left.length, right.length), half = (ext - 1) * 22 + 48;
+  return { svg: svgWrap(s, 2 * half + 30, -(cy - half - 15)), facts: { resultant: Math.abs(res), direction: res === 0 ? 'balanced' : res > 0 ? 'right' : 'left', unit } };
 };
 
 RENDERERS.right_triangle = (spec) => {
@@ -215,7 +217,7 @@ RENDERERS.logic_gate = (spec) => {
   if (g === 'NOT') s += L(x - 90, mid, x, mid, { w: 1.8 }) + T(x - 98, mid + 5, 'A', { size: 16, anchor: 'end', role: 'id' });
   else s += L(x - 90, y + 32, x + 8, y + 32, { w: 1.8 }) + L(x - 90, y + h - 32, x + 8, y + h - 32, { w: 1.8 }) + T(x - 98, y + 37, 'A', { size: 16, anchor: 'end', role: 'id' }) + T(x - 98, y + h - 27, 'B', { size: 16, anchor: 'end', role: 'id' });
   s += T(outX + 100, mid + 5, 'Q', { size: 16, anchor: 'start', role: 'id' });
-  return { svg: svgWrap(s), facts: { gate_name: g } };
+  return { svg: svgWrap(s, 180, -85), facts: { gate_name: g } };
 };
 
 RENDERERS.flowchart = (spec) => {
@@ -234,7 +236,7 @@ RENDERERS.flowchart = (spec) => {
     s += T(cx, cy + 5, lab, { size: n === 1 ? 26 : 14, role: lab === '?' ? 'id' : 'data' });
     if (i < n - 1) s += arrow(x + bw + (nd.type === 'io' ? 18 : 0), cy, x + bw + gap - 2, cy);
   });
-  return { svg: svgWrap(s), facts: { nodes: nodes.map((x) => x.type), symbol_type: nodes.length === 1 ? nodes[0].type : null } };
+  return { svg: svgWrap(s, n === 1 ? 190 : 125, n === 1 ? -85 : -118), facts: { nodes: nodes.map((x) => x.type), symbol_type: nodes.length === 1 ? nodes[0].type : null } };
 };
 
 RENDERERS.resistor_circuit = (spec) => {
@@ -247,7 +249,13 @@ RENDERERS.resistor_circuit = (spec) => {
   s += L(x0, yT, x0, 160) + L(x0, 194, x0, yB);
   s += L(x0 - 22, 160, x0 + 22, 160, { w: 2.4 }) + L(x0 - 12, 177, x0 + 12, 177, { w: 4 }) + L(x0 - 22, 194, x0 + 22, 194, { w: 2.4 });
   s += T(x0 - 32, 182, `${fmtNum(V)} V`, { size: 16, anchor: 'end', role: 'data' });
-  const resBox = (cx, cy, vertical, v) => (vertical ? R(cx - 14, cy - 28, 28, 56, { fill: '#fff' }) + T(cx + 22, cy + 5, `${fmtNum(v)} Ω`, { size: 15, anchor: 'start' }) : R(cx - 28, cy - 14, 56, 28, { fill: '#fff' }) + T(cx, cy - 22, `${fmtNum(v)} Ω`, { size: 15 }));
+  const zig = (cx, cy, vertical) => {
+    const off = [[-30, 0], [-24, 0], [-20, -10], [-12, 10], [-4, -10], [4, 10], [12, -10], [20, 10], [24, 0], [30, 0]];
+    const pts = off.map(([a, b]) => (vertical ? [cx + b, cy + a] : [cx + a, cy + b]));
+    const bg = vertical ? `<rect x="${cx - 12}" y="${cy - 31}" width="24" height="62" fill="#fff" stroke="none"/>` : `<rect x="${cx - 31}" y="${cy - 12}" width="62" height="24" fill="#fff" stroke="none"/>`;
+    return bg + PL(pts, { sw: 1.8 });
+  };
+  const resBox = (cx, cy, vertical, v) => (vertical ? zig(cx, cy, true) + T(cx + 22, cy + 5, `${fmtNum(v)} Ω`, { size: 15, anchor: 'start' }) : zig(cx, cy, false) + T(cx, cy - 22, `${fmtNum(v)} Ω`, { size: 15 }));
   let req;
   if (mode === 'series') {
     const n = vals.length, seg = (x1 - x0) / n;
@@ -261,7 +269,7 @@ RENDERERS.resistor_circuit = (spec) => {
     xs.forEach((x, i) => { s += L(x, yT, x, yB) + C(x, yT, 3.5, { fill: '#000' }) + C(x, yB, 3.5, { fill: '#000' }) + resBox(x, (yT + yB) / 2, true, vals[i]); });
     req = 1 / vals.reduce((a, b) => a + 1 / b, 0);
   }
-  return { svg: svgWrap(s), facts: { mode, equivalent_resistance: r2(req), total_current: r2(V / req), voltage: V } };
+  return { svg: svgWrap(s, 265, -50), facts: { mode, equivalent_resistance: r2(req), total_current: r2(V / req), voltage: V } };
 };
 
 
@@ -277,7 +285,40 @@ RENDERERS.network_topology = (spec) => {
   else if (type === 'mesh') { ring.forEach((p, i) => ring.forEach((q, j) => { if (j > i) s += L(p[0], p[1], q[0], q[1], { w: 1.2 }); })); ring.forEach((p) => { s += node(p[0], p[1]); }); }
   else if (type === 'bus') { s += L(70, 185, 570, 185, { w: 2.6 }); for (let i = 0; i < n; i++) { const x = 100 + i * (440 / (n - 1)), up = i % 2 === 0, y = up ? 105 : 265; s += L(x, 185, x, up ? y + 15 : y - 15) + node(x, y); } }
   else { s += R(cx - 28, 60, 56, 32, { fill: '#fde9c8' }); const kids = Math.min(n, 4); for (let i = 0; i < kids; i++) { const x = 130 + i * (380 / Math.max(1, kids - 1)); s += L(cx, 92, x, 190) + R(x - 26, 190, 52, 30, { fill: '#e8eef7' }); if (i < 2) { s += L(x, 220, x - 30, 290) + L(x, 220, x + 30, 290) + node(x - 30, 305) + node(x + 30, 305); } } }
-  return { svg: svgWrap(s), facts: { topology_name: type } };
+  return { svg: svgWrap(s, 310, -30), facts: { topology_name: type } };
+};
+
+RENDERERS.spring_mass = (spec) => {
+  const k = num(spec.k), x = num(spec.x), dir = String(spec.direction || 'right').toLowerCase();
+  if (!(k > 0) || !(x > 0)) throw new Error('spring_mass: k iyo x waa inay togan yihiin');
+  if (!['right', 'left'].includes(dir)) throw new Error('spring_mass: direction = right|left');
+  const xUnit = spec.xUnit || 'm', kUnit = spec.kUnit || 'N/m', sgn = dir === 'right' ? 1 : -1;
+  const wall = 90, eq = 330, floor = 150, bw = 64, bh = 56, cx = eq + sgn * 80, left = cx - bw / 2, sy = floor - bh / 2;
+  let s = L(wall, floor - 100, wall, floor, { w: 3 }) + L(60, floor, 580, floor, { w: 2 });
+  for (let i = 0; i < 6; i++) s += L(wall, floor - 18 - i * 16, wall - 12, floor - 6 - i * 16, { w: 1.2 });
+  const len = left - wall, n = 9, pts = [[wall, sy], [wall + 14, sy]];
+  for (let i = 0; i < n; i++) pts.push([wall + 14 + ((len - 28) * (i + 0.5)) / n, sy + (i % 2 ? 11 : -11)]);
+  pts.push([left - 14, sy], [left, sy]);
+  s += PL(pts, { sw: 1.8 }) + R(left, floor - bh, bw, bh, { fill: '#e8eef7' }) + T(cx, floor - bh / 2 + 5, spec.massLabel || 'm', { size: 16, role: 'id' });
+  s += L(eq, floor - bh - 22, eq, floor + 8, { w: 1.2, dash: '5,4' }) + T(eq, floor + 26, 'equilibrium', { size: 13, role: 'data' });
+  const ay = floor - bh - 14;
+  s += arrow(eq, ay, cx, ay, { w: 1.8 }) + T((eq + cx) / 2, ay - 8, `x = ${fmtNum(x)} ${xUnit}`, { size: 15, role: 'data' });
+  s += T(wall + 70, floor + 26, `k = ${fmtNum(k)} ${kUnit}`, { size: 15, role: 'data' });
+  const F = r2(k * x), U = Math.round(0.5 * k * x * x * 1000) / 1000;
+  return { svg: svgWrap(s, 195, -20), facts: { restoring_force: F, potential_energy: U, extension: x, units: { restoring_force: 'N', potential_energy: 'J', extension: xUnit } } };
+};
+
+RENDERERS.pendulum = (spec) => {
+  const Lm = num(spec.length), ang = Math.max(5, Math.min(30, num(spec.angle, 15)));
+  if (!(Lm > 0)) throw new Error('pendulum: length waa inuu togan yahay');
+  const px = 320, py = 40, plen = 200, a = (ang * Math.PI) / 180, bx = px + plen * Math.sin(a), by = py + plen * Math.cos(a);
+  let s = L(px - 90, py, px + 90, py, { w: 3 });
+  for (let i = 0; i < 8; i++) s += L(px - 90 + i * 24, py, px - 78 + i * 24, py - 12, { w: 1.2 });
+  s += L(px, py, px, py + plen + 25, { w: 1.2, dash: '5,4' }) + L(px, py, bx, by, { w: 1.8 }) + C(bx, by, 16, { fill: '#e8eef7', sw: 1.8 });
+  s += PATH(`M${r2(px)} ${r2(py + 60)} A60 60 0 0 1 ${r2(px + 60 * Math.sin(a))} ${r2(py + 60 * Math.cos(a))}`, { sw: 1.4 }) + T(px + 34, py + 84, 'θ', { size: 16, anchor: 'start', role: 'id' });
+  if (spec.showLength !== false) s += T((px + bx) / 2 + 26, (py + by) / 2, `L = ${fmtNum(Lm)} m`, { size: 15, anchor: 'start', role: 'data' });
+  const T0 = Math.round(2 * Math.PI * Math.sqrt(Lm / 9.8) * 10) / 10;
+  return { svg: svgWrap(s, 290, -10), facts: { period: T0, frequency: T0 > 0 ? r2(1 / T0) : null, length: Lm, units: { period: 's', frequency: 'Hz', length: 'm' } } };
 };
 
 RENDERERS.coord_line = (spec) => {
@@ -309,6 +350,8 @@ export const FIGURE_SCHEMAS = {
   flowchart: '{"nodes":[{"type":"start","label":"Start"},{"type":"process","label":"Input"},{"type":"decision","label":"?"}]}  (types: start,end,process,decision,io; one node with label "?" = identify the symbol)',
   resistor_circuit: '{"mode":"series","values":[4,6],"voltage":12}  (mode series|parallel; 2-3 resistors in ohms)',
   network_topology: '{"type":"star","nodes":5}  (type star|ring|bus|mesh|tree; nodes 3-6; the figure never carries the topology name)',
+  spring_mass: '{"k":100,"x":0.05,"direction":"right","xUnit":"m","kUnit":"N/m"}  (horizontal mass-spring system displaced from equilibrium; ask restoring_force or potential_energy; the figure shows k and x only)',
+  pendulum: '{"length":1,"angle":15,"showLength":true}  (simple pendulum; period uses g = 9.8 m/s² and is rounded to 0.1 s; ask period or frequency; use L = 0.25, 1, 2.25 or 4 m)',
   coord_line: '{"m":2,"c":1,"xMin":-4,"xMax":4,"points":[1,3]}'
 };
 
@@ -347,6 +390,8 @@ export function verifySvg(svg, { answerTexts = [], expectedNumbers = [], require
   const vb = svg.match(/viewBox\s*=\s*["']\s*([\d.\-]+)[ ,]+([\d.\-]+)[ ,]+([\d.]+)[ ,]+([\d.]+)/i);
   if (!vb) issues.push('viewBox ma jiro');
   const VW = vb ? Number(vb[3]) : W, VH = vb ? Number(vb[4]) : H;
+  const dy = Number((svg.match(/data-dy="(-?[\d.]+)"/) || [])[1]) || 0;
+  const chkSvg = svg.replace(/<rect width="[\d.]+" height="[\d.]+" fill="#ffffff"\/>/, '');
   // Tag balance
   const stack = []; const tagRx = /<\s*(\/)?\s*([a-zA-Z][\w:-]*)\b[^>]*?(\/)?>/g; let tm;
   while ((tm = tagRx.exec(svg))) { if (tm[3]) continue; if (tm[1]) { const top = stack.pop(); if (top !== tm[2].toLowerCase()) { issues.push('tag-yada SVG-ga isma dhigmaan'); break; } } else stack.push(tm[2].toLowerCase()); }
@@ -356,25 +401,25 @@ export function verifySvg(svg, { answerTexts = [], expectedNumbers = [], require
   if (shapes < minShapes) issues.push('sawirku wuu madhan yahay (qaybo yar)');
   // Out-of-canvas numbers on common attrs
   const bad = [];
-  const chk = (re, axis) => { let m; while ((m = re.exec(svg))) { const v = parseFloat(m[1]); if (axis === 'x' && (v < -2 || v > VW + 2)) bad.push(`x=${v}`); if (axis === 'y' && (v < -2 || v > VH + 2)) bad.push(`y=${v}`); } };
+  const chk = (re, axis) => { let m; while ((m = re.exec(chkSvg))) { const v = parseFloat(m[1]) + (axis === 'y' ? dy : 0); if (axis === 'x' && (v < -2 || v > VW + 2)) bad.push(`x=${v}`); if (axis === 'y' && (v < -2 || v > VH + 2)) bad.push(`y=${v}`); } };
   chk(/\b(?:x|x1|x2|cx)\s*=\s*"(-?[\d.]+)"/g, 'x'); chk(/\b(?:y|y1|y2|cy)\s*=\s*"(-?[\d.]+)"/g, 'y');
   const rectRx = /<rect\b([^>]*)>/gi; let rm;
-  while ((rm = rectRx.exec(svg))) {
+  while ((rm = rectRx.exec(chkSvg))) {
     const g = (n) => { const mm = rm[1].match(new RegExp(`\\b${n}\\s*=\\s*"(-?[\\d.]+)"`)); return mm ? parseFloat(mm[1]) : null; };
-    const rx0 = g('x') ?? 0, ry0 = g('y') ?? 0, rw = g('width'), rh = g('height');
+    const rx0 = g('x') ?? 0, ry0 = (g('y') ?? 0) + dy, rw = g('width'), rh = g('height');
     if (rw !== null && rh !== null && !(rw >= VW - 1 && rh >= VH - 1) && (rx0 < -2 || ry0 < -2 || rx0 + rw > VW + 2 || ry0 + rh > VH + 2)) bad.push(`rect ${rx0},${ry0} ${rw}x${rh}`);
   }
   const circRx = /<circle\b([^>]*)>/gi; let cm;
-  while ((cm = circRx.exec(svg))) {
+  while ((cm = circRx.exec(chkSvg))) {
     const g = (n) => { const mm = cm[1].match(new RegExp(`\\b${n}\\s*=\\s*"(-?[\\d.]+)"`)); return mm ? parseFloat(mm[1]) : 0; };
-    const cx = g('cx'), cy = g('cy'), cr = g('r');
+    const cx = g('cx'), cy = g('cy') + dy, cr = g('r');
     if (cx - cr < -2 || cy - cr < -2 || cx + cr > VW + 2 || cy + cr > VH + 2) bad.push(`circle ${cx},${cy} r${cr}`);
   }
   const ptsRx = /points\s*=\s*"([^"]+)"/g; let pm;
-  while ((pm = ptsRx.exec(svg))) pm[1].trim().split(/\s+/).forEach((p) => { const [px, py] = p.split(',').map(parseFloat); if (px < -2 || px > VW + 2 || py < -2 || py > VH + 2) bad.push(`point ${p}`); });
+  while ((pm = ptsRx.exec(chkSvg))) pm[1].trim().split(/\s+/).forEach((p) => { const [px, py0] = p.split(',').map(parseFloat); const py = py0 + dy; if (px < -2 || px > VW + 2 || py < -2 || py > VH + 2) bad.push(`point ${p}`); });
   if (bad.length) issues.push(`qaybo ayaa canvas-ka ka baxsan (${bad.slice(0, 3).join(', ')})`);
   // Text: inside canvas + overlap
-  const texts = extractTexts(svg).filter((t) => t.text);
+  const texts = extractTexts(svg).filter((t) => t.text).map((t) => ({ ...t, y: t.y + dy }));
   const boxes = texts.map(textBox);
   boxes.forEach((b, i) => { if (b.x < 2 || b.x + b.w > VW - 2 || b.y < 2 || b.y + b.h > VH - 2) issues.push(`qoraalka "${texts[i].text.slice(0, 20)}" wuu ka baxsan yahay xadka`); });
   for (let i = 0; i < boxes.length; i++) for (let j = i + 1; j < boxes.length; j++) {
@@ -404,8 +449,8 @@ export function answerIndex(q) {
 
 // Soo saar qiimaha la sugayo ee su'aasha ka timaadda facts + askFact
 export function expectedFor(askFact, facts, spec = {}) {
-  const numKinds = ['max_value', 'acceleration', 'amplitude', 'period', 'frequency', 'resultant', 'equivalent_resistance', 'total_current', 'gradient', 'y_intercept', 'hypotenuse', 'area', 'perimeter', 'total', 'difference'];
-  if (numKinds.includes(askFact)) { const v = facts[askFact]; return v === null || v === undefined ? null : { type: 'number', value: Number(v), unit: facts.unit || '' }; }
+  const numKinds = ['restoring_force', 'potential_energy', 'extension', 'length', 'max_value', 'acceleration', 'amplitude', 'period', 'frequency', 'resultant', 'equivalent_resistance', 'total_current', 'gradient', 'y_intercept', 'hypotenuse', 'area', 'perimeter', 'total', 'difference'];
+  if (numKinds.includes(askFact)) { const v = facts[askFact]; return v === null || v === undefined ? null : { type: 'number', value: Number(v), unit: (facts.units && facts.units[askFact]) || facts.unit || '' }; }
   if (askFact === 'constant_interval') { const c = facts.constant_intervals || []; return c.length === 1 ? { type: 'tokens', tokens: [c[0].from, c[0].to] } : null; }
   if (['max_label', 'min_label', 'largest_share', 'smallest_share'].includes(askFact)) return facts[askFact] ? { type: 'tokens', tokens: [String(facts[askFact])] } : null;
   if (askFact === 'gate_name') return { type: 'tokens', tokens: [facts.gate_name] };

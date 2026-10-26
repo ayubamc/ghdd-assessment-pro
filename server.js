@@ -2026,6 +2026,8 @@ ${String(p.sourceText || p.text || '')}
     if (chemMode) mapQuestionText(q, cleanChemText);
   });
   if (p.passage && passage) passage.text = stripSourceCitations(passage.text);
+  // Su'aalaha oo sawir ka hadlaya laakiin sawir aan lahayn (diyaarin fashilantay) waa la hagaajiyaa
+  try { const r2 = await smartFigures.repairBroken(p, questions, plannedObjectives(p, questions.length), { dangling: true }); if (repairReport) { repairReport.found += r2.found; repairReport.repaired += r2.repaired; repairReport.failed += r2.failed; } else repairReport = r2; } catch (e) { console.warn('Dangling-figure repair skipped:', e.message); }
   questions.figureReport = figureReport;
   questions.repairReport = repairReport;
   if (examPlan) questions.examProfile = { key: examPlan.profile.key, label: examPlan.profile.label, basis: examPlan.profile.basis, notes: examPlan.profile.notes, style: examPlan.profile.style };
