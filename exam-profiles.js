@@ -27,7 +27,7 @@ export const KINDS = {
 
 // Noocyada sawirka ee uu app-ku si deterministic ah u sameyn karo (sax 100%)
 export const DETERMINISTIC_FIGURES = [
-  'vt_graph', 'wave', 'forces', 'right_triangle', 'bar_chart', 'line_chart',
+  'network_topology', 'vt_graph', 'wave', 'forces', 'right_triangle', 'bar_chart', 'line_chart',
   'pie_chart', 'data_table', 'logic_gate', 'flowchart', 'resistor_circuit', 'coord_line'
 ];
 // Noocyada u baahan sawir AI/buug (biology, geography, map)
@@ -37,6 +37,7 @@ const P = (o) => o;
 
 export const NATIONAL_PROFILES = {
   physics: P({
+    style: {"mcq": "Choose the best answer for each of the following", "structured": "Part Two: Direct Questions", "marksWord": "Marks", "letters": "abcd", "suffix": "."},
     label: 'Physics', basis: 'sampled', language: 'en', letters: 'latin',
     mcq: { count: 40, marks: 40 }, structured: { marks: 60, count: 8 },
     figureShare: [0.35, 0.5],
@@ -44,6 +45,7 @@ export const NATIONAL_PROFILES = {
     notes: 'MCQ-yada waxaa ku jira v-t graph, wave, circuit, force, logic gate, sawirro buug'
   }),
   chemistry: P({
+    style: {"mcq": "SECTION A: Circle the Correct Answer", "structured": "SECTION B: Direct Questions", "marksWord": "Marks", "letters": "abcd", "suffix": ")"},
     label: 'Chemistry', basis: 'sampled', language: 'en', letters: 'latin',
     mcq: { count: 40, marks: 40 }, structured: { marks: 60, count: 10 },
     figureShare: [0.1, 0.25],
@@ -52,6 +54,7 @@ export const NATIONAL_PROFILES = {
     notes: 'Formula qaab, pH/mole xisaabin, jaantus xaaladaha shayga, qaab-dhismeed organic'
   }),
   biology: P({
+    style: {"mcq": "Section A: Multiple choice questions", "structured": "Section B: Structured Questions", "marksWord": "Marks", "letters": "ABCD", "suffix": "."},
     label: 'Biology', basis: 'sampled', language: 'en', letters: 'latin',
     mcq: { count: 40, marks: 40 }, structured: { marks: 60, count: 11 },
     figureShare: [0.12, 0.25],
@@ -59,6 +62,7 @@ export const NATIONAL_PROFILES = {
     notes: 'Jaantus unugyada, maqaarka, neuron, ubaxa, sawirro qalab (PCR) - badanaa sawir buug'
   }),
   math: P({
+    style: {"mcq": "Circle the letter of the correct answer", "structured": "Part Two: Answer the following questions", "marksWord": "Marks", "letters": "abcd", "suffix": "."},
     label: 'Xisaab', basis: 'sampled', language: 'so', letters: 'latin',
     mcq: { count: 40, marks: 40 }, structured: { marks: 60, count: 14 },
     figureShare: [0.03, 0.1],
@@ -67,6 +71,7 @@ export const NATIONAL_PROFILES = {
     notes: 'Badanaa xisaabin; calculus, complex numbers, probability, sets; sawir yar'
   }),
   geography: P({
+    style: {"mcq": "B. Goobo geli jawaabta saxda ah", "structured": "QAYBTA 2AAD EE IMTIXAANKA", "marksWord": "Dhibcood", "letters": "btjx", "suffix": "."},
     label: 'Geography', basis: 'sampled', language: 'so', letters: 'somali',
     mcq: { count: 40, marks: 40 }, structured: { marks: 60, count: 12 },
     figureShare: [0.08, 0.2],
@@ -74,14 +79,16 @@ export const NATIONAL_PROFILES = {
     notes: 'Khariidad Soomaaliya/Afrika, sawir tamar dabeyl, volcano; xisaabin cufnaan (qof/km²)'
   }),
   technology: P({
+    style: {"mcq": "Choose the Correct answer", "structured": "PART TWO: STRUCTURED QUESTIONS", "marksWord": "Marks", "letters": "ABCD", "suffix": ")"},
     label: 'Technology', basis: 'sampled', language: 'en', letters: 'latin',
     mcq: { count: 40, marks: 40 }, structured: { marks: 60, count: 8 },
     figureShare: [0.12, 0.25],
-    figures: ['flowchart', 'data_table', 'logic_gate', 'textbook_diagram'],
+    figures: ['flowchart', 'network_topology', 'data_table', 'logic_gate', 'textbook_diagram'],
     codeShare: [0.15, 0.3],
     notes: 'Flowchart, UI Word/Excel/PowerPoint, topology, binary, koodh (compiler, errors)'
   }),
   english: P({
+    style: {"mcq": "SECTION ONE: Multiple choice questions", "structured": "SECTION TWO: ANSWER THESE QUESTIONS", "marksWord": "Marks", "letters": "ABCD", "suffix": ")"},
     label: 'English', basis: 'sampled', language: 'en', letters: 'latin',
     mcq: { count: 40, marks: 40 }, structured: { marks: 60, count: 10 },
     figureShare: [0, 0], figures: [],
@@ -89,6 +96,7 @@ export const NATIONAL_PROFILES = {
     notes: 'Passage (Q1-10) + Grammar + Literature + Vocabulary; sawir ma jiro'
   }),
   business: P({
+    style: {"mcq": "A. CIRCLE THE CORRECT ANSWER", "structured": "SECTION 2: DIRECT QUESTIONS", "marksWord": "Points", "letters": "ABCD", "suffix": "."},
     label: 'Business', basis: 'sampled', language: 'en', letters: 'latin',
     mcq: { count: 40, marks: 40 }, structured: { marks: 60, count: 6 },
     figureShare: [0.1, 0.22],
@@ -97,12 +105,14 @@ export const NATIONAL_PROFILES = {
     notes: 'Supply curve, income statement, liability xisaabin, sawirro xafiis; jadwal demand/supply'
   }),
   history: P({
+    style: {"mcq": "B. Goobo geli jawaabta saxda ah", "structured": "QAYBTA 2AAD EE IMTIXAANKA", "marksWord": "Dhibcood", "letters": "BTJX", "suffix": ")"},
     label: 'History', basis: 'sampled', language: 'so', letters: 'somali',
     mcq: { count: 40, marks: 40 }, structured: { marks: 60, count: 15 },
     figureShare: [0, 0.03], figures: [],
     notes: 'MCQ qoraal ah oo keliya (taariikh, sanado, magacyo); sawir ma jiro'
   }),
   somali: P({
+    style: {"mcq": "B. Goobo geli jawaabta saxda ah", "structured": "Qaybta 2aad: Curis", "marksWord": "Dhibcood", "letters": "btjx", "suffix": "."},
     label: 'Soomaali', basis: 'sampled', language: 'so', letters: 'somali',
     mcq: { count: 40, marks: 80 }, structured: { marks: 20, count: 2 },
     figureShare: [0, 0], figures: [],
@@ -110,12 +120,14 @@ export const NATIONAL_PROFILES = {
     notes: 'Qaybta 1aad: qiidcada + MCQ luqad (40 su\'aal = 80 dhibcood); Qaybta 2aad: curis 20 dhibcood'
   }),
   arabic: P({
+    style: {"mcq": "اختر الإجابة الصحيحة", "structured": "القسم الثاني: الأسئلة المباشرة", "marksWord": "درجة", "letters": "ABCD", "suffix": ")"},
     label: 'Arabic', basis: 'assumed', language: 'ar', letters: 'latin',
     mcq: { count: 40, marks: 40 }, structured: { marks: 60, count: 10 },
     figureShare: [0, 0.05], figures: [],
     notes: 'La qiyaasay: MCQ + qoraal; hubi sample-ka'
   }),
   tarbiya: P({
+    style: {"mcq": "Dooro jawaabta saxda ah", "structured": "Qaybta 2aad: Su'aalaha toosan", "marksWord": "Dhibcood", "letters": "ABCD", "suffix": ")"},
     label: 'Tarbiya Islaamiga', basis: 'assumed', language: 'so', letters: 'latin',
     mcq: { count: 40, marks: 40 }, structured: { marks: 60, count: 10 },
     figureShare: [0, 0.03], figures: [],
@@ -158,6 +170,7 @@ const FIGURE_RULES = [
   [['physics'], /resultant|net force|balanced|unbalanced|tug|newton'?s (first|second|third)|force/i, 'forces', ['resultant', 'direction']],
   [['physics'], /series|parallel|resist|ohm|circuit|current|voltage|potential diff/i, 'resistor_circuit', ['equivalent_resistance', 'total_current']],
   [['physics', 'technology'], /logic gate|and gate|or gate|not gate|nand|nor|boolean|digital electronics/i, 'logic_gate', ['gate_name']],
+  [['technology'], /topology|network layout|star network|ring network|bus network|mesh network|hub and switch/i, 'network_topology', ['topology_name']],
   [['technology'], /flow ?chart|algorithm|decision symbol|process symbol|program flow|pseudocode/i, 'flowchart', ['symbol_type']],
   [['math', 'physics'], /straight line|gradient|slope|linear (graph|equation)|y ?= ?mx|coordinate/i, 'coord_line', ['gradient', 'y_intercept']],
   [['math'], /pythag|hypotenuse|right.?angle|trigonomet|triangle/i, 'right_triangle', ['hypotenuse', 'area', 'perimeter']],

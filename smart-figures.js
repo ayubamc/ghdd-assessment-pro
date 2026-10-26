@@ -12,6 +12,31 @@ const LETTERS = ['A', 'B', 'C', 'D'];
 const hash = (str) => { let h = 2166136261; for (const c of String(str)) { h ^= c.charCodeAt(0); h = Math.imul(h, 16777619); } return h >>> 0; };
 const tokens = (s) => new Set((String(s || '').toLowerCase().match(/[\p{L}\p{N}]{3,}/gu) || []));
 
+// ---- Su'aalaha jajaban: qoraal la'aan, cinwaan qayb, MCQ doorasho la'aan, ama MCQ oo ah qeexid ("Define...") ----
+const SECTION_LABEL = /^\s*(part|section|qaybta|القسم)\b/i;
+const DEFINE_STEM = /^\s*(define|explain|describe|discuss|list|outline|state\s+(?:and|two|three|four|five)|qeex|sharax|faahfaahi|taxan|ka hadal|\u0634\u0631\u062d|\u0639\u0631\u0641)\b/i;
+export function findBrokenQuestions(questions) {
+  const bad = [];
+  questions.forEach((q, i) => {
+    const text = String(q?.question || q?.text || '').trim();
+    const isMcq = /^(mcq|multiple)/i.test(q?.type || '');
+    const opts = Array.isArray(q?.options) ? q.options.map((o) => String(o || '').trim()).filter(Boolean) : [];
+    let why = '';
+    if (text.length < 8 || (SECTION_LABEL.test(text) && text.length < 90)) why = 'empty-or-section-title';
+    else if (isMcq && opts.length !== 4) why = 'mcq-without-options';
+    else if (isMcq && DEFINE_STEM.test(text)) why = 'mcq-is-open-question';
+    if (why) bad.push({ index: i, why });
+  });
+  return bad;
+}
+// "figure above" -> "figure below": sawirka waxaa la dhigaa stem-ka hoostiisa (sida sample-ka qaranka)
+export function fixFigureDirection(text, lang = 'en') {
+  return String(text || '')
+    .replace(/\b(figure|diagram|graph|chart|table|picture|map|illustration)\s+above\b/gi, '$1 below')
+    .replace(/\babove\s+(figure|diagram|graph|chart|table|picture|map|illustration)\b/gi, 'below $1')
+    .replace(/\b(sawirka|jaantuska|shaxda|khariidadda)\s+(kore|sare)\b/gi, '$1 hoose');
+}
+
 export function partTypeAt(plan, i, count) {
   let n = 0;
   for (const part of Array.isArray(plan) ? plan : []) { n += Number(part.count) || 0; if (i < n) return part.type || 'MCQ'; }
@@ -105,7 +130,7 @@ Return ONLY JSON: {"spec":{},"askFact":"","unit":"","question":"","options":["",
       }
       const ver = verifyFigureQuestion(q, { svg: rendered.svg, facts: rendered.facts, askFact, spec: j.spec });
       if (!ver.ok) { feedback = ver.issues.join('; '); lastIssues = ver.issues; continue; }
-      q.diagramSvg = rendered.svg; q.diagram = '';
+      q.question = fixFigureDirection(q.question); q.diagramSvg = rendered.svg; q.diagram = '';
       q.figureMeta = { method: 'deterministic', kind: slot.figure, askFact, answerChecked: !!exp, repaired, notes, needsReview: false, spec: j.spec, facts: slimFacts(rendered.facts) };
       return { q, status: repaired ? 'repaired' : 'ok', issues: notes };
     }
@@ -157,7 +182,7 @@ Return ONLY JSON: {"question":"","options":["","","",""],"answer":"","keyPoints"
       if (!svg) { try { svg = await aiGenerateDiagram(p, q, index + 1); } catch (e) { lastIssues = [e.message]; continue; } }
       const ver = verifyFigureQuestion(q, { svg });
       if (!ver.ok) { feedback = ver.issues.join('; '); lastIssues = ver.issues; if (lib) break; continue; }
-      q.diagramSvg = svg; q.diagram = '';
+      q.question = fixFigureDirection(q.question); q.diagramSvg = svg; q.diagram = '';
       q.figureMeta = { method: lib ? 'library' : 'ai-svg', kind: slot.figure, askFact: null, answerChecked: false, repaired: false, notes: [], needsReview: true, libraryId: lib?.id || null };
       return { q, status: 'needs-review', issues: [] };
     }
@@ -209,7 +234,44 @@ Return ONLY JSON: {"question":"","options":["","","",""],"answer":"","keyPoints"
     return { ok: hard.length === 0, flags, choiceWithFigure: withFigure.choice, choiceWithout: without.choice, key, problems: withFigure.problems || [] };
   }
 
-  return { smartFigureStage, visionVerify };
+  // Hagaaji su'aalaha jajaban (ilaa 5 isku mar). Haddii hagaajinta fashilanto, su'aasha asalka ah ayaa hadhaysa.
+  async function repairBroken(p, questions, objs = []) {
+    const bad = findBrokenQuestions(questions);
+    const report = { found: bad.length, repaired: 0, failed: 0 };
+    let next = 0;
+    const lang = langName(String(p.examLanguage || 'en'));
+    const worker = async () => {
+      while (next < bad.length) {
+        const { index, why } = bad[next++];
+        const q = questions[index], isMcq = /^(mcq|multiple)/i.test(q.type || '');
+        const objective = q.objective || objs[index]?.text || '';
+        const topic = q.topic || objs[index]?.topic || '';
+        const prompt = `You are a national-examination item writer for ${p.subject || 'the subject'} (${p.className || 'secondary school'}). ${String(p.examLanguage) === 'so' ? somaliStyle : ''}
+Write ONE ${isMcq ? 'multiple-choice question with exactly four options and one correct answer' : 'direct written question with a short model answer'} in ${lang}.
+OBJECTIVE: ${objective}
+TOPIC: ${topic}
+${q.sourceText ? '' : ''}${isMcq ? 'The stem must be a complete question or sentence to complete (never "Define..." or "Explain..."). Options are short and plausible; wrong options come from typical mistakes. "answer" = A, B, C or D.' : 'The question must be complete (never a section title). Give 2-5 short "keyPoints".'}
+Marks: ${q.marks || 1}.
+Return ONLY JSON: {"question":"","options":${isMcq ? '["","","",""]' : '[]'},"answer":"","keyPoints":[]}`;
+        try {
+          const j = await callGeminiJson(prompt, { maxTokens: 1500, temperature: 0.3 });
+          const fixed = { ...q, question: String(j.question || '').trim(), answer: String(j.answer || '').trim(), keyPoints: Array.isArray(j.keyPoints) && j.keyPoints.length ? j.keyPoints.map(String) : q.keyPoints };
+          if (isMcq) {
+            fixed.options = (Array.isArray(j.options) ? j.options : []).map((o) => optionText(String(o)));
+            const chk = checkAndRepairMcq(fixed, {});
+            if (!chk.ok) throw new Error(chk.issues.join('; '));
+            Object.assign(fixed, chk.q);
+          } else { fixed.options = []; if (fixed.question.length < 12 || !fixed.answer) throw new Error('structured repair incomplete'); }
+          if (findBrokenQuestions([fixed]).length) throw new Error('still broken');
+          questions[index] = fixed; report.repaired++;
+        } catch (e) { report.failed++; log.warn?.(`Repair of question ${index + 1} (${why}) failed: ${e.message}`); }
+      }
+    };
+    await Promise.all(Array.from({ length: Math.min(5, bad.length) }, worker));
+    return report;
+  }
+
+  return { smartFigureStage, visionVerify, repairBroken };
 }
 
 function slimFacts(f) {

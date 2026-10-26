@@ -264,6 +264,22 @@ RENDERERS.resistor_circuit = (spec) => {
   return { svg: svgWrap(s), facts: { mode, equivalent_resistance: r2(req), total_current: r2(V / req), voltage: V } };
 };
 
+
+RENDERERS.network_topology = (spec) => {
+  const type = String(spec.type || '').toLowerCase(), n = Math.max(3, Math.min(6, Math.round(num(spec.nodes, 5))));
+  if (!['star', 'ring', 'bus', 'mesh', 'tree'].includes(type)) throw new Error('network_topology: type = star|ring|bus|mesh|tree');
+  const node = (x, y) => R(x - 22, y - 15, 44, 30, { fill: '#e8eef7', sw: 1.6 });
+  let s = '';
+  const cx = 320, cy = 185, rad = 120;
+  const ring = Array.from({ length: n }, (_, i) => [cx + rad * Math.cos((2 * Math.PI * i) / n - Math.PI / 2), cy + rad * Math.sin((2 * Math.PI * i) / n - Math.PI / 2)]);
+  if (type === 'star') { ring.forEach((p) => { s += L(cx, cy, p[0], p[1]); }); s += R(cx - 28, cy - 18, 56, 36, { fill: '#fde9c8' }); ring.forEach((p) => { s += node(p[0], p[1]); }); }
+  else if (type === 'ring') { ring.forEach((p, i) => { const q = ring[(i + 1) % n]; s += L(p[0], p[1], q[0], q[1]); }); ring.forEach((p) => { s += node(p[0], p[1]); }); }
+  else if (type === 'mesh') { ring.forEach((p, i) => ring.forEach((q, j) => { if (j > i) s += L(p[0], p[1], q[0], q[1], { w: 1.2 }); })); ring.forEach((p) => { s += node(p[0], p[1]); }); }
+  else if (type === 'bus') { s += L(70, 185, 570, 185, { w: 2.6 }); for (let i = 0; i < n; i++) { const x = 100 + i * (440 / (n - 1)), up = i % 2 === 0, y = up ? 105 : 265; s += L(x, 185, x, up ? y + 15 : y - 15) + node(x, y); } }
+  else { s += R(cx - 28, 60, 56, 32, { fill: '#fde9c8' }); const kids = Math.min(n, 4); for (let i = 0; i < kids; i++) { const x = 130 + i * (380 / Math.max(1, kids - 1)); s += L(cx, 92, x, 190) + R(x - 26, 190, 52, 30, { fill: '#e8eef7' }); if (i < 2) { s += L(x, 220, x - 30, 290) + L(x, 220, x + 30, 290) + node(x - 30, 305) + node(x + 30, 305); } } }
+  return { svg: svgWrap(s), facts: { topology_name: type } };
+};
+
 RENDERERS.coord_line = (spec) => {
   const m = num(spec.m), c = num(spec.c), lo = num(spec.xMin, -5), hi = num(spec.xMax, 5);
   const ys = [m * lo + c, m * hi + c], yMin = Math.min(-1, ...ys, c), yMax = Math.max(1, ...ys, c), pad = 1;
@@ -292,6 +308,7 @@ export const FIGURE_SCHEMAS = {
   logic_gate: '{"gate":"AND"}  (AND|OR|NOT|NAND|NOR|XOR)',
   flowchart: '{"nodes":[{"type":"start","label":"Start"},{"type":"process","label":"Input"},{"type":"decision","label":"?"}]}  (types: start,end,process,decision,io; one node with label "?" = identify the symbol)',
   resistor_circuit: '{"mode":"series","values":[4,6],"voltage":12}  (mode series|parallel; 2-3 resistors in ohms)',
+  network_topology: '{"type":"star","nodes":5}  (type star|ring|bus|mesh|tree; nodes 3-6; the figure never carries the topology name)',
   coord_line: '{"m":2,"c":1,"xMin":-4,"xMax":4,"points":[1,3]}'
 };
 
@@ -392,6 +409,7 @@ export function expectedFor(askFact, facts, spec = {}) {
   if (askFact === 'constant_interval') { const c = facts.constant_intervals || []; return c.length === 1 ? { type: 'tokens', tokens: [c[0].from, c[0].to] } : null; }
   if (['max_label', 'min_label', 'largest_share', 'smallest_share'].includes(askFact)) return facts[askFact] ? { type: 'tokens', tokens: [String(facts[askFact])] } : null;
   if (askFact === 'gate_name') return { type: 'tokens', tokens: [facts.gate_name] };
+  if (askFact === 'topology_name') return { type: 'tokens', tokens: [facts.topology_name] };
   if (askFact === 'column_total') { const h = spec.ask && spec.ask.col; return h && facts.column_total && h in facts.column_total ? { type: 'number', value: facts.column_total[h] } : null; }
   if (askFact === 'cell_lookup') return facts.cell_lookup != null ? (Number.isFinite(Number(String(facts.cell_lookup).replace(/,/g, ''))) ? { type: 'number', value: Number(String(facts.cell_lookup).replace(/,/g, '')) } : { type: 'tokens', tokens: [String(facts.cell_lookup)] }) : null;
   return null; // symbol_type, part_identification: lama hubin karo si toos ah

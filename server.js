@@ -8,7 +8,7 @@ import path from 'path';
 import fs from 'fs';
 import { fileURLToPath } from 'url';
 import { getProfile, NATIONAL_PROFILES } from './exam-profiles.js';
-import { createSmartFigures, buildExamPlan, slotHint } from './smart-figures.js';
+import { createSmartFigures, buildExamPlan, slotHint, plannedObjectives } from './smart-figures.js';
 import { renderFigure, verifySvg } from './figure-engine.js';
 
 const { Pool } = pg;
@@ -1963,6 +1963,9 @@ ${String(p.sourceText || p.text || '')}
   }
   const languageReport = await enforceQuestionLanguage(questions, p.examLanguage);
   // Sawirrada iyo stem-variety waa is-barbar (waxay taabanayaan su'aalo kala duwan)
+  // Su'aalaha jajaban (qoraal la'aan / cinwaan qayb / MCQ doorasho la'aan ama qeexid) waa la hagaajiyaa ka hor sawirrada
+  let repairReport = null;
+  try { repairReport = await smartFigures.repairBroken(p, questions, plannedObjectives(p, questions.length)); } catch (e) { console.warn('Repair skipped:', e.message); }
   const figPromise = (p.figureMode === 'smart' && examPlan) ? smartFigures.smartFigureStage(p, questions, examPlan) : null;
   try { await diversifyStems(questions, p.examLanguage); } catch (e) { console.warn('Stem variety skipped:', e.message); }
   const passageCheck = await enforcePassageGrounding(questions, passage, p, targetLanguage);
@@ -2024,7 +2027,8 @@ ${String(p.sourceText || p.text || '')}
   });
   if (p.passage && passage) passage.text = stripSourceCitations(passage.text);
   questions.figureReport = figureReport;
-  if (examPlan) questions.examProfile = { key: examPlan.profile.key, label: examPlan.profile.label, basis: examPlan.profile.basis, notes: examPlan.profile.notes };
+  questions.repairReport = repairReport;
+  if (examPlan) questions.examProfile = { key: examPlan.profile.key, label: examPlan.profile.label, basis: examPlan.profile.basis, notes: examPlan.profile.notes, style: examPlan.profile.style };
   questions.languageReport = languageReport;
   questions.passageCheck = passageCheck;
   questions.passage = p.passage ? passage : null;
@@ -2333,11 +2337,11 @@ app.post('/api/generate', async (req, res) => {
     let questions = [];
     let languageReport = null;
     let passage = null;
-    let figureReport = null, examProfile = null;
+    let figureReport = null, examProfile = null, repairReport = null;
 
     try {
       const generated = await aiGenerate({ ...p, count, levels, partPlan: Array.isArray(p.partPlan) ? p.partPlan : [] });
-      if (Array.isArray(generated)) { languageReport = generated.languageReport || null; passage = generated.passage || null; figureReport = generated.figureReport || null; examProfile = generated.examProfile || null; questions = generated.slice(0, count); }
+      if (Array.isArray(generated)) { languageReport = generated.languageReport || null; passage = generated.passage || null; figureReport = generated.figureReport || null; repairReport = generated.repairReport || null; examProfile = generated.examProfile || null; questions = generated.slice(0, count); }
     } catch (e) {
       console.error('AI generation failed:', e.message);
       return res.status(502).json({
@@ -2424,6 +2428,7 @@ app.post('/api/generate', async (req, res) => {
       validation:{ok:true,pageRange:sourcePageCheck,pageIssues:[],englishIssues:[],objectiveIssues:[],objectivePageIssues:[],objectiveCount:p.blueprint?.objectiveInventory?.objectives?.length||0,allSelectedQuestionObjectivesLinked:true},
       passage,
       figureReport,
+      repairReport,
       examProfile,
       languageCheck: languageReport || { fixed: 0, remaining: 0 },
       aiUsed: true
