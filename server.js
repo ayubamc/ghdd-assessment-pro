@@ -1835,6 +1835,15 @@ function qualityCheck(q) {
   };
 }
 
+function slicePlan(plan, from, n) {
+  const out = []; let pos = 0, left = n;
+  for (const part of Array.isArray(plan) ? plan : []) {
+    const c = Number(part.count) || 0, start = Math.max(from, pos), end = Math.min(from + n, pos + c);
+    if (end > start && left > 0) { out.push({ ...part, count: end - start }); left -= end - start; }
+    pos += c;
+  }
+  return out;
+}
 async function aiGenerate(p) {
   const key = process.env.GEMINI_API_KEY;
   if (!key) return null;
@@ -1845,7 +1854,7 @@ async function aiGenerate(p) {
   const chemMode = !mathMode && (isChemSubject(p.subject) || isChemSubject(p.className) || isChemSubject(p.sourceTitle));
   // Mabda'a 1-3: maadada + sample-ka qaranka + nooca su'aasha ee casharka ku habboon (kaliya marka figureMode='smart')
   const examPlan = p.figureMode === 'smart' ? buildExamPlan(p, Math.max(1, Number(p.count) || 10)) : null;
-  const buildPrompt = (count, partPlan, avoid = [], passageObj = null) => `
+  const buildPrompt = (count, partPlan, avoid = [], passageObj = null, range = null) => `
 You are an expert secondary-school assessment designer and professional translator.
 ${normalizeLang(p.examLanguage) === 'so' ? SOMALI_STYLE : ''}
 ${STEM_VARIETY}
@@ -1860,7 +1869,7 @@ Create exactly ${count} questions using ONLY facts and concepts supported by the
 ${passageInstructions(p, passageObj, targetLanguage)}
 OBJECTIVE-FIRST DESIGN (MOST IMPORTANT RULE): the learning objectives (learningOutcomes) in the blueprint below are exactly what this exam must measure. Before writing each question, choose ONE objective from the blueprint topic it belongs to, then write a question that directly measures that objective. The action verb of the objective decides what the student must do (define/state → recall; identify/classify → recognise; explain/describe → explanation; calculate/solve → computation; compare/analyse → comparison or analysis; justify/evaluate → reasoned judgement). Copy the chosen objective text, in ${targetLanguage}, into the question's \"objective\" field. Rules: (1) every question has one primary objective in "objective" and lists exact objective IDs in "objectiveIds"; a question may list multiple IDs only when it genuinely assesses each closely related objective; (2) spread questions across different SELECTED Blueprint objectives where appropriate; do not force a unique objective for every question if the approved Blueprint has fewer selected objectives than questions. Reuse an objective only for a genuinely different question/skill when its planned questionCount permits; never invent an objective ID or use an unselected inventory objective; (3) do not write questions on trivia, side facts, dates or examples unless an objective requires them; (4) the question must be answerable from the source text and must not test anything outside its objective; (5) if the blueprint has no objectives, first derive measurable objectives from the source text and use them the same way.
 Use Bloom levels: ${JSON.stringify(p.levels || blooms)}. Choose each question's \"bloom\" value so it matches the objective's action verb; keep it ONLY in the JSON \"bloom\" field. BLOOM CONFIDENTIALITY: never write the word Bloom or any cognitive-level label or tag (Remember, Understand, Apply, Analyze, Evaluate, Create, or their translations) in question text, options, matching items, topics, section titles, instructions, answers or marking guides. The student must never be able to see the cognitive level.
-${avoid.length ? '' : slotHint(examPlan)}
+${(avoid.length && !range) ? '' : slotHint(examPlan, range)}
 Required ordered section plan: ${JSON.stringify(partPlan || [])}. Follow the exact section order and counts; translate every displayed section title into ${targetLanguage}.
 AI-GENERATED TOPIC BLUEPRINT (use for coverage only; translate all displayed topics/outcomes into ${targetLanguage}): ${JSON.stringify(p.blueprint || {})}. Distribute questions across blueprint topics and source pages. Every question must include exactly ONE primary objective ID from blueprint.objectiveInventory. The full inventory is the curriculum reference and may contain more objectives than the exam has questions; do NOT try to assess every inventory objective and do NOT apply any percentage threshold to the full inventory. Select no more than ${count} distinct assessment objectives for ${count} questions. Prefer one different, suitable objective per question and do not repeat an objective ID while other suitable, assessable objectives remain. Only use a second objective when the question genuinely assesses both; by default use exactly one ID. Do not invent objective IDs. use the matching objective IDs for its subject section (Reading Q1–10 from passage-related reading objectives, Grammar Q11–20, Literature Q21–30, Vocabulary Q31–40, and Section Two Q41–49 from the Blueprint/TOS). Keep Composition Q50 tied to writing objectives. Preserve marks and section counts. Assessment-objective count must not exceed the question count; the selected objectives are the objectives this exam is designed to measure, while all remaining inventory objectives stay in the curriculum inventory for future exams.${avoid.length ? `\nALREADY WRITTEN (continue the exam from the next question; do NOT repeat or paraphrase these, and prefer learning objectives not used yet): ${JSON.stringify(avoid)}` : ''}
 SOURCE DISTRIBUTION RULE: ${p.sourceSelectionRule || 'Spread questions across different headings/topics; do not take consecutive questions from the same paragraph or heading. Prefer passages separated by at least two headings or at least one full page.'}
@@ -1887,8 +1896,30 @@ ${String(p.sourceText || p.text || '')}
     await enforcePassageLanguage(passage, p.examLanguage);
     passage.anchors = validAnchors(passage.anchors, passage.text);
   }
-  const firstBatch = await requestQuestionBatch(buildPrompt(p.count, p.partPlan || [], [], passage));
-  let questions = firstBatch.questions;
+  // XAWAARAHA: su'aalaha waxaa lagu sameeyaa baaqyo yaryar oo is-barbar socda (halkii hal baaq weyn). Passage/English Form 4 waa hal baaq (kala-dambeyn ayay leeyihiin).
+  const CHUNK = 12;
+  const canChunk = p.count > CHUNK + 2 && !p.passage && !isEnglishForm4(p);
+  let questions;
+  if (canChunk) {
+    const nChunks = Math.ceil(p.count / CHUNK), size = Math.ceil(p.count / nChunks);
+    const jobs = Array.from({ length: nChunks }, (_, k) => {
+      const from = k * size, n = Math.min(size, p.count - from);
+      const plan = slicePlan(p.partPlan, from, n);
+      const promptText = buildPrompt(n, plan, [], null, { from, to: from + n }) + `\nPARALLEL BATCH: you are writing exam questions ${from + 1} to ${from + n} of ${p.count}. Use the blueprint objectives assigned to these positions and do not repeat a question another batch would obviously write.`;
+      return requestQuestionBatch(promptText).then((r) => r.questions.slice(0, n)).catch((e) => { console.warn(`Batch ${k + 1} failed:`, e.message); return []; });
+    });
+    const parts = await Promise.all(jobs);
+    questions = [];
+    const seen = [];
+    for (const part of parts) for (const q of part) {
+      const t = tokenSet(String(q.question || '')); const dup = seen.some((o) => { let c = 0; for (const w of t) if (o.has(w)) c++; return t.size > 4 && c / Math.max(t.size, o.size) > 0.8; });
+      if (!dup) { questions.push(q); seen.push(t); }
+    }
+    // Haddii baaq gaar ah fashilmay/yaraaday, kala-dhimista hoose (top-up) ayaa buuxinaysa
+  } else {
+    const firstBatch = await requestQuestionBatch(buildPrompt(p.count, p.partPlan || [], [], passage));
+    questions = firstBatch.questions;
+  }
   // If the answer was cut short (long Somali/Arabic exams), ask for ONLY the missing questions and continue.
   for (let round = 0; questions.length < p.count && round < 3; round++) {
     const missing = p.count - questions.length;
@@ -1907,6 +1938,8 @@ ${String(p.sourceText || p.text || '')}
     await enforcePassageLanguage(passage, p.examLanguage);
   }
   const languageReport = await enforceQuestionLanguage(questions, p.examLanguage);
+  // Sawirrada iyo stem-variety waa is-barbar (waxay taabanayaan su'aalo kala duwan)
+  const figPromise = (p.figureMode === 'smart' && examPlan) ? smartFigures.smartFigureStage(p, questions, examPlan) : null;
   try { await diversifyStems(questions, p.examLanguage); } catch (e) { console.warn('Stem variety skipped:', e.message); }
   const passageCheck = await enforcePassageGrounding(questions, passage, p, targetLanguage);
   const requestedDiagrams = Math.max(0, Math.min(30, Number(p.diagramCount || 0)));
@@ -1917,7 +1950,7 @@ ${String(p.sourceText || p.text || '')}
   }
   let figureReport = null;
   if (p.figureMode === 'smart' && examPlan) {
-    figureReport = await smartFigures.smartFigureStage(p, questions, examPlan);
+    figureReport = await figPromise;
   } else if (requestedDiagrams > 0) {
     const candidates = questions.filter(q => /structured|direct/i.test(String(q.type || '')) || /STRUCTURED|DIRECT/i.test(String(q.section || '')));
     if (candidates.length < requestedDiagrams) {

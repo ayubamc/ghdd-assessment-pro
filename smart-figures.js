@@ -43,9 +43,9 @@ export function buildExamPlan(p, count) {
 }
 
 // Qoraal u gudba prompt-ka guud ee su'aalaha (boqolka su'aalood)
-export function slotHint(plan) {
+export function slotHint(plan, range = null) {
   if (!plan) return '';
-  const lines = plan.slots.map((s) => `${s.index + 1}: ${describeSlot(s)}`).join('; ');
+  const lines = plan.slots.filter((s) => !range || (s.index >= range.from && s.index < range.to)).map((s) => `${s.index + 1}: ${describeSlot(s)}`).join('; ');
   return `NATIONAL-EXAM QUESTION-KIND PLAN for ${plan.profile.label} (follows the national sample paper: ${plan.profile.notes}). Position → kind: ${lines}.
 For a "figure" position write an ordinary stand-alone question on its objective (the system will replace it by a figure-based version, so do not describe or draw any figure yourself). For "calc" positions give a computation with ONE correct numeric result and four numeric options with units. For "code" positions test a concrete symbol, step, command, flowchart element or error type, never a vague definition.`;
 }
@@ -80,7 +80,7 @@ Return ONLY JSON: {"spec":{},"askFact":"","unit":"","question":"","options":["",
   async function buildDeterministic({ p, slot, base, obj }) {
     const isMcq = slot.kind === KINDS.MCQ_FIGURE;
     let feedback = '', lastIssues = [];
-    for (let attempt = 0; attempt < 3; attempt++) {
+    for (let attempt = 0; attempt < 2; attempt++) {
       let j;
       try { j = await callGeminiJson(figurePrompt({ p, slot, obj, base, feedback, isMcq }), { maxTokens: 4000, temperature: attempt ? 0.45 : 0.2 }); }
       catch (e) { lastIssues = [`AI: ${e.message}`]; continue; }
@@ -186,7 +186,7 @@ Return ONLY JSON: {"question":"","options":["","","",""],"answer":"","keyPoints"
         report.items.push(item);
       }
     };
-    await Promise.all(Array.from({ length: Math.min(3, figSlots.length) }, worker));
+    await Promise.all(Array.from({ length: Math.min(5, figSlots.length) }, worker));
     report.items.sort((a, b) => a.index - b.index);
     return report;
   }
