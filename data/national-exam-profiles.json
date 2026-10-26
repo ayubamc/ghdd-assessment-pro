@@ -1,1 +1,369 @@
-
+{
+  "source": "User-provided Somalia Form 4 national examination samples 2024-2025",
+  "profiles": [
+    {
+      "subject": "Arabic",
+      "class": "Form 4",
+      "sourceFile": "Arabic_F4_National_Exam_2024-2025.pdf",
+      "pageCount": 8,
+      "sectionAndMarkingCues": [
+        "Opening Arabic reading passage",
+        "Multiple-choice comprehension/language items",
+        "Structured written-response items visible near the final pages"
+      ],
+      "questionStemExamples": [
+        "Passage-linked comprehension and vocabulary questions (OCR is weak; verify wording visually)",
+        "Arabic language-use questions",
+        "Structured response prompts on final pages"
+      ],
+      "figureOrDiagramCuePages": [],
+      "observedQuestionSignals": {
+        "multipleChoice": true,
+        "structuredOrShortAnswer": true,
+        "figureOrDiagramQuestions": false
+      },
+      "sampleStyleSummary": "The 8-page Arabic paper begins with a substantial Arabic reading passage and uses Arabic multiple-choice comprehension/vocabulary/language items, followed by structured written-response prompts. Preserve right-to-left Arabic layout and Arabic command wording. OCR is weak, so do not infer exact text from OCR; use the visible sample for style and the selected textbook for examinable facts."
+    },
+    {
+      "subject": "Biology",
+      "class": "Form 4",
+      "sourceFile": "Biology_F4_National_Exam_2024-2025.pdf",
+      "pageCount": 11,
+      "sectionAndMarkingCues": [
+        "Section A: Multiple choice questions [40 Marks]",
+        "Section B: Structured Questions"
+      ],
+      "questionStemExamples": [
+        "A. Bmin and spinal B. Crani.al and spinal C. Spinai cord and D. Cranial nerves and",
+        "A. Synaptic knob B. Synaptic vesicles C. Synaptic cXeft D. Synaptie terminal",
+        "A. Parasympathetic B. Synpathetic C. Somatic D. Autonomic",
+        "4. Suppose a persoil holding a very hot ob,ject and <loes not feel a burrrrng pain in his hand. Slhich of the",
+        "A. Connectors B. Sensory C. Motor D. Neuron",
+        "5 Ali has eaten bread as breakfas! His blood glucose lev*l wiii decrease atier t*'o hr:urs. r,vhich honnone",
+        "6. The giancl i.vhich enlarges into a goiter as a result of iociine deficiency is:",
+        "A. Adrenal B. Parathyroid C. Pineal D. Thyrcid"
+      ],
+      "figureOrDiagramCuePages": [
+        2,
+        3,
+        4,
+        6,
+        8,
+        9,
+        10
+      ],
+      "observedQuestionSignals": {
+        "multipleChoice": true,
+        "structuredOrShortAnswer": true,
+        "figureOrDiagramQuestions": true
+      },
+      "sampleStyleSummary": "Section A is multiple choice worth 40 marks; Section B is structured questions. Use concise science stems, plausible options, diagrams only for biological structures/processes supported by the textbook, and label parts neutrally when identification is assessed."
+    },
+    {
+      "subject": "Business",
+      "class": "Form 4",
+      "sourceFile": "Business_F4_National_Exam_2024-2025.pdf",
+      "pageCount": 9,
+      "sectionAndMarkingCues": [
+        "Multiple-choice questions include picture-based business activity identification",
+        "Structured questions include applied business scenarios and short explanations"
+      ],
+      "questionStemExamples": [
+        "1 The kind of btxiness activit,v lab.;Ied in the given pictu.i'e is?",
+        "A. Exffactioil E. Pr**essi.*.g ij l\\,{arufacluring D. C+nstruction",
+        "2. \"fhc f'utdameli-tal econ*riii,; prirhi*nt i* tll;x le:!iiult,*r$ -bsl",
+        "A. Tradc: *off. i*. F;:q:dr:rtivit','. C\" t!*i:aanqi. L). Sceroity.",
+        "A. Optiniisti* '8, ft*s*ur'*,:tl-i} {-:. Adv**a*y I-.). h'{otivated",
+        "7 I{ow di:es n tear* mak* sJ*cision ir b,usir *ss prrrj;:e:1.'",
+        "8. The graph beior,r, show's the supply cuft'e frrr {,off,*e.",
+        "A. {lorii,enient. 1,*. ih*'ahte. C\" Sssr*e. L,1\" Aecrpteel."
+      ],
+      "figureOrDiagramCuePages": [
+        2,
+        3,
+        4,
+        5,
+        6,
+        7
+      ],
+      "observedQuestionSignals": {
+        "multipleChoice": true,
+        "structuredOrShortAnswer": true,
+        "figureOrDiagramQuestions": true
+      },
+      "sampleStyleSummary": "The sample includes picture-based identification and business-context questions. Use short applied scenarios, visual interpretation when a relevant business activity/image is genuinely examinable, and structured responses for explanation/application."
+    },
+    {
+      "subject": "Chemistry",
+      "class": "Form 4",
+      "sourceFile": "Chemistry_F4_National_Exam_2024-2025.pdf",
+      "pageCount": 12,
+      "sectionAndMarkingCues": [
+        "Section A: Circle the Correct Answer [approximately 40 marks]",
+        "Section B: Structured Questions [approximately 60 marks]"
+      ],
+      "questionStemExamples": [
+        "4 The rnolar mass of CaCOI given atornic mass of { Ca:40 C:12 O : 16) ,,",
+        "5 The figure below states a change of state of matter .What process occurs the part labeled at X",
+        "6. Which of the following does NOT belong to eoaditions for a reaction to occur?",
+        "7 The IUPAC name for product fonned when cHs-cHz-cHz-o-k+cHs-cHz-Br is",
+        "8. The PH of a solution was determined to be 3.5 , The [HtO*i ion of that solution is:",
+        "9 The horizontali'orvs of the periodic table",
+        "10 The figure below represent the structural formula of glucose , it has molecular formula CeHrzOe",
+        "11 The figure beiorv show that the penetrating abilify rlf raclioaetive emissions by using the detector"
+      ],
+      "figureOrDiagramCuePages": [
+        2,
+        3,
+        4,
+        5,
+        7,
+        9,
+        11
+      ],
+      "observedQuestionSignals": {
+        "multipleChoice": true,
+        "structuredOrShortAnswer": true,
+        "figureOrDiagramQuestions": true
+      },
+      "sampleStyleSummary": "Section A: circle the correct answer, approximately 40 marks; Section B: structured questions, approximately 60 marks. The sample uses diagrams for changes of state and periodic-table information. Match chemistry symbols/formulas and only create diagrams relevant to the source topic."
+    },
+    {
+      "subject": "English",
+      "class": "Form 4",
+      "sourceFile": "English_F4_National_Exam_2024-2025.pdf",
+      "pageCount": 9,
+      "sectionAndMarkingCues": [
+        "Section One: reading passage and passage-based MCQs",
+        "Multiple choice questions [40 marks]",
+        "Grammar, literature and vocabulary sections",
+        "Structured short-answer questions and composition"
+      ],
+      "questionStemExamples": [
+        "1 Fartl : Reaeling compreheilsion",
+        "A) advertr B) pronoun C ) rurun D) adjective",
+        "A) collective Blproper il; Ahstraci. D) common",
+        "A) Conuete. B) It4aterial. C) Abstract D) proper",
+        "A) demorrstrativ* B;. possessinlr C; quantity D) qualrty",
+        "5 \"fhe worrJ'osasi*r\" is used in the pa$sage. ro,.hich degr*e d*es it belr:ng to?",
+        "A) positive B) comparative C) superlative D) Gerund",
+        "6. What does respectfirlly mean in ac*ording to the passag$:"
+      ],
+      "figureOrDiagramCuePages": [],
+      "observedQuestionSignals": {
+        "multipleChoice": true,
+        "structuredOrShortAnswer": true,
+        "figureOrDiagramQuestions": false
+      },
+      "sampleStyleSummary": "The sample begins with a reading passage and passage-based multiple-choice comprehension. Preserve a coherent passage, concise language questions, vocabulary/grammar, and written-response items as supported by the selected curriculum and approved blueprint."
+    },
+    {
+      "subject": "Geography",
+      "class": "Form 4",
+      "sourceFile": "Geography_F4_National_Exam_2024-2025.pdf",
+      "pageCount": 8,
+      "sectionAndMarkingCues": [
+        "Section A: select/circle the correct answer [approximately 40 marks]",
+        "Section B: structured questions including map-based tasks"
+      ],
+      "questionStemExamples": [
+        "1 Noocyada carada ee dhulka Soomaaliya waa kala jaa{, gaxaana keenaayo kala duwanaanta:",
+        "2. Qayta ugu lveyn ugrlna muhiimsan qaybaha dhirtawaxarl lagu magacaabaa:",
+        "4. Adigoo adeegsanaya jaantuska hoose, tiknaan lambarka muujinaya gobolka Jubbada ho*se:",
+        "5. Marka aynu jocgoo magaaloo;vinka xeebaha, sida la dareemi karo huurku wuxutl nodqaa mid:",
+        "6. Jiidaha dulaha dhulka Soomaaliy* waxaa loo qeybiyaa ilaa iyo:",
+        "7 Maxaa dhacaya haddii tirada dadka ay ka sara martc, ilaha dhaqaale ee dabiiciga ah?",
+        "B. Xaalad ka dhalatay hcos u dhac ku yimid roobka rnuddc dheer waxaa loa yaqaan:",
+        "9 Waxyaabaha dabiiciga ah ee saarneeya l:aahsanaanta tirada darika waxaa kamid ah:"
+      ],
+      "figureOrDiagramCuePages": [
+        4,
+        5,
+        6,
+        7
+      ],
+      "observedQuestionSignals": {
+        "multipleChoice": true,
+        "structuredOrShortAnswer": true,
+        "figureOrDiagramQuestions": true
+      },
+      "sampleStyleSummary": "The sample presents a 40-mark multiple-choice section and a 60-mark structured-response section in Somali. Use local/national geography wording, maps or graphs only when supported by the textbook, and structured command verbs such as describe, distinguish and analyse."
+    },
+    {
+      "subject": "History",
+      "class": "Form 4",
+      "sourceFile": "History_F4_National_Exam_2024-2025.pdf",
+      "pageCount": 7,
+      "sectionAndMarkingCues": [
+        "Section A: select the correct answer [40 marks]",
+        "Structured written-response questions with item-specific marks"
+      ],
+      "questionStemExamples": [
+        "B. GCIoho geEi jawaabta saxda sk*: ( 40 Dhibcood )",
+        "B) Cabdulxamiid 2 T) Muxammad 1 J) Saliim X) hduraad",
+        "2 Dov,,,ladrJii Cabbaasii,iintu rvaxay tr<u clhala.tay qaab :",
+        "B) Shuuro ah T) Doorasht,al J) K.acdr:on ah X) Tanaasul ah",
+        "B) taas Qoray T) Burco .I) Boorama X) Laas Caanood",
+        "5 ilhaqdhaqaaqii h{ahdiga Suudaan waxsa sasbe.ha-v sori ifbixiisii:",
+        "6 Shirkii Baariiin *e qa3'binta Afrika waxaa la q*hta;r sanadkii:",
+        "B) islaamka T) Masiix.iyadckr J} I{imfuauga X) h{ajuusirr\"aikJa"
+      ],
+      "figureOrDiagramCuePages": [],
+      "observedQuestionSignals": {
+        "multipleChoice": true,
+        "structuredOrShortAnswer": true,
+        "figureOrDiagramQuestions": false
+      },
+      "sampleStyleSummary": "The sample has a 40-mark multiple-choice section and structured written questions with item-specific marks. Keep chronology and historical claims grounded in the selected textbook; use concise prompts asking students to explain, compare or analyse when appropriate."
+    },
+    {
+      "subject": "Physics",
+      "class": "Form 4",
+      "sourceFile": "Physics_F4_National_Exam_2024-2025.pdf",
+      "pageCount": 12,
+      "sectionAndMarkingCues": [
+        "Section A: choose the best answer [40 marks]",
+        "Structured numerical and explanation questions with item-specific marks"
+      ],
+      "questionStemExamples": [
+        "4. lfhe period of SI{Iv{ depends on:",
+        "6. rli hi ch quantitv mea:rures'rhe fi gr:r',: b;:lct'",
+        "7 The device used fbr rneas*ring potential dil'f\"erene,: (Yoltage) is knor.vn as :",
+        "9 Tllo tearns from Sornaii putrlic sctrrools ar* piarving a tug war. Filid their resultant f'orce b-v using in the",
+        "17 In t'i:e figur:e shorvs penduhmls *,ith ciiffui:eut strirLg..;, eacli pell,Juiun is pr-riled to the sicles and are",
+        "13. The third larn,of Njer,,,'ton is alsc k;:own as:",
+        "14. The figure below the following rnotion",
+        "17. \\\\rhich of'the foilo*'ing materials aiicws iigix to pass through it ?"
+      ],
+      "figureOrDiagramCuePages": [
+        2,
+        3,
+        4,
+        5,
+        7,
+        10,
+        11
+      ],
+      "observedQuestionSignals": {
+        "multipleChoice": true,
+        "structuredOrShortAnswer": true,
+        "figureOrDiagramQuestions": true
+      },
+      "sampleStyleSummary": "The sample begins with a 40-mark multiple-choice section followed by structured questions. Use calculations with units, interpretation of graphs/circuits/diagrams where relevant, and check numerical answers independently."
+    },
+    {
+      "subject": "Soomaali",
+      "class": "Form 4",
+      "sourceFile": "Soomaali_F4_National_Exam_2024-2025.pdf",
+      "pageCount": 8,
+      "sectionAndMarkingCues": [
+        "Reading passage and language/literature multiple-choice items",
+        "Section 2: Composition [20 marks] with topic choices and writing criteria"
+      ],
+      "questionStemExamples": [
+        "2. Erayga oornagoof' macnihiisu waa:",
+        "5 Geedka \"waarrrbaha\" waxaa la cunaa:",
+        "6. Rooi:ka da'a dabayaaqada xitliga gt\"lga lva.xaa loc, yaqeanaa:",
+        "14 Eray v,,eyriii meedyacia magac- u-yaalladu. dheCdig waxii& ka mid atrr:",
+        "15. Magac lab ee kelida ah haddii uu ku dhamrnaado shaqalka \"e\" waxa uu wadar ku noqdaa:",
+        "16 Xiriiriyeyaasha af-soornaaliga waxa aan ka mid ahayn:-",
+        "17 Magacyada qarsoon waxaa ka mid ah:",
+        "27 Hasha ilmaheedu dhintay ee ilmaha kale lagu maalo w&xaa 1oo yaqaan."
+      ],
+      "figureOrDiagramCuePages": [],
+      "observedQuestionSignals": {
+        "multipleChoice": true,
+        "structuredOrShortAnswer": true,
+        "figureOrDiagramQuestions": false
+      },
+      "sampleStyleSummary": "The sample uses Somali-language multiple-choice questions and passage/poetry-linked items. Use natural classroom Somali, clear command words, correct spelling and punctuation, and keep passage-based questions grounded in the actual passage."
+    },
+    {
+      "subject": "Tarbiya",
+      "class": "Form 4",
+      "sourceFile": "Tarbiya_F4_National_Exam_2024-2025.pdf",
+      "pageCount": 9,
+      "sectionAndMarkingCues": [
+        "Section One: multiple-choice questions [40 marks, scan/OCR weak]",
+        "Later written-response items and mark allocations visible in scan"
+      ],
+      "questionStemExamples": [
+        "1 i,uL[ a.:r;(d.i\\ tlryJ r*lr4lD 11"
+      ],
+      "figureOrDiagramCuePages": [],
+      "observedQuestionSignals": {
+        "multipleChoice": true,
+        "structuredOrShortAnswer": true,
+        "figureOrDiagramQuestions": false
+      },
+      "sampleStyleSummary": "The scanned sample shows Section One multiple-choice worth 40 marks, with four-option rows; the OCR is poor. Keep Islamic studies content tied to the supplied textbook, use precise Arabic/Somali terms, and inspect the scanned sample visually for layout rather than relying on OCR text."
+    },
+    {
+      "subject": "Technology",
+      "class": "Form 4",
+      "sourceFile": "Technology_F4_National_Exam_2024-2025.pdf",
+      "pageCount": 9,
+      "sectionAndMarkingCues": [
+        "Choose the correct answer [40 marks]",
+        "Structured questions include code/output analysis and definitions"
+      ],
+      "questionStemExamples": [
+        "1 Is a netr,vork thal corrnects con:puters ivir.irin a- :,nrall geographical a.rea?",
+        "2 Which one is the Advantage of Ring'I',:polug)\"i'",
+        "A) Expansion of the }.ilrdes B) iias1.'to install an*i C ) Simple instaiiation D) Fauit detection is",
+        "3 Is used to send and receive liies fror:: a refii{li.e iror;t?",
+        "A) TCP B,i NFS c) t},x ni FTP",
+        "4 L he top part of the Pcu,er Foint rvirirlow as in the figu.re helrri is called?",
+        "A) T'itle bar B i St:xus br,r C) 1[iinri,+rv bar DlTooibar",
+        "5 The follorving are rrein parts etr*ments EXECP\"l'"
+      ],
+      "figureOrDiagramCuePages": [
+        3,
+        5
+      ],
+      "observedQuestionSignals": {
+        "multipleChoice": true,
+        "structuredOrShortAnswer": true,
+        "figureOrDiagramQuestions": true
+      },
+      "sampleStyleSummary": "The sample uses a 40-mark multiple-choice section and a 60-mark structured section. It includes software-interface/screen-based questions; create clean, accurate UI-style figures only when the selected textbook supports the exact interface or concept."
+    },
+    {
+      "subject": "Xisaab",
+      "class": "Form 4",
+      "sourceFile": "Xisaab_F4_National_Exam_2024-2025.pdf",
+      "pageCount": 13,
+      "sectionAndMarkingCues": [
+        "Circle the letter of the correct answer [40 marks]",
+        "Structured calculation questions with item-specific marks"
+      ],
+      "questionStemExamples": [
+        "2 The suni ruie for Cos(A+ts)::",
+        "4. If set .4 : {a, b,d, f} and sr,*t. B : tb,c, e, f)then .4 n B is",
+        "6 'I'he value of ihe iimit: lirn 5",
+        "7 The sum of the t-r.r,o cornplex irumbers of (*3 * i) anc{ (Z + 5i)rs:",
+        "9 2. The first term of arithnietic progression is denote<tr b.v",
+        "1 Quadratic equations can tre solved by:",
+        "11 The derivative of a the lunctionx v with respect to y is:",
+        "12 The lines are without:"
+      ],
+      "figureOrDiagramCuePages": [
+        4,
+        5,
+        6,
+        7,
+        8,
+        9,
+        10,
+        11,
+        12
+      ],
+      "observedQuestionSignals": {
+        "multipleChoice": true,
+        "structuredOrShortAnswer": true,
+        "figureOrDiagramQuestions": true
+      },
+      "sampleStyleSummary": "The sample uses multiple-choice questions with figure/graph/set/statistics references and structured calculation items. Use textbook notation, show required working in the marking guide, make distractors plausible, and verify each calculation and mark allocation."
+    }
+  ]
+}
