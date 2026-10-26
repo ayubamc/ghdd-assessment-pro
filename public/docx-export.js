@@ -328,7 +328,7 @@
     });
   }
   // MCQ: question row + the four options in ONE bordered table (same look as the PDF box)
-  function mcqBoxTable(row, optTable, ctx, env) {
+  function mcqBoxTable(row, optTable, ctx, env, figEl) {
     const opts = Array.from(optTable.rows[0].cells);
     if (opts.length !== 4) return null;
     const NUM = 700, MK = 1900, q = Math.floor(CONTENT_W / 4);
@@ -346,7 +346,7 @@
     const mk = (el, a, b, align, bold, topOnly) => new D.TableCell({
       width: { size: W(a, b), type: D.WidthType.DXA }, columnSpan: b - a > 1 ? b - a : undefined, verticalAlign: D.VerticalAlign.TOP,
       borders: topOnly ? { top: line(), left: line(), right: line(), bottom: none() } : bord,
-      children: [para(el ? inlineKids(el, ctx, bold ? { bold: true } : {}, env) : [], ctx, { align, after: 0 })]
+      children: [para(el ? inlineKids(el, ctx, bold ? { bold: true } : {}, env) : [], ctx, { align, after: 0, keepNext: !!figEl })]
     });
     const row1 = new D.TableRow({ cantSplit: true, children: [mk(numEl, 0, 1, undefined, true, true), mk(txtEl, 1, 5, undefined, false, true), mk(mkEl, 5, 6, 'end', true, true)] });
     const optCell = (td, a, b) => new D.TableCell({
@@ -354,8 +354,14 @@
       children: (() => { const keep = env.maxW; env.maxW = Math.max(60, Math.floor(W(a, b) / 15) - 18); try { return fixCellBlocks(blocksFromChildren(td, ctx, env, {}), ctx); } finally { env.maxW = keep; } })()
     });
     const row2 = new D.TableRow({ cantSplit: true, children: [optCell(opts[0], 0, 2), optCell(opts[1], 2, 3), optCell(opts[2], 3, 4), optCell(opts[3], 4, 6)] });
+    let figRow = null;
+    if (figEl) {
+      const keepW = env.maxW, keepH = env.figMaxH; env.maxW = Math.max(60, Math.floor(CONTENT_W / 15) - 24); env.figMaxH = 250;
+      let kids2 = []; try { kids2 = blocksFromChildren(figEl, ctx, env, {}); } finally { env.maxW = keepW; env.figMaxH = keepH; }
+      if (kids2.length) figRow = new D.TableRow({ cantSplit: true, children: [new D.TableCell({ width: { size: CONTENT_W, type: D.WidthType.DXA }, columnSpan: 6, borders: { top: none(), left: line(), right: line(), bottom: none() }, children: fixCellBlocks(kids2, ctx) })] });
+    }
     return new D.Table({
-      rows: [row1, row2], width: { size: CONTENT_W, type: D.WidthType.DXA }, columnWidths: widths,
+      rows: figRow ? [row1, figRow, row2] : [row1, row2], width: { size: CONTENT_W, type: D.WidthType.DXA }, columnWidths: widths,
       layout: D.TableLayoutType.FIXED, visuallyRightToLeft: ctx.rtl || undefined,
       margins: { top: 60, bottom: 60, left: 100, right: 100 },
       borders: { ...allBorders(line()), insideHorizontal: none(), insideVertical: none() }
@@ -454,7 +460,14 @@
       if (!im) return;
       if (im.failed) { out.push(para([textRun('[Diagram]', { italics: true })], ctx, { align: 'center' })); return; }
       const logo = cls.contains('exam-logo');
-      out.push(para([imageRun(im, el, logo ? 650 : Math.min(560, env.maxW || 560), logo ? 115 : 400)], ctx, { align: 'center', after: logo ? 60 : 120, before: logo ? 0 : 60, keepLines: true, keepNext: !logo }));
+      out.push(para([imageRun(im, el, logo ? 650 : Math.min(560, env.maxW || 560), logo ? 115 : (env.figMaxH || 400))], ctx, { align: 'center', after: logo ? 60 : 120, before: logo ? 0 : 60, keepLines: true, keepNext: !logo }));
+      return;
+    }
+    if (cls.contains('nat-banner')) {
+      const t = el.querySelector('.nb-title'), m = el.querySelector('.nb-marks');
+      const bd = allBorders(line());
+      const cellB = (node, w, align) => new D.TableCell({ width: { size: w, type: D.WidthType.DXA }, borders: bd, verticalAlign: D.VerticalAlign.CENTER, children: [para(node ? inlineKids(node, ctx, { bold: true, size: 24 }, env) : [], ctx, { align, after: 0, keepNext: true })] });
+      out.push(new D.Table({ rows: [new D.TableRow({ cantSplit: true, children: [cellB(t, CONTENT_W - 2200, undefined), cellB(m, 2200, 'end')] })], width: { size: CONTENT_W, type: D.WidthType.DXA }, columnWidths: [CONTENT_W - 2200, 2200], layout: D.TableLayoutType.FIXED, visuallyRightToLeft: ctx.rtl || undefined, margins: { top: 70, bottom: 70, left: 120, right: 120 }, borders: { ...bd, insideHorizontal: none(), insideVertical: none() } }), spacer());
       return;
     }
     if (cls.contains('paper-meta')) { out.push(metaTable(el, ctx, env), spacer()); return; }
@@ -496,10 +509,11 @@
     if (cls.contains('mcq-box')) {
       const row = Array.from(el.children).find(c => c.classList.contains('mcq-question-row'));
       const opt = Array.from(el.children).find(c => c.tagName.toLowerCase() === 'table' && c.classList.contains('mcq-options-table'));
-      const t = row && opt ? mcqBoxTable(row, opt, ctx, env) : null;
+      const figEl = Array.from(el.children).find(c => c.classList.contains('exam-diagram')) || null;
+      const t = row && opt ? mcqBoxTable(row, opt, ctx, env, figEl) : null;
       if (t) {
         out.push(t);
-        Array.from(el.children).filter(c => c !== row && c !== opt).forEach(c => block(c, ctx, env, out, st));
+        Array.from(el.children).filter(c => c !== row && c !== opt && !(figEl && c === figEl)).forEach(c => block(c, ctx, env, out, st));
         out.push(spacer());
         return;
       }
@@ -575,5 +589,5 @@
     return D.Packer.toBlob(doc);
   }
   window.buildExamDocx = buildExamDocx;
-  window.GHDD_DOCX_VERSION = 'r22';
+  window.GHDD_DOCX_VERSION = 'r25';
 })();

@@ -830,7 +830,9 @@ $('generateExam').onclick=async()=>{
     const lang=examLanguage;
     const examTitle=$('examName').value.trim()||defaultExamTitle(lang,subject,className);
     const schoolName=lang==='ar'?'مجلس تطوير المدارس الحكومية (GHDD)':lang==='en'?'Public Schools Development Council (GHDD)':'Golaha Horumarinta Dugsiyada Dadweynaha (GHDD)';
+    const natStyle=(($('genFormat')||{}).value==='national'&&generated.examProfile&&generated.examProfile.style)||null;
     const normalized=qs.map((q,i)=>({
+      natStyle,
       id:uid(),
       text:noBloom(q.question||q.text||''),
       marks:Number(q.marks)||1,
@@ -1022,10 +1024,20 @@ function paperQuestionsHtml(normalized,passage,lang,withAnswers,mathMode){
        const numbers=[];let nn=0;const firstMatch=normalized.find(x=>x.type==='Matching');
        normalized.forEach((x,ix)=>{numbers[ix]=(x.type==='Matching'&&x!==firstMatch)?0:++nn;});
        return passageHtml+normalized.map((q,i)=>{
-         const section=q.section||examText(lang,'questionsDefault');
+         const ns=q.natStyle||null;
          const isFill=/fill/i.test(q.type||'');
+         const isMcqType=/^(mcq|multiple choice)/i.test(q.type||'');
+         const isDirectType=/structured|direct/i.test(q.type||'');
+         // Qaabka Qaranka: cinwaanka qaybta + wadarta dhibcaha waxay ka yimaadaan sample-ka maadada
+         const natTitle=ns?(isMcqType?ns.mcq:(isDirectType?ns.structured:null)):null;
+         const section=natTitle||q.section||examText(lang,'questionsDefault');
          let sectionHtml='';
-         if(section!==lastSection){sectionHtml=`<h3 class="paper-section">${esc(section)}</h3>`;lastSection=section;}
+         if(section!==lastSection){
+           if(natTitle){const sm=normalized.filter(x=>(isMcqType?/^(mcq|multiple choice)/i.test(x.type||''):/structured|direct/i.test(x.type||''))).reduce((a,x)=>a+(Number(x.marks)||0),0);
+             sectionHtml=`<h3 class="paper-section nat-banner"><span class="nb-title">${esc(natTitle)}</span><span class="nb-marks">(${sm} ${esc(ns.marksWord.toLowerCase()==='marks'?'marks':ns.marksWord.toLowerCase())})</span></h3>`;}
+           else sectionHtml=`<h3 class="paper-section">${esc(section)}</h3>`;
+           lastSection=section;}
+         const optLabel=k=>ns?`${ns.letters[k]}${ns.suffix}`:`${String.fromCharCode(65+k)}.`;
          // Teacher-only: the learning objective each question measures appears in the answer key, never on the student paper.
          const objectiveHtml=(withAnswers&&q.objective)?`<div class="answer-box objective-box"><strong>${examText(lang,'objectiveLabel')}:</strong> ${esc(q.objective)}</div>`:'';
          if(q.type==='Matching'){
@@ -1058,21 +1070,25 @@ function paperQuestionsHtml(normalized,passage,lang,withAnswers,mathMode){
            if(group[0]!==q)return '';
            const items=group.map(g=>{
              const no=numbers[normalized.indexOf(g)];
-             if(isMcqQ){const L=mcqLetter(g);return {no,val:L?`<b>${L}</b>`:fmt(g.answer||'—')};}
+             if(isMcqQ){const L=mcqLetter(g);const gs=g.natStyle;const DL=L&&gs?gs.letters[L.charCodeAt(0)-65]:L;return {no,val:L?`<b>${DL}</b>`:fmt(g.answer||'—')};}
              return {no,val:esc(g.answer||'—')};
            });
            const gm=group.reduce((s,g)=>s+(Number(g.marks)||0),0);
            const lab={en:'Correct answers',so:'Jawaabaha saxda ah',ar:'الإجابات الصحيحة'}[lang]||'';
            return `${sectionHtml}<div class="paper-question key-block"><p class="key-label"><strong>${lab}</strong> <span class="marks">(${gm} ${examText(lang,'marks')})</span></p>${keyGridHtml(items,isMcqQ?5:3)}</div>`;
          }
-         const options=q.options?.length?`<table class="mcq-options-table"><tbody><tr>${q.options.slice(0,4).map((opt,k)=>`<td><strong>${String.fromCharCode(65+k)}.</strong> ${fmt(String(opt).replace(/^[A-D][\.\):]\s*/i,''))}</td>`).join('')}</tr></tbody></table>`:'';
+         const options=q.options?.length?`<table class="mcq-options-table"><tbody><tr>${q.options.slice(0,4).map((opt,k)=>`<td>${ns?esc(optLabel(k)):`<strong>${esc(optLabel(k))}</strong>`} ${fmt(String(opt).replace(/^[A-DBTJXa-dbtjx][\.\):]\s+/,''))}</td>`).join('')}</tr></tbody></table>`:'';
          const safeSvg=q.diagramSvg?sanitizeDiagramSvg(q.diagramSvg):'';
          const pngSrc=typeof q.diagramPng==='string'&&q.diagramPng.startsWith('data:image/png;base64,')?q.diagramPng:'';
          const diagram=pngSrc?`<div class="exam-diagram"><img class="exam-diagram-png" src="${pngSrc}" alt="${lang==='ar'?'رسم توضيحي':lang==='so'?'Jaantus imtixaan':'Exam diagram'}"></div>`:(safeSvg?`<div class="exam-diagram">${safeSvg}</div>`:(q.diagram&&q.diagram!=='undefined'?`<div class="diagram-note"><strong>${lang==='ar'?'الرسم التوضيحي':lang==='so'?'Jaantus / sawir':'Diagram'}:</strong> ${esc(q.diagram)}</div>`:''));
          const isDirect=/structured|direct/i.test(q.type||'')||/STRUCTURED|DIRECT/i.test(section);
          const answerSpace=(!withAnswers&&isDirect)?`<div class="student-answer-label">${examText(lang,'studentAnswer')}:</div><div class="answer-space">${Array.from({length:Math.max(2,Math.min(14,Math.ceil(Number(q.marks||1)*1.4)))},()=>'<div class="answer-line"></div>').join('')}</div>`:'';
          const answer = withAnswers ? `<div class="answer-box"><strong>${examText(lang,'markingGuide')}:</strong> ${isFill?esc(q.answer||examText(lang,'notProvided')):fmt(q.answer||examText(lang,'notProvided'))}</div>` : '';
-         const questionLine=`<div class="mcq-question-row"><span class="question-number">${numbers[i]}.</span><span class="question-text">${isFill?fillBlankHtml(q.text,q.answer,withAnswers):fmt(q.text)}</span><span class="marks">(${q.marks} ${examText(lang,'marks')})</span></div>`;
+         const hasFig=!!(q.diagramSvg||q.diagramPng);
+         const stemText=hasFig?String(q.text||'').replace(/\b(figure|diagram|graph|chart|table|picture|map)\s+above\b/gi,'$1 below').replace(/\b(sawirka|jaantuska|shaxda|khariidadda)\s+(kore|sare)\b/gi,'$1 hoose'):q.text;
+         const inlineMarks=(ns&&!isMcqType&&!isFill)?` <span class="inline-marks">( ${q.marks} ${esc(ns.marksWord.toLowerCase())} )</span>`:'';
+         const marksCell=ns?(isMcqType?'<span class="marks"></span>':''):`<span class="marks">(${q.marks} ${examText(lang,'marks')})</span>`;
+         const questionLine=`<div class="mcq-question-row"><span class="question-number">${numbers[i]}.</span><span class="question-text">${isFill?fillBlankHtml(stemText,q.answer,withAnswers):fmt(stemText)}${inlineMarks}</span>${marksCell}</div>`;
          if(q.type==='MCQ'||q.type==='Multiple Choice'||q.type==='Multiple Choice Questions'){
            return `${sectionHtml}<div class="paper-question mcq-box">${questionLine}${diagram}${options}${answer}${figureNoteHtml(q,withAnswers,lang)}${objectiveHtml}</div>`;
          }
@@ -1563,7 +1579,7 @@ async function ensureDocxExporter(){
     catch(_){try{await loadJsText('https://cdn.jsdelivr.net/npm/docx@9.8.1/dist/index.iife.js');}catch(__){}}
   }
   if(!window.docx)throw new Error('Maktabadda docx lama helin. Geli faylka public/vendor/docx.iife.js oo dib u deploy garee.');
-  try{await loadJsText('/docx-export.js?v=r24');}
+  try{await loadJsText('/docx-export.js?v=r25');}
   catch(e){throw new Error('Hubi in faylka public/docx-export.js la geliyay. '+e.message);}
   if(typeof window.buildExamDocx!=='function')throw new Error('docx-export.js si sax uma shaqeynin.');
 }
