@@ -83,6 +83,10 @@ function rankModels(names) {
   const byVer = (a, b) => modelVersion(b) - modelVersion(a);
   return [...ok.filter(n => !/lite/.test(n)).sort(byVer), ...ok.filter(n => /lite/.test(n)).sort(byVer)];
 }
+// Xawaare: Gemini 2.5 Flash wuxuu si caadi ah u "fikiraa" waqti dheer; shaqooyinka habaysan (objectives, blueprint, JSON) uma baahna.
+function thinkingCfg(model, budget) {
+  return /^gemini-2\.5-flash$/.test(String(model || '')) ? { thinkingConfig: { thinkingBudget: budget } } : {};
+}
 async function getGeminiModels() {
   const forced = String(process.env.GEMINI_MODEL || '').trim();
   const key = process.env.GEMINI_API_KEY;
@@ -352,19 +356,39 @@ function splitMarkedPages(sourceText) {
   const matches=[...text.matchAll(re)];
   return matches.map((m,i)=>({page:Number(m[1]||m[2]),text:text.slice(m.index+m[0].length,i+1<matches.length?matches[i+1].index:text.length).trim()}));
 }
+const inventoryCache = new Map();
 async function extractRangeObjectiveInventory(sourceText, pageRange, languageName) {
+  const ck = crypto.createHash('sha1').update(`${languageName}|${pageRange?.start}-${pageRange?.end}|${sourceText}`).digest('hex');
+  if (inventoryCache.has(ck)) return JSON.parse(JSON.stringify(inventoryCache.get(ck)));
+  const inv = await extractRangeObjectiveInventoryRaw(sourceText, pageRange, languageName);
+  inventoryCache.set(ck, inv); if (inventoryCache.size > 20) inventoryCache.delete(inventoryCache.keys().next().value);
+  return JSON.parse(JSON.stringify(inv));
+}
+async function extractRangeObjectiveInventoryRaw(sourceText, pageRange, languageName) {
   const start=Number(pageRange?.start), end=Number(pageRange?.end);
   const selected=splitMarkedPages(sourceText).filter(x=>x.page>=start&&x.page<=end);
   const inventory=[]; const seenIds=new Set();
   let batch=[], chars=0; const batches=[];
   for (const pg of selected) {
-    if (batch.length && (batch.length>=8 || chars+pg.text.length>22000)) { batches.push(batch); batch=[]; chars=0; }
+    if (batch.length && (batch.length>=4 || chars+pg.text.length>12000)) { batches.push(batch); batch=[]; chars=0; }
     batch.push(pg); chars+=pg.text.length;
   }
   if (batch.length) batches.push(batch);
-  for (const group of batches) {
-    const prompt=`Audit every supplied scanned textbook PDF/OCR page. Extract all explicit learning objectives/outcomes. Where explicit objectives are absent, derive a small, complete set of topic-level assessable objectives from the actual curriculum content across the supplied pages. Do not turn every fact or example into a separate objective; do not invent content or omit any explicit objective. Preserve all distinct skills/topics that the selected pages teach. Keep PDF/OCR page number distinct from printed book page. Return JSON only: {"pages":[{"page":3,"topics":[{"unit":"","topic":"","objectives":[{"id":"P3-O1","text":"","evidence":"short evidence from the page"}]}]}]}. Every supplied PDF/OCR page must appear exactly once. Objective IDs must be unique and use the actual PDF/OCR page, e.g. P3-O1, P3-O2. Each objective should describe one assessable learning outcome. If a page has no assessable content, include it with topics: []. Use language ${languageName} for unit/topic/objective/evidence.\nPAGES:\n${group.map(pg=>`[PDF/OCR PAGE ${pg.page}]\n${pg.text}`).join('\n\n')}`;
-    const result=await callGeminiJson(prompt,{maxTokens:14000,temperature:0.05});
+  // XAWAARAHA: baaqyada bogagga waa is-barbar (ilaa 4 isku mar), natiijooyinkuna waxay u biirayaan isla kala-dambayntii hore.
+  const promptFor = (group) => {
+    return `Audit every supplied scanned textbook PDF/OCR page. Extract all explicit learning objectives/outcomes. Where explicit objectives are absent, derive a small, complete set of topic-level assessable objectives from the actual curriculum content across the supplied pages. Do not turn every fact or example into a separate objective; do not invent content or omit any explicit objective. Preserve all distinct skills/topics that the selected pages teach. Keep PDF/OCR page number distinct from printed book page. Return JSON only: {"pages":[{"page":3,"topics":[{"unit":"","topic":"","objectives":[{"id":"P3-O1","text":"","evidence":"short evidence from the page"}]}]}]}. Every supplied PDF/OCR page must appear exactly once. Objective IDs must be unique and use the actual PDF/OCR page, e.g. P3-O1, P3-O2. Each objective should describe one assessable learning outcome. If a page has no assessable content, include it with topics: []. Use language ${languageName} for unit/topic/objective/evidence.\nPAGES:\n${group.map(pg=>`[PDF/OCR PAGE ${pg.page}]\n${pg.text}`).join('\n\n')}`;
+  };
+  const results = new Array(batches.length);
+  let nextB = 0;
+  const workers = Array.from({ length: Math.min(4, batches.length) }, async () => {
+    while (nextB < batches.length) {
+      const bi = nextB++;
+      results[bi] = await callGeminiJson(promptFor(batches[bi]), { maxTokens: 14000, temperature: 0.05, thinking: 0 });
+    }
+  });
+  await Promise.all(workers);
+  for (let bi = 0; bi < batches.length; bi++) {
+    const group = batches[bi], result = results[bi];
     if (!Array.isArray(result.pages)) throw new Error('Objective inventory: AI did not return page-by-page analysis.');
     const byPage=new Map(result.pages.map(x=>[Number(x.page),x]));
     for (const pg of group) {
@@ -716,7 +740,7 @@ async function requestQuestionBatch(prompt) {
       try {
         const r = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`, {
           method: 'POST', headers: { 'content-type': 'application/json', 'x-goog-api-key': key },
-          body: JSON.stringify({ contents: [{ role: 'user', parts: [{ text: prompt }] }], generationConfig: { responseMimeType: 'application/json', temperature: 0.25, maxOutputTokens: 32000 } })
+          body: JSON.stringify({ contents: [{ role: 'user', parts: [{ text: prompt }] }], generationConfig: { responseMimeType: 'application/json', temperature: 0.25, maxOutputTokens: 32000, ...thinkingCfg(model, 1024) } })
         });
         const data = await r.json();
         if (!r.ok) { lastError = data?.error?.message || `AI request failed (${r.status})`; if ([429, 500, 502, 503, 504].includes(r.status)) continue; break; }
@@ -730,7 +754,7 @@ async function requestQuestionBatch(prompt) {
   throw new Error(lastError || 'AI request failed');
 }
 
-async function callGeminiJson(prompt, { maxTokens = 9000, temperature = 0.1 } = {}) {
+async function callGeminiJson(prompt, { maxTokens = 9000, temperature = 0.1, thinking = 0 } = {}) {
   const key = process.env.GEMINI_API_KEY;
   if (!key) throw new Error('GEMINI_API_KEY is missing');
   const models = await getGeminiModels();
@@ -739,7 +763,7 @@ async function callGeminiJson(prompt, { maxTokens = 9000, temperature = 0.1 } = 
     try {
       const r = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`, {
         method: 'POST', headers: { 'content-type': 'application/json', 'x-goog-api-key': key },
-        body: JSON.stringify({ contents: [{ role: 'user', parts: [{ text: prompt }] }], generationConfig: { responseMimeType: 'application/json', temperature, maxOutputTokens: maxTokens } })
+        body: JSON.stringify({ contents: [{ role: 'user', parts: [{ text: prompt }] }], generationConfig: { responseMimeType: 'application/json', temperature, maxOutputTokens: maxTokens, ...thinkingCfg(model, thinking) } })
       });
       const data = await r.json();
       if (!r.ok) { lastError = data?.error?.message || `AI request failed (${r.status})`; continue; }
@@ -2210,7 +2234,7 @@ app.post('/api/blueprint', async (req, res) => {
       try {
         const r = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`, {
           method:'POST', headers:{'content-type':'application/json','x-goog-api-key':key},
-          body:JSON.stringify({contents:[{role:'user',parts:[{text:prompt}]}],generationConfig:{responseMimeType:'application/json',temperature:0.15,maxOutputTokens:9000}})
+          body:JSON.stringify({contents:[{role:'user',parts:[{text:prompt}]}],generationConfig:{responseMimeType:'application/json',temperature:0.15,maxOutputTokens:9000,...thinkingCfg(model,0)}})
         });
         const data = await r.json();
         if (!r.ok) { lastError = data?.error?.message || `AI request failed (${r.status})`; if ([429,500,502,503,504].includes(r.status)) continue; throw new Error(lastError); }
