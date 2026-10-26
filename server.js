@@ -7,76 +7,13 @@ import { AsyncLocalStorage } from 'node:async_hooks';
 import path from 'path';
 import fs from 'fs';
 import { fileURLToPath } from 'url';
+import { getProfile, NATIONAL_PROFILES } from './exam-profiles.js';
+import { createSmartFigures, buildExamPlan, slotHint } from './smart-figures.js';
+import { renderFigure, verifySvg } from './figure-engine.js';
 
 const { Pool } = pg;
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const app = express();
-
-// Compact, subject-specific observations extracted from the user-provided 2024–2025
-// Form 4 national exam samples. These guide style and visual choice; they are not a
-// question bank and their example wording must never be copied into generated papers.
-const nationalExamProfileFile = path.join(__dirname, 'data', 'national-exam-profiles.json');
-let nationalExamProfiles = { source: 'Unavailable', profiles: [] };
-try {
-  if (fs.existsSync(nationalExamProfileFile)) nationalExamProfiles = JSON.parse(fs.readFileSync(nationalExamProfileFile, 'utf8'));
-} catch (e) { console.warn('National exam profiles could not be loaded:', e.message); }
-
-function normalizeSubjectKey(subject) {
-  const s = String(subject || '').toLowerCase().normalize('NFKD').replace(/[\u0300-\u036f]/g, '').replace(/[^\p{L}\p{N}]+/gu, ' ').trim();
-  const aliases = [
-    ['soomaali', /\b(soomaali|somali|af soomaali)\b/],
-    ['english', /\b(english|ingiriis|inglish)\b/],
-    ['arabic', /\b(arabic|carabi|العربية|عربي)\b/],
-    ['xisaab', /\b(xisaab|math|mathematics|رياضيات|حساب)\b/],
-    ['physics', /\b(physics|fiisigis|فيزياء)\b/],
-    ['chemistry', /\b(chemistry|kiimiko|kimistari|كيمياء)\b/],
-    ['biology', /\b(biology|bayooloji|بيولوجيا|احياء)\b/],
-    ['geography', /\b(geography|juqraafi|jiyooloji|جغرافيا)\b/],
-    ['history', /\b(history|taariikh|تاريخ)\b/],
-    ['business', /\b(business|ganacsi|commerce|تجارة)\b/],
-    ['technology', /\b(technology|technology studies|technology and|teknooloji|ict|computer studies|تقنية)\b/],
-    ['tarbiya', /\b(tarbiya|tarbiyah|islamic|diin|التربية الاسلامية|تربية)\b/]
-  ];
-  const rawSubject = String(subject || '').toLowerCase();
-  const directAliases = [['arabic',['العربية','عربي']],['xisaab',['رياضيات','حساب']],['physics',['فيزياء']],['chemistry',['كيمياء']],['biology',['بيولوجيا','احياء']],['geography',['جغرافيا']],['history',['تاريخ']],['business',['تجارة']],['technology',['تقنية']],['tarbiya',['التربية الاسلامية','تربية']]];
-  for (const [key, words] of directAliases) if (words.some(word => rawSubject.includes(word))) return key;
-  for (const [key, re] of aliases) if (re.test(s) || re.test(rawSubject)) return key;
-  return s;
-}
-
-function nationalProfileFor(subject) {
-  const key = normalizeSubjectKey(subject);
-  return (nationalExamProfiles.profiles || []).find(p => normalizeSubjectKey(p.subject) === key) || null;
-}
-
-function nationalStyleInstructions(subject) {
-  const profile = nationalProfileFor(subject);
-  if (!profile) return `NATIONAL SAMPLE DESIGN RULE: use the national sample only as a visual/design reference for professional exam-paper conventions: concise command words, readable section headings, consistent numbering, clean MCQ option layout, structured subparts, mark labels, and purposeful textbook-style diagrams. Do not assume an unverified subject-specific pattern. Textbook/OCR and the approved Blueprint remain the content authority; the selected pages and objectives define this exam's scope.`;
-  const designProfile = {
-    subject: profile.subject,
-    sampleStyleSummary: profile.sampleStyleSummary,
-    observedQuestionSignals: profile.observedQuestionSignals,
-    figureOrDiagramCuePages: profile.figureOrDiagramCuePages
-  };
-  return `SUBJECT-SPECIFIC NATIONAL EXAM REFERENCE — DESIGN ONLY (user-provided Form 4 2024–2025 sample): ${JSON.stringify(designProfile)}. Apply the following strict separation: (1) LEARN DESIGN, NOT THE FINAL-EXAM SCOPE: imitate this subject's professional paper design, command-word style, question-stem variety, option/table layout, structured subparts, mark-label presentation, and the visual language of its diagrams. (2) DO NOT COPY THE SAMPLE'S SYLLABUS COVERAGE: this may be a year-end national exam; the current request may be a monthly exam. Generate content ONLY from the selected textbook/OCR pages, the approved Blueprint, and the objectives selected by the user. Do not add unselected chapters just because they occur in the national sample. (3) DO NOT FORCE ITS QUESTION COUNT, SECTION COUNT, MARK DISTRIBUTION, OR TOTAL MARKS: those are observational features of the sample, not requirements. Follow the current exam request and approved partPlan/Blueprint for the number of questions, sections, and marks. (4) CHOOSE ITEM TYPES TO FIT THE ACTUAL SELECTED LESSON: MCQ, completion, structured response, calculation, code-reading, chart/map/table interpretation, matching, or visual interpretation only when the selected lesson supports it. Do not force a question type merely because it appears in the sample. (5) VISUALS MUST BE PURPOSEFUL: model the sample's clean, print-friendly diagram style, neutral labels, readable text, correct arrows/axes/units, and layout; make a diagram only when it directly helps assess a selected learning objective. It must be relevant to the exact question, visible and structurally valid, and must not contain the answer or requested labels. Never copy an example question or use the sample as the source of examinable facts. Match only the requested subject: ${String(subject || profile.subject)}.`;
-}
-
-function plannedDiagramCount(p, count = Number(p?.count || p?.questionCount || 10)) {
-  const mode = String(p?.visualMode || '').toLowerCase();
-  if (mode === 'none') return 0;
-  if (mode === 'manual') return Math.max(0, Math.min(30, Number(p?.diagramCount || 0)));
-  if (mode === 'auto') {
-    const key = normalizeSubjectKey(p?.subject);
-    const visualSubjects = new Set(['physics','chemistry','biology','geography','xisaab','technology','business']);
-    const profile = nationalProfileFor(p?.subject);
-    const profileSignalsVisual = !!profile?.observedQuestionSignals?.figureOrDiagramQuestions;
-    if (!visualSubjects.has(key) && !profileSignalsVisual) return 0;
-    if (count < 8) return 0;
-    return Math.max(1, Math.min(3, Math.floor(count / 12)));
-  }
-  // Backward compatibility for older clients: a numeric diagramCount means manual mode.
-  return Math.max(0, Math.min(30, Number(p?.diagramCount || 0)));
-}
 
 // PDF-yada waaweyn waxaa lagu diraa qaybo yaryar, ma aha hal JSON weyn.
 app.use(express.json({ limit: '12mb' }));
@@ -128,20 +65,6 @@ async function db(sql, params = []) {
 async function bdb(sql, params = []) {
   if (!booksPool) throw new Error('PostgreSQL lama dejin.');
   return booksPool.query(sql, params);
-}
-
-async function selectedBookSubjectIssue(p) {
-  const bookId = String(p?.sourceBookId || '').trim();
-  if (!bookId) return null; // Compatibility with older clients.
-  const result = await bdb('SELECT id, subject, title FROM books WHERE id=$1 LIMIT 1', [bookId]);
-  const book = result.rows?.[0];
-  if (!book) return {status:404, error:'Buugga la doortay lama helin. Dib u soo cusboonaysii liiska buugaagta.'};
-  const bookSubject = String(book.subject || '').trim();
-  const requestedSubject = String(p.subject || '').trim();
-  if (bookSubject && requestedSubject && normalizeSubjectKey(bookSubject) !== normalizeSubjectKey(requestedSubject)) {
-    return {status:422, error:`Maaddada la codsaday (${requestedSubject}) kuma waafaqsana maaddada buugga (${bookSubject}). Imtixaanka waa in laga sameeyaa maaddada buugga la doortay oo keliya.`, subjectMismatch:true, bookSubject, requestedSubject};
-  }
-  return null;
 }
 
 const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || 'change-me';
@@ -1114,17 +1037,6 @@ const dbReady = initDb()
     throw err;
   });
 
-app.get('/api/national-exam-profiles', (req, res) => {
-  const profiles = (nationalExamProfiles.profiles || []).map(p => ({
-    subject: p.subject, class: p.class, pageCount: p.pageCount,
-    sampleStyleSummary: p.sampleStyleSummary || '',
-    sectionAndMarkingCues: p.sectionAndMarkingCues || [],
-    observedQuestionSignals: p.observedQuestionSignals || {},
-    figureOrDiagramCuePages: p.figureOrDiagramCuePages || []
-  }));
-  res.json({source:nationalExamProfiles.source || 'National sample profiles', count:profiles.length, profiles});
-});
-
 app.get('/api/health', async (req, res) => {
   try {
     await dbReady;
@@ -1916,44 +1828,6 @@ function qualityCheck(q) {
     score -= 10;
   }
 
-  const marks = Number(q.marks);
-  if (!Number.isFinite(marks) || marks <= 0) {
-    issues.push('Marks must be a positive number');
-    score -= 10;
-  }
-
-  if (q.type === 'MCQ' || /\bmcq\b|multiple.?choice/i.test(String(q.type || q.section || ''))) {
-    const options = Array.isArray(q.options) ? q.options.map(x => String(x || '').trim()) : [];
-    const normalized = options.map(x => x.toLocaleLowerCase().replace(/\s+/g, ' '));
-    if (new Set(normalized).size !== normalized.length) {
-      issues.push('MCQ contains duplicate options');
-      score -= 15;
-    }
-    if (options.some(x => !x)) {
-      issues.push('MCQ contains an empty option');
-      score -= 10;
-    }
-  }
-
-  if (q.diagramSvg || q.diagramPng) {
-    const svg = String(q.diagramSvg || '');
-    if (svg && !svgLooksValid(svg)) {
-      issues.push('Diagram SVG is incomplete or structurally invalid');
-      score -= 25;
-    }
-    const stem = String(q.question || q.text || '');
-    if (!/(diagram|figure|picture|graph|map|table below|jaantus|sawirka|shax|khariidad|الشكل|الرسم|الخريطة|الجدول)/i.test(stem)) {
-      issues.push('Question does not clearly refer to its attached visual');
-      score -= 15;
-    }
-    const answer = String(q.answer || '').trim().replace(/<[^>]*>/g, '').toLocaleLowerCase();
-    const visibleSvgText = svg.replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').toLocaleLowerCase();
-    if (answer.length >= 4 && visibleSvgText.includes(answer)) {
-      issues.push('Diagram may reveal the model answer; inspect and revise it');
-      score -= 25;
-    }
-  }
-
   return {
     score: Math.max(0, score),
     status: score >= 90 ? 'Excellent' : score >= 75 ? 'Review recommended' : 'Needs revision',
@@ -1969,10 +1843,10 @@ async function aiGenerate(p) {
   const targetLanguage = LANGUAGE_NAMES[normalizeLang(p.examLanguage)];
   const mathMode = isMathSubject(p.subject) || isMathSubject(p.className) || isMathSubject(p.sourceTitle);
   const chemMode = !mathMode && (isChemSubject(p.subject) || isChemSubject(p.className) || isChemSubject(p.sourceTitle));
-  const diagramTarget = p.passage ? 0 : plannedDiagramCount(p, p.count);
+  // Mabda'a 1-3: maadada + sample-ka qaranka + nooca su'aasha ee casharka ku habboon (kaliya marka figureMode='smart')
+  const examPlan = p.figureMode === 'smart' ? buildExamPlan(p, Math.max(1, Number(p.count) || 10)) : null;
   const buildPrompt = (count, partPlan, avoid = [], passageObj = null) => `
 You are an expert secondary-school assessment designer and professional translator.
-${nationalStyleInstructions(p.subject)}
 ${normalizeLang(p.examLanguage) === 'so' ? SOMALI_STYLE : ''}
 ${STEM_VARIETY}
 NON-NEGOTIABLE OUTPUT LANGUAGE: ${targetLanguage}. The user explicitly selected this language. The textbook may be in a different language; translate the educational content accurately into the selected output language. NEVER use the textbook language as the exam language unless it is the selected language. Do not mix English, Somali and Arabic.
@@ -1982,11 +1856,11 @@ MATHEMATICS WRITING RULES (MANDATORY, this is a mathematics exam): write every n
 ${chemMode ? `
 CHEMISTRY WRITING RULES (MANDATORY when the subject is chemistry): write organic structures as ONE-LINE CONDENSED FORMULAS with plain digits (CH3, CH2, OH, COOH, Br). The exam paper draws them automatically as a branched-chain structure exactly like the school textbook (main chain on one line, branches above/below). Rules: (1) join the atoms of the MAIN (longest) chain with a hyphen: CH3-CH2-CH2-OH; (2) write every branch in round brackets right after the carbon it hangs on: CH3-CH(CH3)-C(CH3)(OH)-CH2-CH3; two identical branches may be written C(CH3)2; (3) double and triple bonds use = and ≡ : CH2=C(CH3)-CH2-OH; a branch with a double bond: CH3-C(=O)-CH3; (4) never use LaTeX, $, \\ce{}, underscores, Unicode subscripts, ASCII art, SMILES or images for formulas; (5) put a structure in the question text or in an option on its own, separated by spaces from normal words, e.g. \"Give the IUPAC name of the compound CH3-CH(CH3)-CH2-OH.\"; (6) the structure must be chemically valid (carbon has four bonds) and the answer/IUPAC name must match it exactly; (7) simple molecules (H2O, CO2, NaCl) are written normally.` : ''}
 ${isEnglishForm4(p) ? `ENGLISH FORM 4 NATIONAL-STYLE PROFILE (MANDATORY): use the selected-page curriculum and approved blueprint for all examinable content. The new passage is used ONLY for Q1–10 Reading Comprehension; do not make Q11–50 depend on that passage unless the question is explicitly a passage follow-up in the approved blueprint. Keep the standard order: Q1–10 Reading Comprehension; Q11–20 Grammar (tense, verb forms, pronouns, plurals, conjunctions and other grammar objectives actually present in the selected pages); Q21–30 Literature/poetry; Q31–40 Vocabulary; Q41–49 short answers totalling 50 marks; Q50 Composition worth 10 marks with exactly THREE clearly labelled topic choices A, B, C and student chooses ONE. Section Two Q41–49 follows the approved Blueprint/TOS and selected PDF/OCR pages, not the new passage. Overall total 100 marks for the standard 50-question format. Do not put alliteration, homophones or poetry terms into Grammar merely to fill the section. MCQ options must be distinct, concise, parallel in form and similar in length; normally 1–5 words when appropriate, with grammar fragments kept grammatically valid. Exactly one option must be correct. Reading passage must be a single coherent original passage on a broadly relatable, age-appropriate theme for Somali secondary students, and its title/content must match. Do not splice unrelated textbook excerpts into it. The passage theme should align with a reading objective in the blueprint and curriculum, while the passage may be newly written. Do not invent textbook-specific facts. If the selected section plan does not support this national structure, report a validation error instead of silently changing the structure. ` : ''}SIMPLE CURRICULUM LANGUAGE (MANDATORY, every subject): write the way the national syllabus and the student textbook write, in short, clear sentences that a student of this class understands at first reading. Use the textbook's own terms and definitions; do not replace them with rare, academic or formal words. One idea per sentence; no double negatives, no long clauses, no trick wording. Use plain starters such as "What is...", "Which one...", "Name...", "State...", "Give two...", "Why...", "Explain how...". Example: not \"Identify the defining structural feature of all alkene compounds\" but \"Which feature is found in all alkenes?\". Options must be short, similar in length and written with the same textbook words. Difficulty comes from the learning objective, never from hard wording.
-MONTHLY EXAM SCOPE (NON-NEGOTIABLE): this is an assessment of the selected lessons/pages only, not automatically a year-end/final examination. Use only the supplied source text, selected page range, approved Blueprint, and user-selected learning objectives. The national sample teaches DESIGN CONVENTIONS only; it must never expand the content scope to other chapters. The user-approved question count, section plan, and marks take precedence over the sample's count/sections/marks. If the requested count or mark plan is supplied, follow it exactly rather than reproducing the national paper's totals.
-NATIONAL DESIGN TRANSFER (NON-NEGOTIABLE): reproduce the sample's professional design principles, not its content: concise and varied command-word stems; clear section headings and numbering; clean, aligned MCQ options and matching tables; appropriate structured subparts; consistent placement of marks; and textbook-like, print-friendly diagrams when relevant. Choose question format based on the selected objective and actual lesson (MCQ, image/diagram interpretation, calculation, code-reading/writing, chart/map/table interpretation, matching, fill-in, or structured response). Do not force irrelevant formats. A visual must assess the selected lesson, be referred to by the question, have readable and accurate labels/symbols/units/arrows, and must not disclose the answer or any label the student is asked to supply. Never add a decorative or unrelated image. Before returning JSON, check: (a) every question belongs to the selected subject and selected pages/objectives; (b) item type fits the learning objective; (c) all answers and distractors are internally consistent; (d) any diagram is complete, relevant, readable, and answer-neutral; (e) question marks follow the user-approved plan; and (f) no unselected national-sample topics were introduced.
+Create exactly ${count} questions using ONLY facts and concepts supported by the supplied source text. Translate supported source content into the selected language; do not invent facts or repeat questions.
 ${passageInstructions(p, passageObj, targetLanguage)}
 OBJECTIVE-FIRST DESIGN (MOST IMPORTANT RULE): the learning objectives (learningOutcomes) in the blueprint below are exactly what this exam must measure. Before writing each question, choose ONE objective from the blueprint topic it belongs to, then write a question that directly measures that objective. The action verb of the objective decides what the student must do (define/state → recall; identify/classify → recognise; explain/describe → explanation; calculate/solve → computation; compare/analyse → comparison or analysis; justify/evaluate → reasoned judgement). Copy the chosen objective text, in ${targetLanguage}, into the question's \"objective\" field. Rules: (1) every question has one primary objective in "objective" and lists exact objective IDs in "objectiveIds"; a question may list multiple IDs only when it genuinely assesses each closely related objective; (2) spread questions across different SELECTED Blueprint objectives where appropriate; do not force a unique objective for every question if the approved Blueprint has fewer selected objectives than questions. Reuse an objective only for a genuinely different question/skill when its planned questionCount permits; never invent an objective ID or use an unselected inventory objective; (3) do not write questions on trivia, side facts, dates or examples unless an objective requires them; (4) the question must be answerable from the source text and must not test anything outside its objective; (5) if the blueprint has no objectives, first derive measurable objectives from the source text and use them the same way.
 Use Bloom levels: ${JSON.stringify(p.levels || blooms)}. Choose each question's \"bloom\" value so it matches the objective's action verb; keep it ONLY in the JSON \"bloom\" field. BLOOM CONFIDENTIALITY: never write the word Bloom or any cognitive-level label or tag (Remember, Understand, Apply, Analyze, Evaluate, Create, or their translations) in question text, options, matching items, topics, section titles, instructions, answers or marking guides. The student must never be able to see the cognitive level.
+${avoid.length ? '' : slotHint(examPlan)}
 Required ordered section plan: ${JSON.stringify(partPlan || [])}. Follow the exact section order and counts; translate every displayed section title into ${targetLanguage}.
 AI-GENERATED TOPIC BLUEPRINT (use for coverage only; translate all displayed topics/outcomes into ${targetLanguage}): ${JSON.stringify(p.blueprint || {})}. Distribute questions across blueprint topics and source pages. Every question must include exactly ONE primary objective ID from blueprint.objectiveInventory. The full inventory is the curriculum reference and may contain more objectives than the exam has questions; do NOT try to assess every inventory objective and do NOT apply any percentage threshold to the full inventory. Select no more than ${count} distinct assessment objectives for ${count} questions. Prefer one different, suitable objective per question and do not repeat an objective ID while other suitable, assessable objectives remain. Only use a second objective when the question genuinely assesses both; by default use exactly one ID. Do not invent objective IDs. use the matching objective IDs for its subject section (Reading Q1–10 from passage-related reading objectives, Grammar Q11–20, Literature Q21–30, Vocabulary Q31–40, and Section Two Q41–49 from the Blueprint/TOS). Keep Composition Q50 tied to writing objectives. Preserve marks and section counts. Assessment-objective count must not exceed the question count; the selected objectives are the objectives this exam is designed to measure, while all remaining inventory objectives stay in the curriculum inventory for future exams.${avoid.length ? `\nALREADY WRITTEN (continue the exam from the next question; do NOT repeat or paraphrase these, and prefer learning objectives not used yet): ${JSON.stringify(avoid)}` : ''}
 SOURCE DISTRIBUTION RULE: ${p.sourceSelectionRule || 'Spread questions across different headings/topics; do not take consecutive questions from the same paragraph or heading. Prefer passages separated by at least two headings or at least one full page.'}
@@ -1995,7 +1869,7 @@ MCQ (NATIONAL-EXAM STYLE): exactly four options A, B, C, D and one correct answe
 Fill in the Blanks (NATIONAL-EXAM WORD-BOX STYLE, MANDATORY): the paper shows ONE WORD BANK above the group, followed by the actual numbered fill-in questions. NEVER make a numbered question that says "WORD BANK", "WORD BANK:", repeats the list of words, repeats the instruction, or merely copies the words from the box. The word bank belongs only in the separate word-box UI and must NOT appear in any question text. Every numbered item must be a genuine subject question with a sentence and one blank. The paper shows a WORD BANK (one word per item, exactly as many words as items) above the items and the student writes the correct word from the box into the blank. So every Fill in the Blank question must be a short, complete statement (a definition, a key term, a rule, a fact, a sentence from the topic) with EXACTLY ONE blank written as ________ (eight underscores); the blank may sit in the middle of the sentence (for example My dog ________ short because she was very shy.). The \"answer\" field contains ONLY the missing word or short term (1 to 3 words, no sentence, no letter label), taken from the source text, so it fits the blank both in meaning and in grammar. Style models: \"________ waa qaybta yar ee nolosha ee dhisa unugga.\" / \"The process by which plants make food is called ________.\" / \"A triangle with three equal sides is called ________ triangle.\" Vary the forms (definition, concept, process, comparison, example); never leave the blank at a place that makes the answer guessable from grammar alone; the answers of one section must all be different words. Leave \"options\" empty for this type. Write everything in ${targetLanguage}.
 Matching: create each matching question as ONE table group, not one separate mini-question per row. Return matches as [{"question":"item/term for Column A in selected language","answer":"exact matching Column B option text in selected language"}]. options must list all correct answers plus exactly ONE plausible extra distractor (so 5 items in Column A require 6 options A-F). All item and option text must be in ${targetLanguage}. On the student paper, render one four-column table: localized number; Column A item; blank for answer letter; Column B options/descriptions. Put the complete A, B, C, D, E, F option list together in the rightmost Column B cell spanning all rows. Students write only the option letter in Column 3. Never reveal correct letters or answers in the student paper.
 Structured/direct questions: include clear subparts in ${targetLanguage} and a teacher-only model answer/marking guide in ${targetLanguage}. The student paper must show no solutions or model answers. ANSWER KEY RULES: (1) For MCQ the \"answer\" field is ONLY the correct option letter (A, B, C or D). (2) For Structured/direct questions the \"answer\" is the correct answer exactly as the curriculum/source text teaches it (a clear, complete model answer, calculations with their steps and units). (3) For every Structured/direct question also give \"keyPoints\": an array of 2 to 6 SHORT marking points, each ONE distinct idea, term, formula or step that a student's answer must contain to earn marks, ordered by importance. A student who expresses the idea in other correct words must still be able to earn the mark, so write each point as the idea (for example for \"define motion\": [\"change in position of an object\", \"with respect to time or a reference point\"]), not as a fixed sentence. Do not put the question's marks inside keyPoints, only the points. Leave keyPoints as [] for MCQ, Fill in the Blank and Matching.
-DIAGRAM RULE: Requested number of diagrams is ${diagramTarget}. Create exactly this number of diagrams across Structured questions. A diagram is an assessment stimulus, NOT an answer key. CRITICAL: the diagram must NEVER contain the answer to the question. Do not print any of the requested items, names, categories, labels, definitions, solutions, or explanatory captions that the student is being asked to supply. For a question such as “Name four branches of X” or “Tax afar ...”, show only the neutral topic/title and four EMPTY boxes or boxes marked A, B, C, D; do NOT write the four branch names in the boxes or anywhere on the diagram. For “name/identify/label the parts”, use neutral letters (A, B, C or X, Y) or empty leader boxes, never the part names. For classification/listing questions, blank boxes or neutral numbered spaces are allowed, but answer terms are forbidden. Choose a diagram type directly relevant to the question and curriculum topic; do not reuse a generic neuron/shape for unrelated subjects. For geography, draw a recognizable, accurate outline map of Somalia or Africa when the question concerns that area, with only necessary neutral labels/markers; do not invent borders, locations, rivers or place names. For physics, use standard symbols, axes, vectors and values that match the question. For biology, use a clean scientific schematic with parts marked neutrally when identification is being tested. If it is 0, every diagram and diagramSvg field must be empty. If greater than 0, create actual, visible, accurate SVG diagrams in diagramSvg—not instructions, not placeholders, and never the word "undefined". Use a standalone SVG in the style of the NATIONAL EXAMINATIONS (see DIAGRAM STYLE rules below), all visible labels in ${targetLanguage}. No scripts, external links, images, foreignObject, markers or CSS imports. The question text must refer to the diagram in the exam way (for example \"Eeg jaantuska hoose\" / \"Study the diagram below\" / \"ادرس الشكل أدناه\") and ask something that can be answered by looking at it (label the parts, name the part marked X, read a value, find an angle or length). Diagrams must be based only on supplied source content and relevant to the question.
+DIAGRAM RULE: Requested number of diagrams is ${Number(p.diagramCount || 0)}. Create exactly this number of diagrams across Structured questions. A diagram is an assessment stimulus, NOT an answer key. CRITICAL: the diagram must NEVER contain the answer to the question. Do not print any of the requested items, names, categories, labels, definitions, solutions, or explanatory captions that the student is being asked to supply. For a question such as “Name four branches of X” or “Tax afar ...”, show only the neutral topic/title and four EMPTY boxes or boxes marked A, B, C, D; do NOT write the four branch names in the boxes or anywhere on the diagram. For “name/identify/label the parts”, use neutral letters (A, B, C or X, Y) or empty leader boxes, never the part names. For classification/listing questions, blank boxes or neutral numbered spaces are allowed, but answer terms are forbidden. Choose a diagram type directly relevant to the question and curriculum topic; do not reuse a generic neuron/shape for unrelated subjects. For geography, draw a recognizable, accurate outline map of Somalia or Africa when the question concerns that area, with only necessary neutral labels/markers; do not invent borders, locations, rivers or place names. For physics, use standard symbols, axes, vectors and values that match the question. For biology, use a clean scientific schematic with parts marked neutrally when identification is being tested. If it is 0, every diagram and diagramSvg field must be empty. If greater than 0, create actual, visible, accurate SVG diagrams in diagramSvg—not instructions, not placeholders, and never the word "undefined". Use a standalone SVG in the style of the NATIONAL EXAMINATIONS (see DIAGRAM STYLE rules below), all visible labels in ${targetLanguage}. No scripts, external links, images, foreignObject, markers or CSS imports. The question text must refer to the diagram in the exam way (for example \"Eeg jaantuska hoose\" / \"Study the diagram below\" / \"ادرس الشكل أدناه\") and ask something that can be answered by looking at it (label the parts, name the part marked X, read a value, find an angle or length). Diagrams must be based only on supplied source content and relevant to the question.
 FINAL LANGUAGE CHECK BEFORE RETURNING: review every string that could appear on either paper. Rewrite any stray phrase in another language into ${targetLanguage}. JSON keys may remain English for the app, but their values must follow the language rules above. Return valid JSON only.
 Return JSON only:
 {"questions":[{"question":"","answer":"","distractor":"","keyPoints":[],"type":"","section":"","options":[],"matches":[{"question":"","answer":""}],"diagram":"","diagramSvg":"","objective":"","objectiveIds":["P3-O1"],"bloom":"","difficulty":"","marks":1,"topic":"","sourcePages":""}]}
@@ -2035,13 +1909,16 @@ ${String(p.sourceText || p.text || '')}
   const languageReport = await enforceQuestionLanguage(questions, p.examLanguage);
   try { await diversifyStems(questions, p.examLanguage); } catch (e) { console.warn('Stem variety skipped:', e.message); }
   const passageCheck = await enforcePassageGrounding(questions, passage, p, targetLanguage);
-  const requestedDiagrams = diagramTarget;
+  const requestedDiagrams = Math.max(0, Math.min(30, Number(p.diagramCount || 0)));
   // Never expose "undefined" or text-only placeholders as diagrams.
   for (const q of questions) {
     if (typeof q.diagram !== 'string' || q.diagram.trim().toLowerCase() === 'undefined') q.diagram = '';
     if (typeof q.diagramSvg !== 'string' || !/<svg\\b/i.test(q.diagramSvg)) q.diagramSvg = '';
   }
-  if (requestedDiagrams > 0) {
+  let figureReport = null;
+  if (p.figureMode === 'smart' && examPlan) {
+    figureReport = await smartFigures.smartFigureStage(p, questions, examPlan);
+  } else if (requestedDiagrams > 0) {
     const candidates = questions.filter(q => /structured|direct/i.test(String(q.type || '')) || /STRUCTURED|DIRECT/i.test(String(q.section || '')));
     if (candidates.length < requestedDiagrams) {
       throw new Error(`The exam plan has only ${candidates.length} structured questions, but ${requestedDiagrams} diagrams were requested. Increase question count or reduce diagrams.`);
@@ -2079,7 +1956,7 @@ ${String(p.sourceText || p.text || '')}
         if (kept > requestedDiagrams) { q.diagramSvg = ''; q.diagram = ''; }
       }
     }
-  } else {
+  } else if (p.figureMode !== 'smart') {
     for (const q of questions) { q.diagramSvg = ''; q.diagram = ''; }
   }
   // Final clean-up of everything the student reads: no source citations; plain textbook-style notation in mathematics.
@@ -2089,6 +1966,8 @@ ${String(p.sourceText || p.text || '')}
     if (chemMode) mapQuestionText(q, cleanChemText);
   });
   if (p.passage && passage) passage.text = stripSourceCitations(passage.text);
+  questions.figureReport = figureReport;
+  if (examPlan) questions.examProfile = { key: examPlan.profile.key, label: examPlan.profile.label, basis: examPlan.profile.basis, notes: examPlan.profile.notes };
   questions.languageReport = languageReport;
   questions.passageCheck = passageCheck;
   questions.passage = p.passage ? passage : null;
@@ -2214,14 +2093,68 @@ app.post('/api/books/:id/diagrams', async(req,res)=>{
 });
 app.delete('/api/diagrams/:id',async(req,res)=>{try{await dbReady;await bdb('DELETE FROM book_diagrams WHERE id=$1',[req.params.id]);res.json({ok:true});}catch(e){res.status(500).json({error:'Jaantuska lama tirtiri karin.'});}});
 
+
+// ===== Smart figures (Mabda'a 1-5): sample-ka qaranka -> nooca su'aasha -> sawirka saxda ah -> hubin =====
+async function callGeminiVision(prompt, dataUrl) {
+  const key = process.env.GEMINI_API_KEY;
+  if (!key) throw new Error('GEMINI_API_KEY is missing');
+  const parts = [{ text: prompt }];
+  if (dataUrl) {
+    const m = String(dataUrl).match(/^data:(image\/(?:png|jpeg|webp));base64,([\s\S]+)$/i);
+    if (!m) throw new Error('Sawirka PNG/JPEG/WEBP sax ah ayaa loo baahan yahay.');
+    parts.push({ inlineData: { mimeType: m[1], data: m[2] } });
+  }
+  const models = await getGeminiModels();
+  let lastError = '';
+  for (const model of models) {
+    try {
+      const r = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`, {
+        method: 'POST', headers: { 'content-type': 'application/json', 'x-goog-api-key': key },
+        body: JSON.stringify({ contents: [{ role: 'user', parts }], generationConfig: { responseMimeType: 'application/json', temperature: 0, maxOutputTokens: 1200 } })
+      });
+      const data = await r.json();
+      if (!r.ok) { lastError = data?.error?.message || `AI request failed (${r.status})`; continue; }
+      const raw = (data.candidates?.[0]?.content?.parts || []).map(x => x.text || '').join('').replace(/^```json|```$/g, '').trim();
+      return JSON.parse(raw);
+    } catch (e) { lastError = e.message; }
+  }
+  throw new Error(lastError || 'Vision request failed');
+}
+const smartFigures = createSmartFigures({
+  callGeminiJson, aiGenerateDiagram, splitMarkedPages, callGeminiVision,
+  somaliStyle: typeof SOMALI_STYLE === 'string' ? SOMALI_STYLE : '', languageNames: LANGUAGE_NAMES,
+  loadLibraryDiagrams: async (bookId) => { await dbReady; const r = await bdb('SELECT id,page,title,description,svg FROM book_diagrams WHERE book_id=$1 ORDER BY page', [bookId]); return r.rows; }
+});
+
+// Profile-ka qaranka ee maadada (client-ku wuxuu u adeegsadaa qaabka imtixaanka qaranka)
+app.get('/api/exam-profile', (req, res) => {
+  const pr = getProfile(String(req.query.subject || ''), String(req.query.className || ''), String(req.query.title || ''));
+  if (!pr) return res.json({ profile: null, available: Object.keys(NATIONAL_PROFILES) });
+  res.json({ profile: pr });
+});
+// Sawir deterministic ah: spec -> SVG + facts (tijaabo / preview)
+app.post('/api/figures/render', (req, res) => {
+  try {
+    const { kind, spec } = req.body || {};
+    const out = renderFigure(String(kind || ''), spec || {});
+    res.json({ svg: out.svg, facts: out.facts, check: verifySvg(out.svg, { minShapes: 1 }) });
+  } catch (e) { res.status(400).json({ error: e.message }); }
+});
+// Hubinta aragga: ardayga AI-ga ah ayaa sawirka eegaya oo su'aasha xallinaya (PNG waxaa soo diraya browser-ka)
+app.post('/api/figures/verify-vision', async (req, res) => {
+  try {
+    const b = req.body || {};
+    if (!b.question || !Array.isArray(b.options) || b.options.length !== 4 || !/^data:image\//.test(String(b.pngDataUrl || ''))) return res.status(400).json({ error: 'su\u2019aasha, 4 doorasho iyo sawir PNG ayaa loo baahan yahay.' });
+    if (String(b.pngDataUrl).length > 8 * 1024 * 1024) return res.status(413).json({ error: 'Sawirku aad buu u weyn yahay.' });
+    res.json(await smartFigures.visionVerify({ question: String(b.question), options: b.options.map(String), answer: String(b.answer || ''), pngDataUrl: String(b.pngDataUrl), lang: b.lang }));
+  } catch (e) { res.status(502).json({ error: e.message }); }
+});
+
 app.post('/api/blueprint', async (req, res) => {
   try {
     const p = req.body || {};
     const sourceText = String(p.sourceText || '').trim();
     if (!sourceText) return res.status(400).json({error:'Qoraalka OCR ee buugga ayaa loo baahan yahay.'});
-    if (!String(p.subject || '').trim()) return res.status(400).json({error:'Dooro ama geli hal maaddo oo keliya ka hor samaynta Blueprint-ka.'});
-    const bookSubjectIssue = await selectedBookSubjectIssue(p);
-    if (bookSubjectIssue) return res.status(bookSubjectIssue.status).json(bookSubjectIssue);
     let sourcePageCheck;
     try { sourcePageCheck = validatePageRangeSource(sourceText, p.pageRange, 'Blueprint'); }
     catch (e) { return res.status(422).json({error:e.message, pageRangeValidation:{ok:false}}); }
@@ -2236,7 +2169,7 @@ app.post('/api/blueprint', async (req, res) => {
     try { objectiveInventory = await extractRangeObjectiveInventory(sourceText, p.pageRange, languageName); }
     catch (e) { return res.status(422).json({error:'Blueprint lama samayn: dhammaan bogagga PDF/OCR iyo objectives-kooda lama xaqiijin. '+e.message,validation:{ok:false,pageRange:sourcePageCheck,objectiveInventory:false}}); }
     const inventoryJson = JSON.stringify(objectiveInventory);
-    const prompt = `You are an expert secondary-school assessment designer. ${normalizeLang(p.examLanguage) === 'so' ? SOMALI_STYLE + ' ' : ''}${nationalStyleInstructions(p.subject)}\nCreate an EXAM BLUEPRINT / TABLE OF SPECIFICATIONS before the questions are generated. Use ONLY topics, headings, facts and learning outcomes supported by the supplied OCR text and the complete page-by-page OBJECTIVE INVENTORY below. Do not invent units or learning outcomes. The inventory is the full curriculum pool, NOT a checklist that must all appear in this exam. Select a suitable subset of objectives based on the requested question count, section plan, marks, and page range. Never require every inventory objective to appear. Every selected objective ID must exist in the inventory and retain its exact PDF/OCR source page. Prefer different objectives where suitable, but the same objective may support multiple distinct questions when the blueprint allocates multiple items to it and the questions assess different aspects.\nCOMPLETE OBJECTIVE INVENTORY (built by analyzing every selected PDF/OCR page, not a truncated sample): ${inventoryJson}\nMANDATORY OUTPUT LANGUAGE: ${languageName}. Translate all displayed blueprint fields including unit, topic, learning outcomes, notes and section names into this language, even when the OCR source uses another language. Do not mix languages; only JSON keys and scientific symbols may remain unchanged. Subject: ${p.subject || ''}. Class: ${p.className || ''}. Source book: ${p.sourceTitle || ''}. Selected pages: ${JSON.stringify(p.pageRange || {})}. Total marks: ${totalMarks}. Total questions: ${totalQuestions}. Format: ${p.format || 'four-part'}.\n${isEnglishForm4(p) ? `SUBJECT-SPECIFIC PROFILE — ENGLISH FORM 4 (MANDATORY): use this profile, not a generic language-exam profile. Use only objectives/topics supported by the supplied selected-page OCR. Keep curriculum topic/objective coverage separate from the new reading passage. The original passage is only the basis for Reading Comprehension questions; Grammar, Literature and Vocabulary objectives must come from the selected textbook pages and this blueprint. Plan the national-style structure: Q1–10 Reading Comprehension, Q11–20 Grammar, Q21–30 Literature, Q31–40 Vocabulary, Q41–49 short-answer (together 50 marks), Q50 Composition (10 marks, exactly THREE clearly labelled topic choices A, B, C; student chooses ONE). Section Two Q41–49 must follow the Blueprint/TOS objectives and source pages, not the new passage, total 100 marks when the requested exam is the standard 50-question/100-mark format. Do not assign poetry, homophones or literary-device questions to the Grammar section merely to fill a count. Make the TOS question numbers, item counts and marks mathematically consistent; never invent a separate “Other” topic to hide an unmapped question.\n` : ''}${(p.passage && !isEnglishForm4(p)) ? `PASSAGE-BASED LANGUAGE EXAM: this exam will begin with an original reading passage built from the curriculum, and every question will be answered through that passage. Write the learningOutcomes as language-skill objectives taken from the CURRICULUM text itself (grammar/naxwaha and sentence structure, vocabulary and word meaning, synonyms and antonyms, plurals and word forms, rhetoric and style, spelling and punctuation) so each can be tested through a passage; reading comprehension (main idea, details, inference) may take at most 30% of the objectives.\n` : ''}OBJECTIVE-FIRST BLUEPRINT (MOST IMPORTANT): the blueprint is built around learning objectives. If the source text itself states objectives (for example headings such as Objectives, Learning outcomes, Learning objectives, \"By the end of this unit/lesson students should be able to\", \"After studying this chapter you should...\"), use those objectives first and translate them faithfully into ${languageName}. Otherwise derive 2 to 5 measurable objectives per topic from the headings and content that are really present. Each objective is ONE testable statement that starts with an observable action verb (define, state, identify, describe, explain, calculate, compare, classify, interpret, justify...) and can be answered from the supplied source text. learningOutcomes must contain only such objectives, never vague aims like \"understand the topic\". Give every topic a questionCount big enough to assess its objectives (at least one question per objective when the total number of questions allows). The Bloom distribution of a topic must follow the action verbs of its objectives. Bloom levels are teacher-only information inside this blueprint and must never appear in student-facing text.\nUse Bloom levels ${JSON.stringify(p.levels || blooms)}. Spread topics across distinct headings and pages; do not base adjacent questions on the same paragraph. Determine topic/unit, measurable learning outcomes, source pages, Bloom distribution, planned question count and marks per topic. Counts must add to exactly ${totalQuestions}; marks must add to exactly ${totalMarks}. Section counts should match this section plan: ${JSON.stringify(p.partPlan || [])}. Return valid JSON only. Set the language field to exactly English, Somali, or Arabic according to the selected language. Schema: {"subject":"","language":"","totalMarks":${totalMarks},"totalQuestions":${totalQuestions},"coverage":[{"unit":"","topic":"","objectiveIds":["P3-O1"],"learningOutcomes":[""],"sourcePages":"","bloomDistribution":{"Remember":0,"Understand":0,"Apply":0,"Analyze":0,"Evaluate":0,"Create":0},"questionCount":0,"marks":0}],"sectionDistribution":[{"section":"","questionCount":0,"marks":0}],"qualityRules":["source traceability","no duplicate questions","marks sum exactly","Bloom alignment"],"notes":[]}.\nOCR PAGE CONTENT (complete selected PDF/OCR range; no truncation):\n${sourceText}`;
+    const prompt = `You are an expert secondary-school assessment designer. ${normalizeLang(p.examLanguage) === 'so' ? SOMALI_STYLE + ' ' : ''}Create an EXAM BLUEPRINT / TABLE OF SPECIFICATIONS before the questions are generated. Use ONLY topics, headings, facts and learning outcomes supported by the supplied OCR text and the complete page-by-page OBJECTIVE INVENTORY below. Do not invent units or learning outcomes. The inventory is the full curriculum pool, NOT a checklist that must all appear in this exam. Select a suitable subset of objectives based on the requested question count, section plan, marks, and page range. Never require every inventory objective to appear. Every selected objective ID must exist in the inventory and retain its exact PDF/OCR source page. Prefer different objectives where suitable, but the same objective may support multiple distinct questions when the blueprint allocates multiple items to it and the questions assess different aspects.\nCOMPLETE OBJECTIVE INVENTORY (built by analyzing every selected PDF/OCR page, not a truncated sample): ${inventoryJson}\nMANDATORY OUTPUT LANGUAGE: ${languageName}. Translate all displayed blueprint fields including unit, topic, learning outcomes, notes and section names into this language, even when the OCR source uses another language. Do not mix languages; only JSON keys and scientific symbols may remain unchanged. Subject: ${p.subject || ''}. Class: ${p.className || ''}. Source book: ${p.sourceTitle || ''}. Selected pages: ${JSON.stringify(p.pageRange || {})}. Total marks: ${totalMarks}. Total questions: ${totalQuestions}. Format: ${p.format || 'four-part'}.\n${isEnglishForm4(p) ? `SUBJECT-SPECIFIC PROFILE — ENGLISH FORM 4 (MANDATORY): use this profile, not a generic language-exam profile. Use only objectives/topics supported by the supplied selected-page OCR. Keep curriculum topic/objective coverage separate from the new reading passage. The original passage is only the basis for Reading Comprehension questions; Grammar, Literature and Vocabulary objectives must come from the selected textbook pages and this blueprint. Plan the national-style structure: Q1–10 Reading Comprehension, Q11–20 Grammar, Q21–30 Literature, Q31–40 Vocabulary, Q41–49 short-answer (together 50 marks), Q50 Composition (10 marks, exactly THREE clearly labelled topic choices A, B, C; student chooses ONE). Section Two Q41–49 must follow the Blueprint/TOS objectives and source pages, not the new passage, total 100 marks when the requested exam is the standard 50-question/100-mark format. Do not assign poetry, homophones or literary-device questions to the Grammar section merely to fill a count. Make the TOS question numbers, item counts and marks mathematically consistent; never invent a separate “Other” topic to hide an unmapped question.\n` : ''}${(p.passage && !isEnglishForm4(p)) ? `PASSAGE-BASED LANGUAGE EXAM: this exam will begin with an original reading passage built from the curriculum, and every question will be answered through that passage. Write the learningOutcomes as language-skill objectives taken from the CURRICULUM text itself (grammar/naxwaha and sentence structure, vocabulary and word meaning, synonyms and antonyms, plurals and word forms, rhetoric and style, spelling and punctuation) so each can be tested through a passage; reading comprehension (main idea, details, inference) may take at most 30% of the objectives.\n` : ''}OBJECTIVE-FIRST BLUEPRINT (MOST IMPORTANT): the blueprint is built around learning objectives. If the source text itself states objectives (for example headings such as Objectives, Learning outcomes, Learning objectives, \"By the end of this unit/lesson students should be able to\", \"After studying this chapter you should...\"), use those objectives first and translate them faithfully into ${languageName}. Otherwise derive 2 to 5 measurable objectives per topic from the headings and content that are really present. Each objective is ONE testable statement that starts with an observable action verb (define, state, identify, describe, explain, calculate, compare, classify, interpret, justify...) and can be answered from the supplied source text. learningOutcomes must contain only such objectives, never vague aims like \"understand the topic\". Give every topic a questionCount big enough to assess its objectives (at least one question per objective when the total number of questions allows). The Bloom distribution of a topic must follow the action verbs of its objectives. Bloom levels are teacher-only information inside this blueprint and must never appear in student-facing text.\nUse Bloom levels ${JSON.stringify(p.levels || blooms)}. Spread topics across distinct headings and pages; do not base adjacent questions on the same paragraph. Determine topic/unit, measurable learning outcomes, source pages, Bloom distribution, planned question count and marks per topic. Counts must add to exactly ${totalQuestions}; marks must add to exactly ${totalMarks}. Section counts should match this section plan: ${JSON.stringify(p.partPlan || [])}. Return valid JSON only. Set the language field to exactly English, Somali, or Arabic according to the selected language. Schema: {"subject":"","language":"","totalMarks":${totalMarks},"totalQuestions":${totalQuestions},"coverage":[{"unit":"","topic":"","objectiveIds":["P3-O1"],"learningOutcomes":[""],"sourcePages":"","bloomDistribution":{"Remember":0,"Understand":0,"Apply":0,"Analyze":0,"Evaluate":0,"Create":0},"questionCount":0,"marks":0}],"sectionDistribution":[{"section":"","questionCount":0,"marks":0}],"qualityRules":["source traceability","no duplicate questions","marks sum exactly","Bloom alignment"],"notes":[]}.\nOCR PAGE CONTENT (complete selected PDF/OCR range; no truncation):\n${sourceText}`;
 
     const models = await getGeminiModels();
     let blueprint = null, lastError = '';
@@ -2334,13 +2267,6 @@ app.post('/api/generate', async (req, res) => {
     if (!String(p.sourceText || '').trim()) {
       return res.status(400).json({ error: 'Source text is required.' });
     }
-    const requestedSubject = String(p.subject || '').trim();
-    if (!requestedSubject) return res.status(400).json({error:'Dooro ama geli hal maaddo oo keliya ka hor samaynta imtixaanka.'});
-    const bookSubjectIssue = await selectedBookSubjectIssue(p);
-    if (bookSubjectIssue) return res.status(bookSubjectIssue.status).json(bookSubjectIssue);
-    if (p.blueprint?.subject && normalizeSubjectKey(p.blueprint.subject) !== normalizeSubjectKey(requestedSubject)) {
-      return res.status(422).json({error:`Blueprint-ku wuxuu ka tirsan yahay maaddada “${p.blueprint.subject}”, laakiin maaddada la codsaday waa “${requestedSubject}”. Samee Blueprint cusub oo maaddadan keliya ah.`, validation:{ok:false,subjectMismatch:true}});
-    }
     let sourcePageCheck;
     try { sourcePageCheck = validatePageRangeSource(p.sourceText, p.pageRange, 'Generate Exam'); }
     catch (e) { return res.status(422).json({error:e.message,validation:{ok:false,pageRange:false}}); }
@@ -2350,10 +2276,11 @@ app.post('/api/generate', async (req, res) => {
     let questions = [];
     let languageReport = null;
     let passage = null;
+    let figureReport = null, examProfile = null;
 
     try {
       const generated = await aiGenerate({ ...p, count, levels, partPlan: Array.isArray(p.partPlan) ? p.partPlan : [] });
-      if (Array.isArray(generated)) { languageReport = generated.languageReport || null; passage = generated.passage || null; questions = generated.slice(0, count); }
+      if (Array.isArray(generated)) { languageReport = generated.languageReport || null; passage = generated.passage || null; figureReport = generated.figureReport || null; examProfile = generated.examProfile || null; questions = generated.slice(0, count); }
     } catch (e) {
       console.error('AI generation failed:', e.message);
       return res.status(502).json({
@@ -2439,6 +2366,8 @@ app.post('/api/generate', async (req, res) => {
       objectiveCoverage,
       validation:{ok:true,pageRange:sourcePageCheck,pageIssues:[],englishIssues:[],objectiveIssues:[],objectivePageIssues:[],objectiveCount:p.blueprint?.objectiveInventory?.objectives?.length||0,allSelectedQuestionObjectivesLinked:true},
       passage,
+      figureReport,
+      examProfile,
       languageCheck: languageReport || { fixed: 0, remaining: 0 },
       aiUsed: true
     });

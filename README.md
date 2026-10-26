@@ -135,3 +135,15 @@ Ujeeddada guud waa in la horumariyo tayada, caddaaladda iyo isku-habboonaanta im
 ## 12. Word (.docx) dhab ah
 
 Badhamada "Soo deji Word" waxay hadda sameeyaan fayl **.docx** dhab ah (`public/docx-export.js` + `public/vendor/docx.iife.js`). Jaantusyada SVG waxaa loo beddelaa sawirro PNG oo xallin sare leh, waxayna ku jiraan gudaha faylka, sidaa darteed waxay si cad ugu muuqdaan Word, LibreOffice iyo PDF. Arabic (RTL) waa la taageeraa.
+
+## 13. Habka Sawirrada Caqli-badan (cusub)
+
+Waxaa lagu daray 3 fayl oo cusub (root-ka, server.js agtiisa): `exam-profiles.js`, `figure-engine.js`, `smart-figures.js`.
+
+1. **Profile-ka qaranka** (`exam-profiles.js`): 12-ka maaddo ee sample-ka F4 2024-2025. Waxay hayaan qaab-dhismeedka (40 MCQ + qaybta 2aad), tirada sawirrada ee MCQ (`figureShare`) iyo noocyada sawirka ee maadada. Soomaali: 40 MCQ = 80 dhibcood + curis 20. `basis:'assumed'` = Arabic iyo Tarbiya si fudud ayaa loo eegay.
+2. **Nooca su'aasha** (`chooseKindForObjective`): ujeeddada casharka ayaa go'aamisa MCQ qoraal / sawir / xisaabin / koodh / qoraal.
+3. **Sawirka saxda ah** (`figure-engine.js`): AI-gu wuxuu bixiyaa SPEC (tirooyin), koodhkuna wuxuu sawiraa: vt_graph, wave, forces, right_triangle, bar/line/pie chart, data_table, logic_gate, flowchart, resistor_circuit, coord_line. Jawaabta waxaa laga xisaabiyaa sawirka (facts). Biology/Geography/map: maktabadda buugga (`book_diagrams`) ama AI-SVG, oo la calaamadeeyo "dib u eeg".
+4. **Hubinta**: SVG dhammaystiran, canvas gudaheeda, calaamado is-qaban, jawaab muujin, furaha jawaabta (waa la saxaa), sawirka loo tixraacay; iyo hubinta aragga (`/api/figures/verify-vision`) ee sawirrada AI.
+5. **Isticmaal**: Qaabka imtixaanka = "Qaabka Imtixaanka Qaranka", ama Habka sawirrada = "Caqli-badan". Haddii sawir fashilmo, su'aasha qoraalka ah ayaa hadhaysa (sawir jaban lama bixiyo).
+
+API cusub: `GET /api/exam-profile`, `POST /api/figures/render`, `POST /api/figures/verify-vision`.

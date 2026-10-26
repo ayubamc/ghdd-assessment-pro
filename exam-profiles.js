@@ -1,0 +1,269 @@
+// exam-profiles.js
+// Mabda'a 1 + 2 + 3: app-ku wuxuu ogaadaa maadada, qaabka sample-ka qaranka, iyo nooca su'aasha ku habboon casharka.
+//
+// XOGTA: waxay ka timid 12-ka sample ee Imtixaanka Qaranka F4 2024-2025 (Physics, Chemistry, Biology, Xisaab,
+// Geography, Technology, English, Business, History, Soomaali, Arabic, Tarbiya).
+//   basis = 'sampled'  -> bogagga maadadan si toos ah ayaa loo eegay (qaab-dhismeedka iyo sawirrada)
+//   basis = 'assumed'  -> maadadan si fudud ayaa loo eegay; hubi markaad isticmaalayso
+// figureShare = qaybta (min..max) su'aalaha MCQ ee sawirka ku salaysan ee sample-ka laga arkay.
+
+export const OPTION_LETTERS = {
+  latin: ['A', 'B', 'C', 'D'],
+  somali: ['B', 'T', 'J', 'X'] // Geography, History, Soomaali sample-yada ayaa adeegsaday b / t / j / x
+};
+
+// Noocyada su'aasha (Mabda'a 3)
+export const KINDS = {
+  MCQ_TEXT: 'mcq_text',          // MCQ qoraal ah
+  MCQ_FIGURE: 'mcq_figure',      // MCQ sawir ku salaysan (jaantus/graph/circuit/map)
+  MCQ_CALC: 'mcq_calc',          // MCQ xisaabin
+  MCQ_CODE: 'mcq_code',          // MCQ koodh / UI / flowchart
+  MCQ_CHART: 'mcq_chart',        // MCQ jaantus la fasirayo (chart/table/graph xog ah)
+  STRUCT_TEXT: 'struct_text',    // su'aal qoraal ah
+  STRUCT_CALC: 'struct_calc',    // su'aal xisaabin ah
+  STRUCT_FIGURE: 'struct_figure',// su'aal jaantus ku salaysan (label, qor, fasir)
+  STRUCT_CODE: 'struct_code'     // su'aal koodh/flowchart/topology
+};
+
+// Noocyada sawirka ee uu app-ku si deterministic ah u sameyn karo (sax 100%)
+export const DETERMINISTIC_FIGURES = [
+  'vt_graph', 'wave', 'forces', 'right_triangle', 'bar_chart', 'line_chart',
+  'pie_chart', 'data_table', 'logic_gate', 'flowchart', 'resistor_circuit', 'coord_line'
+];
+// Noocyada u baahan sawir AI/buug (biology, geography, map)
+export const SCHEMATIC_FIGURES = ['labelled_schematic', 'map', 'textbook_diagram'];
+
+const P = (o) => o;
+
+export const NATIONAL_PROFILES = {
+  physics: P({
+    label: 'Physics', basis: 'sampled', language: 'en', letters: 'latin',
+    mcq: { count: 40, marks: 40 }, structured: { marks: 60, count: 8 },
+    figureShare: [0.35, 0.5],
+    figures: ['vt_graph', 'wave', 'forces', 'resistor_circuit', 'logic_gate', 'coord_line', 'textbook_diagram'],
+    notes: 'MCQ-yada waxaa ku jira v-t graph, wave, circuit, force, logic gate, sawirro buug'
+  }),
+  chemistry: P({
+    label: 'Chemistry', basis: 'sampled', language: 'en', letters: 'latin',
+    mcq: { count: 40, marks: 40 }, structured: { marks: 60, count: 10 },
+    figureShare: [0.1, 0.25],
+    figures: ['bar_chart', 'data_table', 'textbook_diagram'],
+    calcShare: [0.15, 0.3],
+    notes: 'Formula qaab, pH/mole xisaabin, jaantus xaaladaha shayga, qaab-dhismeed organic'
+  }),
+  biology: P({
+    label: 'Biology', basis: 'sampled', language: 'en', letters: 'latin',
+    mcq: { count: 40, marks: 40 }, structured: { marks: 60, count: 11 },
+    figureShare: [0.12, 0.25],
+    figures: ['labelled_schematic', 'textbook_diagram', 'bar_chart', 'data_table'],
+    notes: 'Jaantus unugyada, maqaarka, neuron, ubaxa, sawirro qalab (PCR) - badanaa sawir buug'
+  }),
+  math: P({
+    label: 'Xisaab', basis: 'sampled', language: 'so', letters: 'latin',
+    mcq: { count: 40, marks: 40 }, structured: { marks: 60, count: 14 },
+    figureShare: [0.03, 0.1],
+    calcShare: [0.5, 0.75],
+    figures: ['coord_line', 'right_triangle', 'bar_chart', 'data_table'],
+    notes: 'Badanaa xisaabin; calculus, complex numbers, probability, sets; sawir yar'
+  }),
+  geography: P({
+    label: 'Geography', basis: 'sampled', language: 'so', letters: 'somali',
+    mcq: { count: 40, marks: 40 }, structured: { marks: 60, count: 12 },
+    figureShare: [0.08, 0.2],
+    figures: ['map', 'textbook_diagram', 'bar_chart', 'line_chart', 'pie_chart', 'data_table'],
+    notes: 'Khariidad Soomaaliya/Afrika, sawir tamar dabeyl, volcano; xisaabin cufnaan (qof/km²)'
+  }),
+  technology: P({
+    label: 'Technology', basis: 'sampled', language: 'en', letters: 'latin',
+    mcq: { count: 40, marks: 40 }, structured: { marks: 60, count: 8 },
+    figureShare: [0.12, 0.25],
+    figures: ['flowchart', 'data_table', 'logic_gate', 'textbook_diagram'],
+    codeShare: [0.15, 0.3],
+    notes: 'Flowchart, UI Word/Excel/PowerPoint, topology, binary, koodh (compiler, errors)'
+  }),
+  english: P({
+    label: 'English', basis: 'sampled', language: 'en', letters: 'latin',
+    mcq: { count: 40, marks: 40 }, structured: { marks: 60, count: 10 },
+    figureShare: [0, 0], figures: [],
+    passage: true,
+    notes: 'Passage (Q1-10) + Grammar + Literature + Vocabulary; sawir ma jiro'
+  }),
+  business: P({
+    label: 'Business', basis: 'sampled', language: 'en', letters: 'latin',
+    mcq: { count: 40, marks: 40 }, structured: { marks: 60, count: 6 },
+    figureShare: [0.1, 0.22],
+    calcShare: [0.1, 0.2],
+    figures: ['line_chart', 'data_table', 'bar_chart', 'textbook_diagram'],
+    notes: 'Supply curve, income statement, liability xisaabin, sawirro xafiis; jadwal demand/supply'
+  }),
+  history: P({
+    label: 'History', basis: 'sampled', language: 'so', letters: 'somali',
+    mcq: { count: 40, marks: 40 }, structured: { marks: 60, count: 15 },
+    figureShare: [0, 0.03], figures: [],
+    notes: 'MCQ qoraal ah oo keliya (taariikh, sanado, magacyo); sawir ma jiro'
+  }),
+  somali: P({
+    label: 'Soomaali', basis: 'sampled', language: 'so', letters: 'somali',
+    mcq: { count: 40, marks: 80 }, structured: { marks: 20, count: 2 },
+    figureShare: [0, 0], figures: [],
+    passage: true,
+    notes: 'Qaybta 1aad: qiidcada + MCQ luqad (40 su\'aal = 80 dhibcood); Qaybta 2aad: curis 20 dhibcood'
+  }),
+  arabic: P({
+    label: 'Arabic', basis: 'assumed', language: 'ar', letters: 'latin',
+    mcq: { count: 40, marks: 40 }, structured: { marks: 60, count: 10 },
+    figureShare: [0, 0.05], figures: [],
+    notes: 'La qiyaasay: MCQ + qoraal; hubi sample-ka'
+  }),
+  tarbiya: P({
+    label: 'Tarbiya Islaamiga', basis: 'assumed', language: 'so', letters: 'latin',
+    mcq: { count: 40, marks: 40 }, structured: { marks: 60, count: 10 },
+    figureShare: [0, 0.03], figures: [],
+    notes: 'La qiyaasay: MCQ + qoraal; hubi sample-ka'
+  })
+};
+
+const SUBJECT_PATTERNS = [
+  ['physics', /phys|fiisi|فيزياء/i],
+  ['chemistry', /chem|kimis|كيمياء/i],
+  ['biology', /biolog|bayooloj|أحياء/i],
+  ['math', /math|xisaab|رياضيات/i],
+  ['geography', /geograph|jugraaf|جغرافيا/i],
+  ['technology', /technolog|tiknooloj|computer|ict|\bit\b|تقنية/i],
+  ['english', /english|ingiriis/i],
+  ['business', /business|ganacsi|تجارة/i],
+  ['history', /histor|taariikh|تاريخ/i],
+  ['somali', /soomaali|somali(?!a\b)/i],
+  ['arabic', /arab|carab|عربي/i],
+  ['tarbiya', /tarbiy|islaam|islam|تربية/i]
+];
+
+export function detectSubject(subject = '', className = '', sourceTitle = '') {
+  const hay = `${subject} ${sourceTitle} ${className}`;
+  for (const [key, re] of SUBJECT_PATTERNS) if (re.test(hay)) return key;
+  return '';
+}
+
+export function getProfile(subject, className, sourceTitle) {
+  const key = detectSubject(subject, className, sourceTitle);
+  return key ? { key, ...NATIONAL_PROFILES[key] } : null;
+}
+
+// ---- Mabda'a 3: nooca su'aasha ee casharka ku habboon ---------------------------------------------------------
+// Ujeeddada (objective) iyo ereyga ficilka ayaa go'aamiya nooca su'aasha + nooca sawirka.
+const FIGURE_RULES = [
+  // [subjects, regex on objective/topic, figureKind, askFacts]
+  [['physics'], /velocity.?time|v-?t graph|speed.?time|displacement.?time|acceler|uniform motion|kinematic|dhaqdhaqaaq/i, 'vt_graph', ['constant_interval', 'max_value', 'acceleration']],
+  [['physics'], /amplitude|wavelength|frequency|period|wave|hirar|mowjad|sound|light wave/i, 'wave', ['amplitude', 'period', 'frequency']],
+  [['physics'], /resultant|net force|balanced|unbalanced|tug|newton'?s (first|second|third)|force/i, 'forces', ['resultant', 'direction']],
+  [['physics'], /series|parallel|resist|ohm|circuit|current|voltage|potential diff/i, 'resistor_circuit', ['equivalent_resistance', 'total_current']],
+  [['physics', 'technology'], /logic gate|and gate|or gate|not gate|nand|nor|boolean|digital electronics/i, 'logic_gate', ['gate_name']],
+  [['technology'], /flow ?chart|algorithm|decision symbol|process symbol|program flow|pseudocode/i, 'flowchart', ['symbol_type']],
+  [['math', 'physics'], /straight line|gradient|slope|linear (graph|equation)|y ?= ?mx|coordinate/i, 'coord_line', ['gradient', 'y_intercept']],
+  [['math'], /pythag|hypotenuse|right.?angle|trigonomet|triangle/i, 'right_triangle', ['hypotenuse', 'area', 'perimeter']],
+  [['business', 'geography', 'history', 'chemistry', 'biology', 'math'], /trend|compare|data|statistic|bar chart|graph|chart|production|rainfall|population|sales|profit|price|demand|supply/i, 'bar_chart', ['max_label', 'min_label', 'total', 'difference']],
+  [['geography', 'business'], /pie|percentage share|proportion/i, 'pie_chart', ['largest_share', 'smallest_share']],
+  [['business', 'technology', 'geography'], /table|income statement|balance sheet|schedule/i, 'data_table', ['cell_lookup', 'column_total']],
+  [['biology', 'chemistry', 'geography'], /label|parts? of|structure of|diagram|cell|organ|neuron|flower|skin|heart|map|region|volcano|rock cycle/i, 'labelled_schematic', ['part_identification']]
+];
+
+const CALC_RX = /calculate|compute|solve|find the (value|area|volume|mass|force|speed|density|ph|concentration|molar)|evaluate|differentiate|integrate|simplify|probability|xisaabi|ka dhig/i;
+const CODE_RX = /flow ?chart|algorithm|program|code|binary|compiler|software|hardware|network|topology|excel|word|powerpoint|database|html|python|ip address|osi|security|malware/i;
+const WRITTEN_RX = /explain|describe|discuss|compare|differenti|outline|justify|evaluate|importance|advantages|disadvantages|fasir|sharax|qor|xus/i;
+
+function seededRand(seed) {
+  let s = (seed >>> 0) || 1;
+  return () => { s = (s * 1664525 + 1013904223) >>> 0; return s / 4294967296; };
+}
+function hashStr(str) { let h = 2166136261; for (const c of String(str)) { h ^= c.charCodeAt(0); h = Math.imul(h, 16777619); } return h >>> 0; }
+
+// Go'aami nooca su'aasha ee u dhigma ujeeddo gaar ah.
+export function chooseKindForObjective({ profileKey, objective = '', topic = '', type = 'MCQ', bloom = '' }) {
+  const text = `${objective} ${topic}`;
+  const isMcq = /mcq|multiple/i.test(type);
+  const prof = NATIONAL_PROFILES[profileKey] || null;
+  const allowed = prof ? new Set(prof.figures) : new Set();
+  let figure = null, facts = [];
+  for (const [subjects, rx, kind, askFacts] of FIGURE_RULES) {
+    if (!subjects.includes(profileKey)) continue;
+    if (!rx.test(text)) continue;
+    // Kaliya sawirrada ku jira profile-ka maadada ayaa la isticmaalaa (tusaale History/English sawir ma yeelan)
+    const okKind = allowed.has(kind) || (kind === 'labelled_schematic' && (allowed.has('textbook_diagram') || allowed.has('map')));
+    if (!okKind) continue;
+    figure = kind; facts = askFacts; break;
+  }
+  if (figure === 'labelled_schematic' && prof && !allowed.has('labelled_schematic') && !allowed.has('textbook_diagram')) figure = null;
+  const calc = CALC_RX.test(text);
+  const code = CODE_RX.test(text) && profileKey === 'technology';
+  if (isMcq) {
+    if (figure) return { kind: KINDS.MCQ_FIGURE, figure, askFacts: facts, deterministic: DETERMINISTIC_FIGURES.includes(figure) };
+    if (calc) return { kind: KINDS.MCQ_CALC };
+    if (code) return { kind: KINDS.MCQ_CODE };
+    return { kind: KINDS.MCQ_TEXT };
+  }
+  if (figure && !WRITTEN_RX.test(text)) return { kind: KINDS.STRUCT_FIGURE, figure, askFacts: facts, deterministic: DETERMINISTIC_FIGURES.includes(figure) };
+  if (calc) return { kind: KINDS.STRUCT_CALC };
+  if (code) return { kind: KINDS.STRUCT_CODE };
+  return { kind: KINDS.STRUCT_TEXT };
+}
+
+// Qorshee dhammaan su'aalaha: sample-ka qaranka ayaa go'aaminaya TIRADA sawirrada; casharku wuxuu go'aaminayaa NOOCA.
+// items: [{index, type, objective, topic}]
+export function planSlots({ profileKey, items, seed = 1 }) {
+  const prof = NATIONAL_PROFILES[profileKey] || null;
+  const rnd = seededRand(hashStr(`${profileKey}:${seed}:${items.length}`));
+  const mcqs = items.filter((x) => /mcq|multiple/i.test(x.type || ''));
+  const slots = items.map((it) => ({ index: it.index, ...chooseKindForObjective({ profileKey, ...it }) }));
+  if (!prof) return slots;
+
+  // 1) Tirada sawirrada MCQ: ku dhaw sample-ka qaranka (figureShare)
+  const [lo, hi] = prof.figureShare || [0, 0];
+  const targetFigs = mcqs.length ? Math.round(mcqs.length * (lo + (hi - lo) * rnd())) : 0;
+  const figSlots = slots.filter((s) => s.kind === KINDS.MCQ_FIGURE);
+  // Ka jar haddii casharku ku dhex yaalo sawirro ka badan inta sample-ku sheegayo
+  if (figSlots.length > targetFigs) {
+    const drop = figSlots.slice(targetFigs).filter((_, i) => i % 1 === 0);
+    for (const s of drop) { s.kind = KINDS.MCQ_TEXT; delete s.figure; delete s.askFacts; delete s.deterministic; }
+  }
+  // 2) Haddii ay yar yihiin, ka dhig kuwa u dhow sawir (kaliya haddii maadadu sawir leedahay)
+  const have = slots.filter((s) => s.kind === KINDS.MCQ_FIGURE).length;
+  if (have < targetFigs && prof.figures.length) {
+    const preferred = prof.figures.filter((f) => DETERMINISTIC_FIGURES.includes(f));
+    const pool = slots.filter((s) => s.kind === KINDS.MCQ_TEXT || s.kind === KINDS.MCQ_CALC);
+    let need = targetFigs - have;
+    // kala firdhi: ha la isku xirin su'aalo is-xigta
+    for (let i = 0; i < pool.length && need > 0; i += Math.max(1, Math.floor(pool.length / (need + 1)))) {
+      const s = pool[i]; if (!s || s.kind === KINDS.MCQ_FIGURE) continue;
+      const f = preferred.length ? preferred[Math.floor(rnd() * preferred.length)] : (prof.figures[0] || null);
+      if (!f) break;
+      Object.assign(s, { kind: KINDS.MCQ_FIGURE, figure: f, askFacts: defaultFacts(f), deterministic: DETERMINISTIC_FIGURES.includes(f), forced: true });
+      need--;
+    }
+  }
+  // 3) Su'aalaha qoran (structured): sawirrada ha ka badnaan ~25% (sample-ka qaranka sawirrada badankoodu waa MCQ)
+  const structFig = slots.filter((s) => s.kind === KINDS.STRUCT_FIGURE);
+  const structTotal = slots.filter((s) => /^struct/.test(s.kind)).length || 1;
+  const maxStructFig = prof.figureShare[1] > 0.1 ? Math.max(1, Math.round(structTotal * 0.25)) : (prof.figureShare[1] > 0 ? 1 : 0);
+  structFig.slice(maxStructFig).forEach((s) => { s.kind = KINDS.STRUCT_TEXT; delete s.figure; delete s.askFacts; delete s.deterministic; });
+  return slots;
+}
+
+export function defaultFacts(figure) {
+  const rule = FIGURE_RULES.find((r) => r[2] === figure);
+  return rule ? rule[3] : [];
+}
+
+export function describeSlot(slot) {
+  const tag = {
+    [KINDS.MCQ_TEXT]: 'MCQ qoraal ah (sawir la\'aan)',
+    [KINDS.MCQ_FIGURE]: `MCQ sawir ku salaysan (${slot.figure})`,
+    [KINDS.MCQ_CALC]: 'MCQ xisaabin (tallaabo yar, jawaab tiro ah)',
+    [KINDS.MCQ_CODE]: 'MCQ koodh / flowchart / UI',
+    [KINDS.MCQ_CHART]: 'MCQ jaantus xog',
+    [KINDS.STRUCT_TEXT]: 'su\'aal qoraal ah',
+    [KINDS.STRUCT_CALC]: 'su\'aal xisaabin oo tallaabo-tallaabo ah',
+    [KINDS.STRUCT_FIGURE]: `su'aal sawir ku salaysan (${slot.figure})`,
+    [KINDS.STRUCT_CODE]: 'su\'aal koodh / flowchart'
+  }[slot.kind];
+  return tag || slot.kind;
+}
