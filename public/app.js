@@ -6,7 +6,6 @@ const CHUNK_BYTES = 4 * 1024 * 1024;
 const blooms = ['Remember','Understand','Apply','Analyze','Evaluate','Create'];
 
 let books = [];
-let nationalExamProfiles = [];
 let questions = [];
 let questionBank = [];
 let exams = [];
@@ -362,7 +361,6 @@ async function loadBooks(){
   const box=$('booksList');
   box.innerHTML='<div class="item">Buugaagta waa la soo rarayaa...</div>';
   try{
-    try{const profileData=await api('/api/national-exam-profiles',{method:'GET'});nationalExamProfiles=profileData.profiles||[];}catch(profileError){console.warn('National sample profiles unavailable:',profileError.message);}
     const d=await api('/api/books',{method:'GET'});
     books=d.books||[];
     if($('diagramBook')){const prev=$('diagramBook').value;$('diagramBook').innerHTML='<option value="">Dooro buug...</option>'+books.map(b=>`<option value="${esc(b.id)}">${esc(b.title)} (${b.page_count||'?'} bog)</option>`).join('');if(prev&&books.some(b=>String(b.id)===prev))$('diagramBook').value=prev;}
@@ -399,28 +397,8 @@ async function loadBooks(){
   }
 }
 $('refreshBooks').onclick=loadBooks;
-['sourceBook','startPage','endPage','genTotalMarks','genCount','genFormat','diagramCount','visualMode','examLanguage','genLevels'].forEach(id=>{const el=$(id);if(el)el.addEventListener('change',()=>{currentExamBlueprint=null;currentExamBlueprintKey='';});});
-$('sourceBook')?.addEventListener('change',()=>{const book=books.find(b=>String(b.id)===String($('sourceBook').value));$('genSubject').value=book?.subject||'';renderNationalProfileStatus($('genSubject').value);currentExamBlueprint=null;currentExamBlueprintKey='';});
-$('genSubject')?.addEventListener('input',()=>renderNationalProfileStatus($('genSubject').value));
-$('visualMode')?.addEventListener('change',()=>{const manual=$('visualMode').value==='manual';$('diagramCount').disabled=!manual;});
-if($('diagramCount')&&$('visualMode'))$('diagramCount').disabled=$('visualMode').value!=='manual';
+['sourceBook','startPage','endPage','genTotalMarks','genCount','genFormat','diagramCount','examLanguage','genLevels'].forEach(id=>{const el=$(id);if(el)el.addEventListener('change',()=>{currentExamBlueprint=null;currentExamBlueprintKey='';});});
 
-
-function normalizeSubjectClient(subject){return String(subject||'').toLowerCase().normalize('NFKD').replace(/[\u0300-\u036f]/g,'').replace(/[^\p{L}\p{N}]+/gu,' ').trim().replace(/mathematics/g,'math').replace(/af soomaali/g,'soomaali').replace(/ingiriis/g,'english').replace(/carabi/g,'arabic').replace(/fiisigis/g,'physics').replace(/kiimiko/g,'chemistry').replace(/bayooloji/g,'biology').replace(/juqraafi/g,'geography').replace(/taariikh/g,'history').replace(/ganacsi/g,'business').replace(/teknooloji/g,'technology').replace(/tarbiyah/g,'tarbiya');}
-
-function canonicalSubjectClient(subject){
-  const s=String(subject||'').toLowerCase().normalize('NFKD').replace(/[\u0300-\u036f]/g,'').trim();
-  const rules=[['soomaali',/soomaali|somali/],['english',/english|ingiriis/],['arabic',/arabic|carabi|العربية|عربي/],['xisaab',/xisaab|math|رياضيات|حساب/],['physics',/physics|fiisigis|فيزياء/],['chemistry',/chemistry|kiimiko|كيمياء/],['biology',/biology|bayooloji|بيولوجيا|احياء/],['geography',/geography|juqraafi|جغرافيا/],['history',/history|taariikh|تاريخ/],['business',/business|ganacsi|commerce|تجارة/],['technology',/technology|teknooloji|ict|computer studies|تقنية/],['tarbiya',/tarbiya|tarbiyah|islamic|diin|تربية/]];
-  return rules.find(([,re])=>re.test(s))?.[0]||normalizeSubjectClient(subject);
-}
-function renderNationalProfileStatus(subject){
-  const el=$('nationalProfileStatus');if(!el)return;
-  const key=canonicalSubjectClient(subject);
-  const profile=nationalExamProfiles.find(p=>canonicalSubjectClient(p.subject)===key);
-  if(!subject){el.textContent='Dooro buug si loo aqoonsado sample-ka qaranka ee maaddada.';return;}
-  if(!profile){el.textContent=`Sample gaar ah lama aqoonsan maaddada “${subject}”; nidaamku wuxuu raaci doonaa buugga iyo Blueprint-ka.`;return;}
-  el.textContent=`Sample-ka qaranka waa la aqoonsaday: ${profile.subject} · Form 4 · ${profile.pageCount} bog. ${profile.sampleStyleSummary||''}`;
-}
 
 function detectExamLanguage(source){
   const text=String(source||'');
@@ -506,6 +484,38 @@ async function diagramSvgToPng(svg){
 }
 
 function isEnglishF4Exam(subject,className){return /\benglish\b|ingiriis/i.test(String(subject||'')) && /form\s*4|form\s*four|f4|grade\s*12|secondary\s*4/i.test(String(className||''));}
+function figureNoteHtml(q,withAnswers,lang){
+  if(!withAnswers||!q.figureMeta)return '';
+  const m=q.figureMeta,c=q.figureCheck;
+  const how={deterministic:'sawir la xisaabiyey (jawaabta waa la xaqiijiyey)',library:'sawir ka yimid maktabadda buugga','ai-svg':'sawir AI sameeyey'}[m.method]||m.method;
+  let msg=`🖼 ${esc(how)}${m.repaired?' · furaha jawaabta waa la saxay':''}`;
+  if(m.needsReview)msg+=c?(c.ok?' · hubinta aragga: ✔':` · ⚠ ${esc((c.flags||[]).join('; '))}`):' · ⚠ dib u eeg sawirka ka hor isticmaalka';
+  return `<div class="no-print" style="font-size:12px;color:#555;margin-top:4px">${msg}</div>`;
+}
+// Hubinta aragga (Mabda'a 5) ee sawirrada AI/maktabad: PNG-ga browser-ku wuu sameeyaa, server-kuna AI-ga ardayga ayuu u dirayaa
+async function verifyFiguresVisually(items,lang){
+  for(const q of items){
+    if(!q.figureMeta||!q.figureMeta.needsReview||!q.diagramSvg||!(q.options||[]).length)continue;
+    try{
+      const png=await diagramSvgToPng(q.diagramSvg); if(!png)continue;
+      q.figureCheck=await api('/api/figures/verify-vision',{method:'POST',body:JSON.stringify({question:q.text,options:q.options,answer:q.answer,pngDataUrl:png,lang})});
+    }catch(e){q.figureCheck={ok:false,flags:['hubinta aragga ma shaqayn: '+e.message]};}
+  }
+}
+let nationalProfile=null;
+async function loadNationalProfile(subject,className,title){
+  nationalProfile=null;
+  try{const r=await api(`/api/exam-profile?subject=${encodeURIComponent(subject||'')}&className=${encodeURIComponent(className||'')}&title=${encodeURIComponent(title||'')}`,{method:'GET'});nationalProfile=r.profile||null;}catch(e){console.warn('Exam profile unavailable:',e.message);}
+  return nationalProfile;
+}
+function nationalSpecs(lang,totalCount){
+  const pr=nationalProfile; if(!pr)return null;
+  // Qaab-dhismeedka iyo SAAMIGA oo keliya ayaa laga qaadaa sample-ka; tirada su'aalaha iyo dhibcaha waa kuwa adigu dejisay.
+  const mc=pr.mcq.count, sc=Math.max(1,pr.structured.count);
+  let nM=Math.round(totalCount*mc/(mc+sc)); nM=Math.min(totalCount-1,Math.max(1,nM));
+  const tot=(pr.mcq.marks+pr.structured.marks)||100;
+  return [{section:examText(lang,'mcq'),type:'MCQ',count:nM,weight:pr.mcq.marks/tot},{section:examText(lang,'structured'),type:'Structured',count:totalCount-nM,weight:pr.structured.marks/tot}];
+}
 function makePartPlan(totalCount,totalMarks,format,diagramCount,lang='en',passageMode=false,subject='',className=''){
   const englishNational = isEnglishF4Exam(subject,className);
   const specs = englishNational && totalCount >= 20 && totalMarks === 100
@@ -534,6 +544,12 @@ function makePartPlan(totalCount,totalMarks,format,diagramCount,lang='en',passag
         {section:examText(lang,'matching'),type:'Matching',ratio:.045,weight:.1},
         {section:examText(lang,'structured'),type:'Structured',ratio:.273,weight:.6}
       ];
+  const natSpecs=format==='national'?nationalSpecs(lang,totalCount):null;
+  if(natSpecs){
+    const rawM=natSpecs.map(s=>totalMarks*s.weight),mk=rawM.map(Math.floor);let left=totalMarks-mk.reduce((x,y)=>x+y,0);
+    rawM.map((v,i)=>({i,rem:v-Math.floor(v)})).sort((x,y)=>y.rem-x.rem).forEach(x=>{if(left>0){mk[x.i]++;left--;}});
+    return natSpecs.map((sp,i)=>({section:sp.section,type:sp.type,ratio:0,weight:sp.weight,count:sp.count,targetMarks:mk[i]}));
+  }
   const raw=specs.map(s=>totalCount*s.ratio),counts=raw.map(Math.floor);
   let left=totalCount-counts.reduce((a,b)=>a+b,0);
   raw.map((v,i)=>({i,rem:v-Math.floor(v)})).sort((a,b)=>b.rem-a.rem).forEach((x)=>{if(left>0){counts[x.i]++;left--;}});
@@ -712,7 +728,7 @@ $('makeExamBlueprint').onclick=async()=>{
   const totalMarks=Number($('genTotalMarks').value)||100;
   const countText=$('genCount').value.trim(), count=countText===''?null:Number(countText);
   const levels=Array.from($('genLevels').selectedOptions).map(o=>o.value);
-  const diagramCount=Number($('diagramCount').value), visualMode=$('visualMode')?.value||'auto', format=$('genFormat').value;
+  const diagramCount=Number($('diagramCount').value), format=$('genFormat').value;
   const chosen=document.getElementById('examLanguage')?.value||'en';
   if(!id)return alert('Marka hore dooro buugga OCR.');
   if(!Number.isInteger(start)||!Number.isInteger(end)||start<1||end<start)return alert('Hubi bogagga bilowga iyo dhammaadka.');
@@ -724,13 +740,15 @@ $('makeExamBlueprint').onclick=async()=>{
     const book=books.find(b=>String(b.id)===String(id));
     const subject=$('genSubject').value.trim()||$('bookSubject').value.trim()||book?.subject||'';
     const className=$('genClass').value.trim();
-    const effectiveCount=count===null?(isEnglishF4Exam(subject,className)&&totalMarks===100?50:Math.min(50,Math.max(10,Math.round(totalMarks*.44)))):count;
+    if(format==='national'){const np=await loadNationalProfile(subject,className,d.title);if(!np)throw new Error('Maadadan sample-ka qaranka lagama helin. Hubi magaca maadada.');}
+    const effectiveCount=(count===null?(isEnglishF4Exam(subject,className)&&totalMarks===100?50:Math.min(50,Math.max(10,Math.round(totalMarks*.44)))):count);
     const lang=chosen;
     const bpSubject=$('genSubject').value.trim()||$('bookSubject').value.trim()||books.find(b=>String(b.id)===String(id))?.subject||'';
-    const partPlan=makePartPlan(effectiveCount,totalMarks,format,diagramCount,lang,false,bpSubject,className);
+    const smartBp=format==='national'||($('figureMode')||{}).value==='smart';
+    const partPlan=makePartPlan(effectiveCount,totalMarks,format,smartBp?0:diagramCount,lang,false,bpSubject,className);
     const key=examBlueprintKey(id,start,end,totalMarks,effectiveCount,format,chosen,levels);
     const usePassageBp=resolvePassageMode(subject);
-    const bp=await requestExamBlueprint(sourceText,{subject,sourceBookId:id,className,sourceTitle:d.title,pageRange:{start,end},totalMarks,count:effectiveCount,format,diagramCount:usePassageBp?0:(visualMode==='manual'?diagramCount:0),visualMode:usePassageBp?'none':visualMode,partPlan,levels,examLanguage:chosen,passage:usePassageBp,blueprintKey:key});
+    const bp=await requestExamBlueprint(sourceText,{subject,className,sourceTitle:d.title,pageRange:{start,end},totalMarks,count:effectiveCount,format,diagramCount:(usePassageBp||smartBp)?0:diagramCount,partPlan,levels,examLanguage:chosen,passage:usePassageBp,blueprintKey:key});
     status.textContent=`Blueprint waa diyaar: ${bp.coverage.length} mawduuc ayaa la aqoonsaday.`;
   }catch(e){status.textContent='Khalad: '+e.message;alert('AI Blueprint: '+e.message);}
 };
@@ -744,23 +762,20 @@ $('generateExam').onclick=async()=>{
   const totalMarks=Number($('genTotalMarks').value)||100;
   const levels=Array.from($('genLevels').selectedOptions).map(o=>o.value);
   const diagramCount=Number($('diagramCount').value);
-  const visualMode=$('visualMode')?.value||'auto';
-  const manualDiagramCount=visualMode==='manual'?diagramCount:0;
   if(!id)return alert('Dooro buug.');
   if(!Number.isInteger(start)||!Number.isInteger(end)||start<1||end<start)
     return alert('Hubi bogga bilowga iyo dhammaadka.');
   if(count!==null&&(!Number.isInteger(count)||count<4||count>50))return alert('Qaabka afarta qaybood ah, tirada su’aaluhu waa 4 ilaa 50; ama madhan uga tag.');
   if(!Number.isInteger(totalMarks)||totalMarks<10||totalMarks>300)return alert('Wadarta dhibcuhu waa inay u dhexaysaa 10 ilaa 300.');
-  if(visualMode==='manual'&&(!Number.isInteger(diagramCount)||diagramCount<0||diagramCount>30))return alert('Tirada jaantusyadu waa 0 ilaa 30.');
+  if(!Number.isInteger(diagramCount)||diagramCount<0||diagramCount>30)return alert('Tirada jaantusyadu waa 0 ilaa 30.');
   if(!levels.length)return alert('Dooro ugu yaraan hal heer Bloom.');
-  const selectedBook=books.find(b=>String(b.id)===String(id));
-  const subjectForPlan=$('genSubject').value.trim()||$('bookSubject').value.trim()||selectedBook?.subject||'';
-  if(selectedBook?.subject && subjectForPlan && normalizeSubjectClient(selectedBook.subject)!==normalizeSubjectClient(subjectForPlan))return alert(`Maaddada la codsaday (${subjectForPlan}) kuma waafaqsana maaddada buugga la doortay (${selectedBook.subject}). Dooro buugga saxda ah ama sax maaddada buugga.`);
+  const subjectForPlan=$('genSubject').value.trim()||$('bookSubject').value.trim()||books.find(b=>String(b.id)===String(id))?.subject||'';
   const classForPlan=$('genClass').value.trim();
-  const effectiveCount=count===null?(isEnglishF4Exam(subjectForPlan,classForPlan)&&totalMarks===100?50:Math.min(50,Math.max(10,Math.round(totalMarks*0.44)))):count;
   const format=$('genFormat').value;
+  if(format==='national'){const np=await loadNationalProfile(subjectForPlan,classForPlan,'');if(!np)return alert('Maadadan sample-ka qaranka lagama helin. Hubi magaca maadada (Physics, Chemistry, Biology, Xisaab, Geography, Technology, English, Business, History, Soomaali...).');}
+  const effectiveCount=(count===null?(isEnglishF4Exam(subjectForPlan,classForPlan)&&totalMarks===100?50:Math.min(50,Math.max(10,Math.round(totalMarks*0.44)))):count);
   let partPlan;
-  try{partPlan=makePartPlan(effectiveCount,totalMarks,format,manualDiagramCount,'en',false,subjectForPlan,classForPlan);}
+  try{partPlan=makePartPlan(effectiveCount,totalMarks,format,(format==='national'||($('figureMode')||{}).value==='smart')?0:diagramCount,'en',false,subjectForPlan,classForPlan);}
   catch(planError){return alert(planError.message);}
 
   const status=$('generateStatus');
@@ -779,7 +794,8 @@ $('generateExam').onclick=async()=>{
      const subject=$('genSubject').value.trim()||$('bookSubject').value.trim()||book?.subject||'';
      const className=$('genClass').value.trim();
      const usePassage=resolvePassageMode(subject);
-     const diagramCountUsed=usePassage?0:manualDiagramCount;
+     const figureMode=(format==='national'||($('figureMode')||{}).value==='smart')?'smart':'manual';
+     const diagramCountUsed=(usePassage||figureMode==='smart')?0:diagramCount;
      partPlan=makePartPlan(effectiveCount,totalMarks,format,diagramCountUsed,examLanguage,usePassage,subject,className);
      if(usePassage){const mcqPart=partPlan.find(x=>x.type==='MCQ');if(mcqPart)mcqPart.section=`${mcqPart.section} — ${examText(examLanguage,'mcqPassageNote')}`;}
     if(!sourceText.trim())throw new Error('Qoraal lagama helin bogagga la doortay.');
@@ -790,14 +806,14 @@ $('generateExam').onclick=async()=>{
     }
     if(!currentExamBlueprint || currentExamBlueprintKey!==blueprintKeyNow){
       status.textContent='Tallaabada 1/2: AI ayaa marka hore samaynaya Exam Blueprint...';
-      const bp=await requestExamBlueprint(sourceText,{subject,sourceBookId:id,className,sourceTitle:d.title,pageRange:{start,end},totalMarks,count:effectiveCount,format,diagramCount:diagramCountUsed,visualMode:usePassage?'none':visualMode,partPlan,levels,examLanguage,passage:usePassage,blueprintKey:blueprintKeyNow});
+      const bp=await requestExamBlueprint(sourceText,{subject,className,sourceTitle:d.title,pageRange:{start,end},totalMarks,count:effectiveCount,format,diagramCount:diagramCountUsed,partPlan,levels,examLanguage,passage:usePassage,blueprintKey:blueprintKeyNow});
       if(!bp)throw new Error('Blueprint lama samayn.');
     }
     status.textContent='Tallaabada 2/2: AI ayaa Blueprint-ka raacaya si uu u sameeyo su’aalaha...';
 
     const generated=await apiJob('/api/generate',{
-        sourceText,subject,sourceBookId:id,className,count:effectiveCount,questionCount:effectiveCount,
-        totalMarks,format,diagramCount:diagramCountUsed,visualMode:usePassage?'none':visualMode,passage:usePassage,passageTheme:(($('genPassageTheme')||{}).value||''),partPlan,blueprint:currentExamBlueprint,levels,type:'Isku-dhafan',sourceSelectionRule:'Spread questions across different headings/topics. Do not take consecutive questions from the same paragraph or same heading. Prefer passages separated by at least two headings or at least one full page. Record source pages and topic/heading for each question.',examLanguage,
+        sourceText,subject,className,count:effectiveCount,questionCount:effectiveCount,
+        totalMarks,format,diagramCount:diagramCountUsed,figureMode,bookId:id,passage:usePassage,passageTheme:(($('genPassageTheme')||{}).value||''),partPlan,blueprint:currentExamBlueprint,levels,type:'Isku-dhafan',sourceSelectionRule:'Spread questions across different headings/topics. Do not take consecutive questions from the same paragraph or same heading. Prefer passages separated by at least two headings or at least one full page. Record source pages and topic/heading for each question.',examLanguage,
         sourceTitle:d.title,
         pageRange:{start,end}
       },sec=>{status.textContent='Tallaabada 2/2: AI ayaa Blueprint-ka raacaya si uu u sameeyo su’aalaha... ('+sec+' ilbiriqsi). Ha xirin bogga.';});
@@ -826,7 +842,7 @@ $('generateExam').onclick=async()=>{
       section:q.section||'',
       options:Array.isArray(q.options)?q.options.map(o=>noBloom(String(o))):[],
       matches:Array.isArray(q.matches)?q.matches.map(m=>({...m,question:noBloom(String(m?.question||'')),answer:noBloom(String(m?.answer||''))})):[],
-      diagram:q.diagram||'',diagramSvg:q.diagramSvg||'',diagramPng:q.diagramPng||'',
+      diagram:q.diagram||'',diagramSvg:q.diagramSvg||'',diagramPng:q.diagramPng||'',figureMeta:q.figureMeta||null,
       distractor:noBloom(String(q.distractor||'')),
       keyPoints:Array.isArray(q.keyPoints)?q.keyPoints.map(x=>noBloom(String(x&&typeof x==='object'?(x.point||x.text||''):x||''))).filter(Boolean):[],
       sourcePages:q.sourcePages||''
@@ -851,22 +867,20 @@ $('generateExam').onclick=async()=>{
     const langCheck=generated.languageCheck||{fixed:0,remaining:0};
     const qualityHtml=`<div class="panel"><h3>📊 Exam Quality Report — Preliminary</h3><div class="grid"><div class="stat"><b>${Number(preflight.average)||0}/100</b><br>Question quality score</div><div class="stat"><b>${Math.round(traceable/Math.max(1,normalized.length)*100)}%</b><br>Source traceability</div><div class="stat"><b>${topicsCovered}</b><br>Topics represented</div><div class="stat"><b>${objCov.total?objCov.percent+'%':'—'}</b><br>Objectives covered (${objCov.covered}/${objCov.total})</div><div class="stat"><b>${qualityIssues}</b><br>Automated issues to review</div></div>${objCov.uncovered&&objCov.uncovered.length?`<p class="muted"><strong>Objectives aan weli su’aal lahayn:</strong> ${objCov.uncovered.map(esc).join(' · ')}. Kordhi tirada su’aalaha ama dib u samee imtixaanka si loo daboolo.</p>`:''}${langCheck.remaining?`<p class="muted">⚠️ ${Number(langCheck.remaining)} su’aalood waxay laga yaabaa inay weli ku jiraan erayo luqad kale ah; dib u eeg ka hor daabacaadda.</p>`:''}<p><strong>Blueprint coverage:</strong> ${(currentExamBlueprint?.coverage||[]).length} topics · ${Number(currentExamBlueprint?.totalMarks)||total} planned marks · ${Number(currentExamBlueprint?.totalQuestions)||normalized.length} planned questions.</p><p class="muted">Warbixintani waa hubin hordhac ah; macallinku waa inuu xaqiijiyaa saxnaanta aqooneed, jawaabaha iyo waafaqsanaanta manhajka ka hor daabacaadda.</p>${(preflight.questions||[]).map((q,idx)=>({q,idx})).filter(x=>x.q.quality?.issues?.length).slice(0,10).map(x=>`<p>Q${x.idx+1}: ${esc((x.q.quality.issues||[]).join('; '))}</p>`).join('')}</div>`;
     out.innerHTML=`<div class="notice"><strong>Imtixaanka oo dhammaystiran ayaa diyaar ah.</strong><br>Wadarta dhibcaha: ${total}/${total}. Su’aalaha si toos ah ayaa loogu daray imtixaanka; looma baahna inaad mid-mid u riixdo.<br>Dib u eeg su’aalaha, kadib dooro daabacaadda imtixaanka ama answer key-ga.</div>
-      <p class="notice"><strong>Tallaabada khasabka ah:</strong> dib u eeg jawaabaha, dhibcaha, su’aalaha iyo sawirrada. Soo dejinta iyo kaydintu way furnaanayaan marka aad xaqiijiso dib-u-eegista.</p><div class="paper-tools no-print"><button id="approveGeneratedExam" class="green">✓ Waxaan hubiyey su’aalaha iyo sawirrada</button><button class="green word-dl" data-which="exam" disabled>📄 Word .docx — Imtixaanka</button><button class="green word-dl" data-which="key" disabled>📄 Word .docx — Answer key</button><button class="green word-dl" data-which="both" disabled>📄 Word .docx — Labadaba</button><button id="previewPrintExam" class="secondary" disabled>🖨️ Daabac imtixaanka</button><button id="previewPrintKey" class="secondary" disabled>🔑 Daabac answer key</button><button id="previewPrintBoth" class="secondary" disabled>Daabac labadaba</button><button id="saveGeneratedExam" class="green" disabled>💾 Keydi imtixaanka</button></div>
+      <div class="paper-tools no-print"><button class="green word-dl" data-which="exam">📄 Word .docx — Imtixaanka</button><button class="green word-dl" data-which="key">📄 Word .docx — Answer key</button><button class="green word-dl" data-which="both">📄 Word .docx — Labadaba</button><button id="previewPrintExam" class="secondary">🖨️ Daabac imtixaanka</button><button id="previewPrintKey" class="secondary">🔑 Daabac answer key</button><button id="previewPrintBoth" class="secondary">Daabac labadaba</button><button id="saveGeneratedExam" class="green">💾 Keydi imtixaanka</button></div>
       <div class="item"><strong>${esc(examTitle)}</strong><p>${esc(subject)} · ${esc(className)} · ${total} dhibcood · ${normalized.length} su’aalood</p><p>Su’aalaha si toos ah ayaa loogu daray imtixaanka.</p></div>${qualityHtml}${passage?`<div class="passage-block" ${lang==='ar'?'dir="rtl"':''}><div class="passage-head">${esc(examText(lang,'passageLabel'))}</div>${passage.title?`<p class="passage-title">${esc(passage.title)}</p>`:''}<div class="passage-body">${String(passage.text).split(/\n+/).filter(x=>x.trim()).map(x=>`<p>${esc(x)}</p>`).join('')}</div></div>`:''}${(passage&&passage.anchors&&passage.anchors.length)?`<details class="item"><summary>🎯 Objectives-ka ku dhex jira sheekada (macallinka kaliya)</summary>${passage.anchors.map(a=>`<p><b>${esc(a.objective)}</b>: ${esc(a.example)}</p>`).join('')}</details>`:''}<h3>Dib u eeg su’aalaha (heerka Bloom macallinka ayaa arka; marka la daabacayo waa libdhaa)</h3><div class="list">${questionCardsHtml(lang,false)}</div>`;
     $('previewPrintExam').onclick=()=>printSelection('exam');
     $('previewPrintKey').onclick=()=>printSelection('key');
     $('previewPrintBoth').onclick=()=>printSelection('both');
     $('saveGeneratedExam').onclick=saveExamPackage;
-    $('approveGeneratedExam').onclick=()=>{
-      const exportControls=out.querySelectorAll('.word-dl, #previewPrintExam, #previewPrintKey, #previewPrintBoth, #saveGeneratedExam');
-      exportControls.forEach(control=>control.disabled=false);
-      $('approveGeneratedExam').disabled=true;
-      $('approveGeneratedExam').textContent='✓ Dib-u-eegista waa la xaqiijiyey';
-      const notice=out.querySelector('.notice');
-      if(notice) notice.innerHTML='<strong>Dib-u-eegista waa la xaqiijiyey.</strong> Waxaad hadda soo dejisan kartaa ama kaydin kartaa imtixaanka. Hubinta otomaatiga ahi ma beddelayso xaqiijinta aqooneed ee macallinka.';
-    };
 
         status.textContent=`Guul! ${qs.length} su’aalood ayaa laga sameeyey bogagga ${start}–${end}. Dib u eeg su’aalaha iyo jawaabaha.`;
+    const fr=generated.figureReport;
+    if(fr){
+      const kinds=Object.entries(fr.kinds||{}).map(([k,n])=>`${k}×${n}`).join(', ');
+      status.textContent+=` Sawirrada (${generated.examProfile?.label||''}): ${fr.built}/${fr.planned} la sameeyey${kinds?` (${kinds})`:''}${fr.repaired?`, ${fr.repaired} furaha jawaabta la saxay`:''}${fr.fallback?`, ${fr.fallback} ayaa u noqday su’aal qoraal ah`:''}${fr.needsReview?`, ${fr.needsReview} u baahan dib-u-eeg`:''}.`;
+      if(fr.needsReview){verifyFiguresVisually(normalized,lang).then(()=>{try{renderQuestions();const t=buildPrintRoot({lang,examTitle,subject,className,normalized,passage,instructions:$('examInstructions').value});}catch(e){console.warn(e);}});}
+    }
   }catch(e){
     status.textContent='Khalad: '+e.message;
     alert('Samaynta imtixaanka: '+e.message);
@@ -1060,7 +1074,7 @@ function paperQuestionsHtml(normalized,passage,lang,withAnswers,mathMode){
          const answer = withAnswers ? `<div class="answer-box"><strong>${examText(lang,'markingGuide')}:</strong> ${isFill?esc(q.answer||examText(lang,'notProvided')):fmt(q.answer||examText(lang,'notProvided'))}</div>` : '';
          const questionLine=`<div class="mcq-question-row"><span class="question-number">${numbers[i]}.</span><span class="question-text">${isFill?fillBlankHtml(q.text,q.answer,withAnswers):fmt(q.text)}</span><span class="marks">(${q.marks} ${examText(lang,'marks')})</span></div>`;
          if(q.type==='MCQ'||q.type==='Multiple Choice'||q.type==='Multiple Choice Questions'){
-           return `${sectionHtml}<div class="paper-question mcq-box">${questionLine}${options}${answer}${objectiveHtml}</div>`;
+           return `${sectionHtml}<div class="paper-question mcq-box">${questionLine}${diagram}${options}${answer}${figureNoteHtml(q,withAnswers,lang)}${objectiveHtml}</div>`;
          }
          if(isFill){
            const group=normalized.filter(x=>/fill/i.test(x.type||''));
@@ -1080,7 +1094,7 @@ function paperQuestionsHtml(normalized,passage,lang,withAnswers,mathMode){
              keyPointsHtml=`<div class="key-points"><div class="kp-head"><strong>${L.h}</strong></div><table class="kp-table"><tbody>${kp.map((k,j)=>`<tr><td class="kp-n">${j+1}</td><td>${fmt(k.point)}</td><td class="kp-m">${k.marks} ${L.m}</td></tr>`).join('')}</tbody></table><div class="kp-note">${L.note}</div></div>`;
            }
          }
-         return `${sectionHtml}<div class="paper-question structured-box">${questionLine}${diagram}${answerSpace}${answer}${keyPointsHtml}${objectiveHtml}</div>`;
+         return `${sectionHtml}<div class="paper-question structured-box">${questionLine}${diagram}${answerSpace}${answer}${figureNoteHtml(q,withAnswers,lang)}${keyPointsHtml}${objectiveHtml}</div>`;
        }).join('');
      }
 
