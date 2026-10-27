@@ -1048,6 +1048,17 @@ async function initDb() {
   `);
 
   await db(`
+    CREATE TABLE IF NOT EXISTS claude_usage(
+      day DATE PRIMARY KEY,
+      calls INT DEFAULT 0,
+      input_tokens BIGINT DEFAULT 0,
+      output_tokens BIGINT DEFAULT 0,
+      exams INT DEFAULT 0,
+      figures INT DEFAULT 0
+    )
+  `);
+
+  await db(`
     CREATE TABLE IF NOT EXISTS item_analysis(
       id TEXT PRIMARY KEY,
       assessment_id TEXT,
@@ -1149,6 +1160,28 @@ globalThis.fetch = async (url, opts) => {
 // (no credit, rate limit, error) the very same request is sent to Gemini, so the app never stops.
 const SOMALI_STYLE = `SOMALI QUALITY RULES (MANDATORY whenever you write Somali): Write like a Somali teacher composing a real school exam in Af-Soomaali, NOT like a translation from English. Use natural, short, direct sentences with one idea each and the standard wording used in Somali classrooms and school books. Use the usual exam command words: Qeex, Sharax, Taxay, Sheeg, Ka dooro, Ku buuxi, Isku xidh, Xisaabi, Barbar-dhig, Tusaale u soo qaado, Ka jawaab. Never translate word for word: rebuild every sentence the way a Somali teacher would say it, with correct particles (ka, ku, u, la, ay, uu, waxaa, waxay), correct agreement and standard Latin spelling. Use the established Somali technical term when school books have one; when no accepted Somali term exists keep the common term as taught (English or Arabic, written once, in plain letters) instead of inventing a new word. Never leave English sentences, never write machine-translation phrasing, never use invented or unclear words. A student must understand each question at first reading without guessing.`;
 const claudeState = { until: 0 };
+// Claude-ka lacagta la siiyay: tirada wicitaannada, tokens-ka, imtixaannada iyo sawirrada (si loo ogaado inta ka hartay $5)
+async function recordClaudeUsage({ calls = 0, inTok = 0, outTok = 0, exams = 0, figures = 0 }) {
+  try {
+    await dbReady;
+    await db(`INSERT INTO claude_usage(day,calls,input_tokens,output_tokens,exams,figures) VALUES(CURRENT_DATE,$1,$2,$3,$4,$5)
+      ON CONFLICT(day) DO UPDATE SET calls=claude_usage.calls+EXCLUDED.calls, input_tokens=claude_usage.input_tokens+EXCLUDED.input_tokens,
+      output_tokens=claude_usage.output_tokens+EXCLUDED.output_tokens, exams=claude_usage.exams+EXCLUDED.exams, figures=claude_usage.figures+EXCLUDED.figures`,
+      [calls, inTok, outTok, exams, figures]);
+  } catch (e) { console.warn('Claude usage not saved:', e.message); }
+}
+async function claudeUsageSummary() {
+  await dbReady;
+  const r = await db('SELECT COALESCE(SUM(calls),0)::int calls, COALESCE(SUM(input_tokens),0)::bigint i, COALESCE(SUM(output_tokens),0)::bigint o, COALESCE(SUM(exams),0)::int exams, COALESCE(SUM(figures),0)::int figures FROM claude_usage');
+  const x = r.rows[0] || {};
+  const pin = Number(process.env.CLAUDE_PRICE_IN || 3), pout = Number(process.env.CLAUDE_PRICE_OUT || 15), budget = Number(process.env.CLAUDE_BUDGET || 5);
+  const spent = (Number(x.i) / 1e6) * pin + (Number(x.o) / 1e6) * pout;
+  const perExam = x.exams ? spent / x.exams : 0;
+  return { calls: x.calls, inputTokens: Number(x.i), outputTokens: Number(x.o), examsWithFigures: x.exams, figuresBuilt: x.figures,
+    estimatedSpentUSD: +spent.toFixed(3), estimatedPerExamUSD: +perExam.toFixed(3), budgetUSD: budget,
+    estimatedRemainingUSD: +Math.max(0, budget - spent).toFixed(3), estimatedExamsLeft: perExam ? Math.floor(Math.max(0, budget - spent) / perExam) : null,
+    note: 'Qiyaas ku salaysan tokens-ka (CLAUDE_PRICE_IN/OUT, CLAUDE_BUDGET). Haraagga saxda ah: console.anthropic.com → Billing.' };
+}
 const claudeModel = () => process.env.CLAUDE_MODEL || 'claude-sonnet-5-5';
 function claudeWanted(promptText) {
   const mode = String(process.env.CLAUDE_FOR || 'so').toLowerCase();
@@ -1182,6 +1215,7 @@ async function tryClaude(opts) {
     console.warn(`Claude call failed: status=${r.status} ${msg.slice(0, 200)} -> using Gemini`);
     return null;
   }
+  recordClaudeUsage({ calls: 1, inTok: Number(d.usage?.input_tokens) || 0, outTok: Number(d.usage?.output_tokens) || 0 });
   let out = (d.content || []).filter(b => b.type === 'text').map(b => b.text).join('').trim();
   if (json) {
     out = out.replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/, '');
@@ -1262,9 +1296,11 @@ app.get('/api/ai-test', async (req, res) => {
       claude = { model: claudeModel(), status: r.status, ok: r.ok, message: r.ok ? String(d.content?.[0]?.text || '').slice(0, 40) : String(d?.error?.message || '').slice(0, 300), usedFor: process.env.CLAUDE_FOR || 'so' };
     } catch (e) { claude = { error: e.message }; }
   }
-  res.json({ claude, forcedModel: process.env.GEMINI_MODEL || null, listedFlashModels: listed, triedInOrder: candidates, blocked: [...badModels], results });
+  let claudeUsage = null; try { claudeUsage = await claudeUsageSummary(); } catch (_) {}
+  res.json({ claude, claudeUsage, forcedModel: process.env.GEMINI_MODEL || null, listedFlashModels: listed, triedInOrder: candidates, blocked: [...badModels], results });
 });
 
+app.get('/api/claude-usage', async (req, res) => { try { res.json(await claudeUsageSummary()); } catch (e) { res.status(500).json({ error: e.message }); } });
 app.get('/api/ai-providers', (req, res) => res.json(aiProviderStatus()));
 app.get('/api/ai-models', async (req, res) => {
   try { res.json({ ok: true, models: await getGeminiModels(), blocked: [...badModels], forced: process.env.GEMINI_MODEL || null }); }
@@ -1910,6 +1946,7 @@ app.post('/api/approved-questions/pick', async (req, res) => {
     const missing = [];
     const outParts = [];
     const pickedData = [];
+    let figsLeft = Math.max(0, Math.floor(Number(b.figureTarget) || 0));
     for (const part of parts) {
       const count = Number(part.count) || 0;
       const target = Math.max(1, Math.round((Number(part.targetMarks) || count) / Math.max(1, count)));
@@ -1917,11 +1954,11 @@ app.post('/api/approved-questions/pick', async (req, res) => {
         SELECT id, data, marks FROM approved_questions
         WHERE book_id=$1 AND subject=$2 AND klass=$3 AND lang=$4 AND qtype=$5
           AND page_start>=$6 AND page_end<=$7
-        ORDER BY (marks=$8) DESC, uses ASC, random()
+        ORDER BY (COALESCE(data->>'diagramSvg','')<>'' OR COALESCE(data->>'diagramPng','')<>'') DESC, (marks=$8) DESC, uses ASC, random()
         LIMIT $9
       `, [String(b.bookId || ''), String(b.subject || '').toLowerCase().trim(),
           String(b.className || '').toLowerCase().trim(), String(b.lang || 'en'),
-          String(part.type || ''), Number(b.start) || 0, Number(b.end) || 0, target, count + 25]);
+          String(part.type || ''), Number(b.start) || 0, Number(b.end) || 0, target, count + 40]);
       // ka tuur kuwa jaban, kuwa manhajka ku saabsan, iyo kuwa isku mid ah kuwa hore loo doortay (qayb kasta)
       const rows = [];
       for (const x of r.rows) {
@@ -1930,6 +1967,8 @@ app.post('/api/approved-questions/pick', async (req, res) => {
         const d = { ...(x.data || {}), type: x.data?.type || part.type };
         if (findBrokenQuestions([d], { dangling: true }).length) continue;
         if (similarToOthers(d, pickedData, -1)) continue;
+        // sawirka horay loo sameeyay keydka ayaa laga qaadaa (lacag ma kharash); inta ka badan tirada la rabay waa laga tagaa
+        if (d.diagramSvg || d.diagramPng) { if (figsLeft <= 0) continue; figsLeft--; }
         rows.push(x); pickedData.push(d);
       }
       rows.forEach((x) => used.add(x.id));
@@ -2204,6 +2243,7 @@ ${sourceForRange(p, range || { from: 0, to: count })}
   if (p.figureMode === 'smart' && examPlan) {
     figureReport = await figPromise;
     tlog('figures done');
+    if (figureReport && figureReport.built > 0) recordClaudeUsage({ exams: 1, figures: figureReport.built });
   } else if (requestedDiagrams > 0) {
     const candidates = questions.filter(q => /structured|direct/i.test(String(q.type || '')) || /STRUCTURED|DIRECT/i.test(String(q.section || '')));
     if (candidates.length < requestedDiagrams) {

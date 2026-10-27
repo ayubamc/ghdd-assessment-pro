@@ -835,7 +835,7 @@ $('generateExam').onclick=async()=>{
     if(($('useBank')||{}).checked&&!usePassage){
       try{
         status.textContent='Waxaa laga eegayaa keydka su’aalaha la ansixiyay...';
-        const pk=await api('/api/approved-questions/pick',{method:'POST',body:JSON.stringify({bookId:String(id),start,end,subject:subject,className,lang:examLanguage,partPlan})});
+        const pk=await api('/api/approved-questions/pick',{method:'POST',body:JSON.stringify({bookId:String(id),start,end,subject:subject,className,lang:examLanguage,partPlan,figureTarget:(figureMode==='smart'?diagramCount:0)})});
         // Macallinku wuxuu dalbaday sawirro: haddii keydku ku filan la'yahay sawirro, qayb ka mid ah su'aalaha MCQ ee keydka ayaa laga tegayaa si AI/Claude u sameeyo sawirrada la waayay
         if(pk&&Array.isArray(pk.parts)&&figureMode==='smart'&&diagramCount>0){
           const bankFigsNow=pk.parts.flatMap(x=>x.questions).filter(q=>q.diagramSvg||q.diagramPng).length;
