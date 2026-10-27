@@ -63,7 +63,7 @@ export const NATIONAL_PROFILES = {
   }),
   math: P({
     style: {"mcq": "Choose the correct answer for each of the following", "structured": "Part Two: Direct Questions", "marksWord": "Marks", "letters": "abcd", "suffix": "."},
-    label: 'Xisaab', basis: 'sampled', language: 'so', letters: 'latin',
+    label: 'Mathematics', basis: 'sampled', language: 'en', letters: 'latin',
     mcq: { count: 60, marks: 60 }, structured: { marks: 40, count: 8 },
     figureShare: [0.1, 0.2],
     calcShare: [0.5, 0.75],
