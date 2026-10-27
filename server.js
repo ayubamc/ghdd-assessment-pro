@@ -1866,9 +1866,9 @@ app.post('/api/approved-questions/pick', async (req, res) => {
     const b = req.body || {};
     const parts = Array.isArray(b.partPlan) ? b.partPlan : [];
     if (!parts.length) return res.json({ complete: false, reason: 'no-plan' });
-    const chosen = [];
     const used = new Set();
     const missing = [];
+    const outParts = [];
     for (const part of parts) {
       const count = Number(part.count) || 0;
       const target = Math.max(1, Math.round((Number(part.targetMarks) || count) / Math.max(1, count)));
@@ -1882,12 +1882,13 @@ app.post('/api/approved-questions/pick', async (req, res) => {
           String(b.className || '').toLowerCase().trim(), String(b.lang || 'en'),
           String(part.type || ''), Number(b.start) || 0, Number(b.end) || 0, target, count + 5]);
       const rows = r.rows.filter((x) => !used.has(x.id)).slice(0, count);
-      if (rows.length < count) { missing.push({ type: part.type, need: count, have: rows.length }); continue; }
-      rows.forEach((x) => { used.add(x.id); chosen.push({ ...x.data, section: part.section, type: part.type }); });
+      rows.forEach((x) => used.add(x.id));
+      if (rows.length < count) missing.push({ type: part.type, need: count, have: rows.length });
+      outParts.push({ type: part.type, section: part.section, count,
+        questions: rows.map((x) => ({ ...x.data, section: part.section, type: part.type })) });
     }
-    if (missing.length) return res.json({ complete: false, missing });
-    await db('UPDATE approved_questions SET uses=uses+1 WHERE id = ANY($1)', [Array.from(used)]);
-    res.json({ complete: true, questions: chosen });
+    if (used.size) await db('UPDATE approved_questions SET uses=uses+1 WHERE id = ANY($1)', [Array.from(used)]);
+    res.json({ complete: !missing.length, missing, parts: outParts, total: used.size });
   } catch (e) {
     res.status(500).json({ error: e.message });
   }

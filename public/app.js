@@ -817,17 +817,19 @@ $('generateExam').onclick=async()=>{
      if(usePassage){const mcqPart=partPlan.find(x=>x.type==='MCQ');if(mcqPart)mcqPart.section=`${mcqPart.section} — ${examText(examLanguage,'mcqPassageNote')}`;}
     if(!sourceText.trim())throw new Error('Qoraal lagama helin bogagga la doortay.');
 
-    let generated=null;
+    let generated=null,bankParts=null;
     if(($('useBank')||{}).checked&&!usePassage){
       try{
         status.textContent='Waxaa laga eegayaa keydka su’aalaha la ansixiyay...';
         const pk=await api('/api/approved-questions/pick',{method:'POST',body:JSON.stringify({bookId:String(id),start,end,subject:subject,className,lang:examLanguage,partPlan})});
-        if(pk&&pk.complete&&Array.isArray(pk.questions)){
-          generated={questions:varyBankQuestions(pk.questions,partPlan),examProfile:{style:(pk.questions[0]||{}).natStyle||null},fromBank:true};
-          status.textContent='✅ Su’aalaha waxaa laga qaaday keydka (AI token ma isticmaalin).';
+        if(pk&&pk.complete&&Array.isArray(pk.parts)){
+          const all=pk.parts.flatMap(x=>x.questions);
+          generated={questions:varyBankQuestions(all,partPlan),examProfile:{style:(all[0]||{}).natStyle||null},fromBank:true};
+          status.textContent='✅ Su’aalaha oo dhan waxaa laga qaaday keydka (AI token ma isticmaalin).';
           restoreExamBlueprint(examBlueprintKey(id,start,end,totalMarks,effectiveCount,format,chosenExamLanguage,levels));
-        }else if(pk&&pk.missing){
-          status.textContent='Keydku ma buuxinayo imtixaankan ('+pk.missing.map(m=>m.type+' '+m.have+'/'+m.need).join(', ')+') — AI ayaa samaynaya.';
+        }else if(pk&&Array.isArray(pk.parts)&&pk.total>0&&!isEnglishF4Exam(subject,className)){
+          bankParts=pk.parts;
+          status.textContent='Keydka waxaa laga helay '+pk.total+' su’aalood; AI ayaa samaynaya inta haray...';
         }
       }catch(e){console.warn('bank pick failed',e.message);}
     }
@@ -843,12 +845,38 @@ $('generateExam').onclick=async()=>{
     }
     status.textContent='Tallaabada 2/2: AI ayaa Blueprint-ka raacaya si uu u sameeyo su’aalaha...';
 
+    let genPlan=partPlan,genCount=effectiveCount,genMarks=totalMarks,genFig=diagramCount;
+    if(bankParts){
+      genPlan=[];
+      partPlan.forEach((p,k)=>{
+        const have=(bankParts[k]&&bankParts[k].questions.length)||0;
+        const need=(Number(p.count)||0)-have;
+        if(need>0)genPlan.push({...p,count:need,targetMarks:Math.max(need,Math.round((Number(p.targetMarks)||0)*need/Math.max(1,Number(p.count)||1)))});
+      });
+      genCount=genPlan.reduce((n,p)=>n+p.count,0);
+      genMarks=genPlan.reduce((n,p)=>n+p.targetMarks,0);
+      const bankFigs=bankParts.flatMap(x=>x.questions).filter(q=>q.diagramSvg||q.diagramPng).length;
+      genFig=Math.max(0,diagramCount-bankFigs);
+    }
     generated=await apiJob('/api/generate',{
-        sourceText,subject,className,count:effectiveCount,questionCount:effectiveCount,
-        totalMarks,format,diagramCount:diagramCountUsed,figureTarget:diagramCount,figureMode,bookId:id,passage:usePassage,passageTheme:(($('genPassageTheme')||{}).value||''),partPlan,blueprint:currentExamBlueprint,levels,type:'Isku-dhafan',sourceSelectionRule:'Spread questions across different headings/topics. Do not take consecutive questions from the same paragraph or same heading. Prefer passages separated by at least two headings or at least one full page. Record source pages and topic/heading for each question.',examLanguage,
+        sourceText,subject,className,count:genCount,questionCount:genCount,
+        totalMarks:genMarks,format,diagramCount:diagramCountUsed,figureTarget:genFig,figureMode,bookId:id,passage:usePassage,passageTheme:(($('genPassageTheme')||{}).value||''),partPlan:genPlan,blueprint:currentExamBlueprint,levels,type:'Isku-dhafan',sourceSelectionRule:'Spread questions across different headings/topics. Do not take consecutive questions from the same paragraph or same heading. Prefer passages separated by at least two headings or at least one full page. Record source pages and topic/heading for each question.',examLanguage,
         sourceTitle:d.title,
         pageRange:{start,end}
       },sec=>{status.textContent='Tallaabada 2/2: AI ayaa Blueprint-ka raacaya si uu u sameeyo su’aalaha... ('+sec+' ilbiriqsi). Ha xirin bogga.';});
+    if(bankParts){
+      const aiQs=(generated.questions||[]).slice();
+      if(aiQs.length<genCount)throw new Error(`AI-gu wuxuu soo celiyey ${aiQs.length} su’aalood halkii laga rabay ${genCount}. Isku day mar kale.`);
+      const merged=[];let ai=0;
+      partPlan.forEach((p,k)=>{
+        const bq=(bankParts[k]&&bankParts[k].questions)||[];
+        const need=(Number(p.count)||0)-bq.length;
+        const group=bq.concat(need>0?aiQs.slice(ai,ai+need).map(q=>({...q,section:p.section,type:p.type})):[]);
+        ai+=Math.max(0,need);
+        merged.push(...varyBankQuestions(group,[{count:group.length}]));
+      });
+      generated={...generated,questions:merged};
+    }
     }
 
     let qs=generated.questions||[];
