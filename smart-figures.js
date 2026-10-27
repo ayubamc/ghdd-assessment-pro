@@ -28,13 +28,14 @@ export function cleanMathText(t) {
   for (let i = 0; i < 4; i++) s = s.replace(/\\d?frac\s*\{([^{}]*)\}\s*\{([^{}]*)\}/g, (_, a, b) => `${/^[\w.]+$/.test(a) ? a : '(' + a + ')'}/${/^[\w.]+$/.test(b) ? b : '(' + b + ')'}`);
   s = s.replace(/\\sqrt\s*\{([^{}]*)\}/g, '√($1)').replace(/\\sqrt\s*([\w.]+)/g, '√$1');
   s = s.replace(/\\(?:text|textrm|mathrm|mathbf|textbf|mbox|rm)\s*\{([^{}]*)\}/g, '$1');
+  s = s.replace(/\\(?:left|right|big|Big|bigl|bigr)\b\s*/g, '').replace(/\\(sin|cos|tan|cot|sec|csc|log|ln|exp)\b/g, '$1');
   const g = { pi: 'π', times: '×', cdot: '·', theta: 'θ', omega: 'ω', lambda: 'λ', Delta: 'Δ', delta: 'δ', mu: 'μ', rho: 'ρ', alpha: 'α', beta: 'β', phi: 'φ', approx: '≈', leq: '≤', geq: '≥', neq: '≠', rightarrow: '→', degree: '°', Omega: 'Ω', sigma: 'σ', epsilon: 'ε', infty: '∞', pm: '±' };
   s = s.replace(/\\([A-Za-z]+)/g, (m, w) => (g[w] !== undefined ? g[w] : m)).replace(/\^\{?\\?circ\}?/g, '°');
   const sup = { 0: '⁰', 1: '¹', 2: '²', 3: '³', 4: '⁴', 5: '⁵', 6: '⁶', 7: '⁷', 8: '⁸', 9: '⁹', '-': '⁻' };
   s = s.replace(/\^\{?(-?\d{1,2})\}?/g, (_, n) => [...n].map((c) => sup[c] || c).join(''));
   const sub = { 0: '₀', 1: '₁', 2: '₂', 3: '₃', 4: '₄', 5: '₅', 6: '₆', 7: '₇', 8: '₈', 9: '₉' };
   s = s.replace(/_\{?(\d{1,2})\}?/g, (_, n) => [...n].map((c) => sub[c] || c).join('')).replace(/_\{([A-Za-z]+)\}/g, '_$1');
-  return s.replace(/\\,|\\;|\\ /g, ' ').replace(/[{}]/g, '').replace(/\s{2,}/g, ' ').trim();
+  return s.replace(/\\\s*$/g, '').replace(/\\,|\\;|\\ /g, ' ').replace(/[{}]/g, '').replace(/\s{2,}/g, ' ').trim();
 }
 export function cleanQuestionMath(q) {
   if (!q || typeof q !== 'object') return q;
@@ -45,6 +46,28 @@ export function cleanQuestionMath(q) {
 }
 const figSig = (q) => { try { const m = q?.figureMeta; if (!m || !m.spec) return ''; const st = (o) => Array.isArray(o) ? o.map(st) : o && typeof o === 'object' ? Object.fromEntries(Object.keys(o).sort().map((k) => [k, st(o[k])])) : o; return m.kind + JSON.stringify(st(m.spec)); } catch (_) { return ''; } };
 // Last resort: a question still points to a figure that does not exist -> drop only the sentence that mentions the figure (all data stays in the text).
+const contain = (a, b) => { const m = Math.min(a.size, b.size); if (m < 3) return 0; let i = 0; for (const x of a) if (b.has(x)) i++; return i / m; };
+const LET = 'ABCD';
+function correctText(q) {
+  const opts = Array.isArray(q?.options) ? q.options.map((o) => String(o || '').replace(/^\s*[A-Da-d][.)]\s*/, '').trim()) : [];
+  const a = String(q?.answer || '').trim();
+  if (/^[A-Da-d][.)]?$/.test(a) && opts.length) return opts[LET.indexOf(a[0].toUpperCase())] || '';
+  return a;
+}
+function qsig(q) {
+  const text = String(q?.question || q?.text || '');
+  const ct = String(correctText(q)).toLowerCase().replace(/[^\p{L}\p{N}.]+/gu, ' ').trim();
+  return { st: toks(text), ot: toks((Array.isArray(q?.options) ? q.options : []).join(' ')), ct, ctt: toks(ct) };
+}
+function nearDup(a, b) {
+  if (a.st.size < 3 || b.st.size < 3) return false;
+  const j = jac(a.st, b.st), c = contain(a.st, b.st);
+  if (j >= 0.7 || c >= 0.85) return true;
+  if (j >= 0.5 && jac(a.ot, b.ot) >= 0.5) return true;
+  if (c >= 0.5 && a.ct && a.ct.length >= 2 && a.ct === b.ct) return true;
+  if (c >= 0.5 && a.ctt.size >= 3 && jac(a.ctt, b.ctt) >= 0.6) return true;
+  return false;
+}
 export function stripDanglingFigureRefs(questions) {
   let n = 0;
   for (const i of findBrokenQuestions(questions, { dangling: true }).filter((b) => b.why === 'dangling-figure').map((b) => b.index)) {
@@ -60,14 +83,8 @@ export function stripDanglingFigureRefs(questions) {
   return n;
 }
 export function similarToOthers(q, questions, index) {
-  const text = String(q?.question || q?.text || '');
-  const st = toks(text), ot = toks((Array.isArray(q?.options) ? q.options : []).join(' '));
-  return questions.some((o, i) => {
-    if (i === index || !o) return false;
-    const ost = toks(o.question || o.text || ''), oot = toks((Array.isArray(o.options) ? o.options : []).join(' '));
-    const j = jac(st, ost);
-    return st.size >= 3 && (j >= 0.7 || (j >= 0.5 && jac(ot, oot) >= 0.5));
-  });
+  const a = qsig(q);
+  return questions.some((o, i) => i !== index && o && nearDup(a, qsig(o)));
 }
 export function findBrokenQuestions(questions, { dangling = false, partPlan = null } = {}) {
   const bad = [];
@@ -87,9 +104,10 @@ export function findBrokenQuestions(questions, { dangling = false, partPlan = nu
     if (!why) {
       const sig = figSig(q), tx = text.toLowerCase().replace(/[^\p{L}\p{N}]+/gu, ' ').trim();
       const st = toks(text), ot = toks(opts.join(' '));
-      const near = seenTok.some((p) => { const j = jac(st, p.st); return j >= 0.75 || (j >= 0.5 && jac(ot, p.ot) >= 0.5); });
+      const cur = qsig(q);
+      const near = seenTok.some((p) => nearDup(cur, p.sg));
       if ((sig && seenSig.has(sig)) || (tx.length > 20 && seenTxt.has(tx)) || (st.size >= 3 && near)) why = 'duplicate';
-      else { if (sig) seenSig.set(sig, i); if (tx.length > 20) seenTxt.set(tx, i); seenTok.push({ st, ot }); }
+      else { if (sig) seenSig.set(sig, i); if (tx.length > 20) seenTxt.set(tx, i); seenTok.push({ st, ot, sg: cur }); }
     }
     if (why) bad.push({ index: i, why, mcq: isMcq });
   });
