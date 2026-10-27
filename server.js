@@ -9,7 +9,7 @@ import fs from 'fs';
 import { fileURLToPath } from 'url';
 import { aiProviderStatus, asFigure, inFigure } from './ai-providers.js';
 import { getProfile, NATIONAL_PROFILES } from './exam-profiles.js';
-import { createSmartFigures, buildExamPlan, slotHint, plannedObjectives, interleavePlan, cleanQuestionMath, findBrokenQuestions, stripDanglingFigureRefs, similarToOthers } from './smart-figures.js';
+import { createSmartFigures, buildExamPlan, slotHint, plannedObjectives, interleavePlan, cleanQuestionMath, findBrokenQuestions, stripDanglingFigureRefs, similarToOthers, fixEchoKeys } from './smart-figures.js';
 import { renderFigure, verifySvg } from './figure-engine.js';
 
 const { Pool } = pg;
@@ -2229,6 +2229,7 @@ ${sourceForRange(p, range || { from: 0, to: count })}
   tlog('repair done');
   try { if (Date.now() - T0 < 140000) { const vr = await verifyCalcMcqs(questions, p); console.log(`[gen] answer check: ${JSON.stringify(vr)}`); } } catch (e) { console.warn('Answer check skipped:', e.message); }
   tlog('answers checked');
+  try { const ek = fixEchoKeys(questions); if (ek) console.log(`[gen] echo keys fixed: ${ek}`); } catch (e) { console.warn('Echo check skipped:', e.message); }
   // Hubin xoog leh (Gemini/Groq bilaash ah; Claude kaliya sawirrada): jawaabo khalad ah, laba doorasho oo sax ah, su'aalo is-diidaya -> waa la bedelaa. Iyo wixii ka hadhay dib-u-sameynta.
   try {
     if (Date.now() - T0 < 135000) {
@@ -2789,6 +2790,7 @@ app.post('/api/generate', async (req, res) => {
       passage,
       figureReport,
       repairReport,
+      remainingIssues: findBrokenQuestions(questions, { dangling: true, partPlan: p.partPlan }).map((x) => ({ n: x.index + 1, why: x.why })),
       examProfile,
       languageCheck: languageReport || { fixed: 0, remaining: 0 },
       aiUsed: true

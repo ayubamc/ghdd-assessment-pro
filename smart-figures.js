@@ -15,7 +15,7 @@ const tokens = (s) => new Set((String(s || '').toLowerCase().match(/[\p{L}\p{N}]
 // ---- Su'aalaha jajaban: qoraal la'aan, cinwaan qayb, MCQ doorasho la'aan, ama MCQ oo ah qeexid ("Define...") ----
 const SECTION_LABEL = /^\s*(part|section|qaybta|القسم)\b/i;
 const DEFINE_STEM = /^\s*(define|explain|describe|discuss|list|outline|state|name|relate|differentiate|distinguish|compare|examine|state\s+(?:and|two|three|four|five)|qeex|sharax|faahfaahi|taxan|ka hadal|\u0634\u0631\u062d|\u0639\u0631\u0641)\b/i;
-const FIG_REF = /\b(figure|diagram|graph|chart|table|picture|map|circuit)\s+(below|above|shown|given)|\b(in|from|on|by)\s+the\s+(figure|diagram|graph|chart|circuit|picture)\b|\bshown\s+(in|below|above)\b|\b(below|following)\s+(figure|diagram|graph|chart|circuit)|sawirka\s+(hoose|kor)|jaantuska\s+(hoose|kor)|khariidadda\s+hoose|shaxda\s+hoose/i;
+const FIG_REF = /\b(?:figure|fig\.?|diagram|graph|chart|table)\s*\d+(?:\.\d+)?\b|\b(figure|diagram|graph|chart|table|picture|map|circuit)\s+(below|above|shown|given)|\b(in|from|on|by)\s+the\s+(figure|diagram|graph|chart|circuit|picture)\b|\bshown\s+(in|below|above)\b|\b(below|following)\s+(figure|diagram|graph|chart|circuit)|sawirka\s+(hoose|kor)|jaantuska\s+(hoose|kor)|khariidadda\s+hoose|shaxda\s+hoose/i;
 const STOP = new Set('a an the of in on at to is are was were be it its this that these those which what who whom whose how why when where following correct best one ones following statement statements below above shown figure given by for with from as and or not state identify determine find describe choose select'.split(' '));
 const toks = (t) => new Set(String(t || '').toLowerCase().replace(/[^\p{L}\p{N}.]+/gu, ' ').split(' ').filter((w) => w && !STOP.has(w)));
 const jac = (a, b) => { if (!a.size || !b.size) return 0; let i = 0; for (const x of a) if (b.has(x)) i++; return i / (a.size + b.size - i); };
@@ -102,7 +102,36 @@ export function similarToOthers(q, questions, index) {
 // Su'aalo ku saabsan manhajka/habka waxbarashada (ma aha maaddada) iyo doorashooyin isku macne ah
 const OFF_TOPIC = /\b(national\s+curriculum|curriculum|teaching\s+approach(es)?|instructional\s+approach(es)?|core\s+values?|learner[- ]centred|(physics|chemistry|biology|mathematics|geography|history)\s+(textbook|book)|which\s+chapter|chapter\s+\d+\s+(covers|of\s+the))\b/i;
 const SYN = [[/spring\s+constant|force\s+constant|stiffness\s+constant/g, 'forceconst'], [/\bperiodic\s+time\b|\btime\s+period\b/g, 'period'], [/\bangular\s+velocity\b|\bangular\s+frequency\b/g, 'angfreq']];
+function numOf(t) { const m = String(t).replace(/,/g, '').match(/-?\d+(?:\.\d+)?(?:\s*[x×]\s*10\s*(?:\^|⁻|[⁰¹²³⁴⁵⁶⁷⁸⁹])\S*)?/); if (!m) return null; return parseFloat(m[0]); }
+function nearEqualNumbers(opts) {
+  const v = opts.map((o) => ({ n: numOf(o), u: String(o).replace(/-?[\d.,]+/g, '').replace(/\s+/g, '').toLowerCase() }));
+  for (let i = 0; i < v.length; i++) for (let j = i + 1; j < v.length; j++) {
+    if (v[i].n === null || v[j].n === null || v[i].u !== v[j].u) continue;
+    const a = v[i].n, b = v[j].n; if (a === 0 || b === 0) continue;
+    if (Math.abs(a - b) / Math.max(Math.abs(a), Math.abs(b)) < 0.02) return true;
+  }
+  return false;
+}
+// Echo / sonar / "returns after t seconds": masafadu waa v*t/2. Haddii furuhu yahay v*t (qaladka caadiga ah) -> hagaaji
+export function fixEchoKeys(questions) {
+  let fixed = 0;
+  for (const q of questions) {
+    const text = String(q?.question || q?.text || '');
+    const opts = Array.isArray(q?.options) ? q.options.map(optionText) : [];
+    if (opts.length !== 4 || !/\b(echo|sonar|echo[- ]sounder|ultrasound pulse|(?:return|returns|back)\b.*\b(?:reflect|seabed|wall|cliff)|reflect\w*\s+(?:off|from)\b)/i.test(text)) continue;
+    const tm = text.match(/(\d+(?:\.\d+)?)\s*(?:s\b|sec|seconds?)/i), vm = text.match(/(\d+(?:\.\d+)?)\s*m\s*\/\s*s|(\d+(?:\.\d+)?)\s*m s⁻¹/i);
+    if (!tm || !vm) continue;
+    const t = parseFloat(tm[1]), v = parseFloat(vm[1] || vm[2]); if (!t || !v) continue;
+    const half = v * t / 2, full = v * t;
+    const idxHalf = opts.findIndex((o) => { const n = numOf(o); return n !== null && Math.abs(n - half) < 1e-6 * Math.max(1, half); });
+    const key = answerIndex({ answer: q.answer, options: opts });
+    if (idxHalf >= 0 && key !== idxHalf) { q.answer = 'ABCD'[idxHalf]; fixed++; }
+    else if (idxHalf < 0 && key >= 0 && Math.abs((numOf(opts[key]) ?? -1) - full) < 1e-6 * full) { q._fix = true; q._fixWhy = 'echo round trip'; }
+  }
+  return fixed;
+}
 function hasSynonymOptions(opts) {
+  if (nearEqualNumbers(opts)) return true;
   const n = opts.map((o) => { let t = String(o).toLowerCase(); for (const [re, to] of SYN) t = t.replace(re, to); return t.replace(/[^\p{L}\p{N}]+/gu, ''); });
   return new Set(n).size < n.length;
 }
