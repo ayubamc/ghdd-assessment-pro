@@ -545,7 +545,8 @@ function makePartPlan(totalCount,totalMarks,format,diagramCount,lang='en',passag
         {section:examText(lang,'matching'),type:'Matching',ratio:.045,weight:.1},
         {section:examText(lang,'structured'),type:'Structured',ratio:.273,weight:.6}
       ];
-  const natSpecs=format==='national'?nationalSpecs(lang,totalCount):null;
+  const englishPlanned=englishNational&&totalCount>=20&&totalMarks===100;
+  const natSpecs=(format==='national'&&!englishPlanned)?nationalSpecs(lang,totalCount):null;
   if(natSpecs){
     const rawM=natSpecs.map(s=>totalMarks*s.weight),mk=rawM.map(Math.floor);let left=totalMarks-mk.reduce((x,y)=>x+y,0);
     rawM.map((v,i)=>({i,rem:v-Math.floor(v)})).sort((x,y)=>y.rem-x.rem).forEach(x=>{if(left>0){mk[x.i]++;left--;}});
