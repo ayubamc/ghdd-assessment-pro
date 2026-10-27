@@ -73,7 +73,7 @@ export const NATIONAL_PROFILES = {
   geography: P({
     style: {"mcq": "B. Goobo geli jawaabta saxda ah", "structured": "QAYBTA 2AAD EE IMTIXAANKA", "marksWord": "Dhibcood", "letters": "btjx", "suffix": "."},
     label: 'Geography', basis: 'sampled', language: 'so', letters: 'somali',
-    mcq: { count: 40, marks: 40 }, structured: { marks: 60, count: 12 },
+    mcq: { count: 60, marks: 60 }, structured: { marks: 40, count: 8 },
     figureShare: [0.08, 0.2],
     figures: ['map', 'textbook_diagram', 'bar_chart', 'line_chart', 'pie_chart', 'data_table'],
     notes: 'Khariidad Soomaaliya/Afrika, sawir tamar dabeyl, volcano; xisaabin cufnaan (qof/km²)'
@@ -81,7 +81,7 @@ export const NATIONAL_PROFILES = {
   technology: P({
     style: {"mcq": "Choose the Correct answer", "structured": "PART TWO: STRUCTURED QUESTIONS", "marksWord": "Marks", "letters": "ABCD", "suffix": ")"},
     label: 'Technology', basis: 'sampled', language: 'en', letters: 'latin',
-    mcq: { count: 40, marks: 40 }, structured: { marks: 60, count: 8 },
+    mcq: { count: 60, marks: 60 }, structured: { marks: 40, count: 8 },
     figureShare: [0.12, 0.25],
     figures: ['flowchart', 'network_topology', 'data_table', 'logic_gate', 'textbook_diagram'],
     codeShare: [0.15, 0.3],
@@ -98,7 +98,7 @@ export const NATIONAL_PROFILES = {
   business: P({
     style: {"mcq": "A. CIRCLE THE CORRECT ANSWER", "structured": "SECTION 2: DIRECT QUESTIONS", "marksWord": "Points", "letters": "ABCD", "suffix": "."},
     label: 'Business', basis: 'sampled', language: 'en', letters: 'latin',
-    mcq: { count: 40, marks: 40 }, structured: { marks: 60, count: 6 },
+    mcq: { count: 60, marks: 60 }, structured: { marks: 40, count: 8 },
     figureShare: [0.1, 0.22],
     calcShare: [0.1, 0.2],
     figures: ['line_chart', 'data_table', 'bar_chart', 'textbook_diagram'],
@@ -107,7 +107,7 @@ export const NATIONAL_PROFILES = {
   history: P({
     style: {"mcq": "B. Goobo geli jawaabta saxda ah", "structured": "QAYBTA 2AAD EE IMTIXAANKA", "marksWord": "Dhibcood", "letters": "BTJX", "suffix": ")"},
     label: 'History', basis: 'sampled', language: 'so', letters: 'somali',
-    mcq: { count: 40, marks: 40 }, structured: { marks: 60, count: 15 },
+    mcq: { count: 60, marks: 60 }, structured: { marks: 40, count: 8 },
     figureShare: [0, 0.03], figures: [],
     notes: 'MCQ qoraal ah oo keliya (taariikh, sanado, magacyo); sawir ma jiro'
   }),
@@ -129,7 +129,7 @@ export const NATIONAL_PROFILES = {
   tarbiya: P({
     style: {"mcq": "Dooro jawaabta saxda ah", "structured": "Qaybta 2aad: Su'aalaha toosan", "marksWord": "Dhibcood", "letters": "ABCD", "suffix": ")"},
     label: 'Tarbiya Islaamiga', basis: 'assumed', language: 'so', letters: 'latin',
-    mcq: { count: 40, marks: 40 }, structured: { marks: 60, count: 10 },
+    mcq: { count: 60, marks: 60 }, structured: { marks: 40, count: 8 },
     figureShare: [0, 0.03], figures: [],
     notes: 'La qiyaasay: MCQ + qoraal; hubi sample-ka'
   })
