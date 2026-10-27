@@ -2083,6 +2083,49 @@ function mcqKeyIndex(q) {
   if (m) return 'ABCD'.indexOf(m[1].toUpperCase());
   return opts.findIndex((o) => o && o.toLowerCase() === optStrip(a).toLowerCase());
 }
+
+// Su'aalaha waxaa loo kala saaraa nooca: MCQ-yada (4 doorasho) qaybta MCQ, qoraalka qaybta Direct (hadday kala dhaceen ka dib is-baarid/baaqyo fashilmay)
+function arrangeByPlan(questions, plan) {
+  if (!Array.isArray(plan) || !plan.length) return 0;
+  const isOpt = (q) => Array.isArray(q?.options) && q.options.filter((o) => String(o || '').trim()).length >= 2;
+  const mcq = questions.filter(isOpt), wr = questions.filter((q) => !isOpt(q));
+  const out = []; let moved = 0;
+  for (const part of plan) {
+    const wantMcq = /^(mcq|multiple)/i.test(part.type || '');
+    for (let j = 0; j < (Number(part.count) || 0); j++) {
+      const a = wantMcq ? mcq : wr, b = wantMcq ? wr : mcq;
+      if (a.length) out.push(a.shift()); else if (b.length) { out.push(b.shift()); moved++; }
+    }
+  }
+  [...mcq, ...wr].forEach((q) => out.push(q));
+  const before = questions.slice();
+  questions.splice(0, questions.length, ...out);
+  return questions.some((q, i) => q !== before[i]) ? 1 : 0;
+}
+// Jawaabaha saxda ah ha ahaan 'a' oo keliya: doorashooyinka waa la kala wareejiyaa, furuhuna wuxuu isu dheelitiraa A/B/C/D (calaamadaha "dhammaan kuwa kor ku xusan" waa la reebaa)
+function shuffleMcqOptions(questions) {
+  const COMPLEX = /\b(all|none|both|neither)\s+of\s+(the\s+)?(above|these|them)\b|\b(a|b|c|d)\s*(and|&|or)\s*(b|c|d)\b|\bboth\b.*\band\b/i;
+  const elig = [];
+  questions.forEach((q) => {
+    const raw = Array.isArray(q?.options) ? q.options : [];
+    if (raw.length !== 4) return;
+    const opts = raw.map(optStrip);
+    if (opts.some((o) => !o || COMPLEX.test(o))) return;
+    const k = mcqKeyIndex(q); if (k < 0 || k > 3) return;
+    elig.push({ q, opts, k });
+  });
+  const targets = elig.map((_, i) => i % 4);
+  for (let i = targets.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [targets[i], targets[j]] = [targets[j], targets[i]]; }
+  elig.forEach((e, i) => {
+    const t = targets[i], correct = e.opts[e.k];
+    const others = e.opts.filter((_, idx) => idx !== e.k);
+    for (let x = others.length - 1; x > 0; x--) { const y = Math.floor(Math.random() * (x + 1)); [others[x], others[y]] = [others[y], others[x]]; }
+    const res = []; let oi = 0;
+    for (let s = 0; s < 4; s++) res.push(s === t ? correct : others[oi++]);
+    e.q.options = res; e.q.answer = 'ABCD'[t];
+  });
+  return elig.length;
+}
 async function verifyCalcMcqs(questions, p) {
   const pick = [];
   questions.forEach((q, i) => {
@@ -2224,20 +2267,21 @@ ${sourceForRange(p, range || { from: 0, to: count })}
   // Sawirrada iyo stem-variety waa is-barbar (waxay taabanayaan su'aalo kala duwan)
   // Su'aalaha jajaban (qoraal la'aan / cinwaan qayb / MCQ doorasho la'aan ama qeexid) waa la hagaajiyaa ka hor sawirrada
   questions.forEach(cleanQuestionMath); // LaTeX -> π, √, ², ×
+  try { arrangeByPlan(questions, p.partPlan); } catch (e) { console.warn('Arrange skipped:', e.message); }
   let repairReport = null;
-  try { repairReport = await smartFigures.repairBroken(p, questions, plannedObjectives(p, questions.length), { deadline: T0 + 150000 }); } catch (e) { console.warn('Repair skipped:', e.message); }
+  try { repairReport = await smartFigures.repairBroken(p, questions, plannedObjectives(p, questions.length), { deadline: Math.max(T0 + 150000, Date.now() + 70000) }); } catch (e) { console.warn('Repair skipped:', e.message); }
   tlog('repair done');
-  try { if (Date.now() - T0 < 140000) { const vr = await verifyCalcMcqs(questions, p); console.log(`[gen] answer check: ${JSON.stringify(vr)}`); } } catch (e) { console.warn('Answer check skipped:', e.message); }
+  try { if (Date.now() - T0 < 200000) { const vr = await verifyCalcMcqs(questions, p); console.log(`[gen] answer check: ${JSON.stringify(vr)}`); } } catch (e) { console.warn('Answer check skipped:', e.message); }
   tlog('answers checked');
   try { const ek = fixEchoKeys(questions); if (ek) console.log(`[gen] echo keys fixed: ${ek}`); } catch (e) { console.warn('Echo check skipped:', e.message); }
   // Hubin xoog leh (Gemini/Groq bilaash ah; Claude kaliya sawirrada): jawaabo khalad ah, laba doorasho oo sax ah, su'aalo is-diidaya -> waa la bedelaa. Iyo wixii ka hadhay dib-u-sameynta.
   try {
-    if (Date.now() - T0 < 135000) {
+    if (Date.now() - T0 < 200000) {
       const au = await smartFigures.auditMcqs(p, questions);
       console.log(`[gen] audit: ${JSON.stringify(au)}`);
       const left = findBrokenQuestions(questions, { dangling: false, partPlan: p.partPlan });
       if (left.length) {
-        const rr = await smartFigures.repairBroken(p, questions, plannedObjectives(p, questions.length), { deadline: T0 + 175000 });
+        const rr = await smartFigures.repairBroken(p, questions, plannedObjectives(p, questions.length), { deadline: Math.max(T0 + 175000, Date.now() + 60000) });
         console.log(`[gen] rescue repair: ${JSON.stringify(rr)}`);
         if (repairReport) { repairReport.found += rr.found; repairReport.repaired += rr.repaired; repairReport.failed = rr.failed; } else repairReport = rr;
       }
@@ -2315,6 +2359,7 @@ ${sourceForRange(p, range || { from: 0, to: count })}
   if (mathMode) questions.forEach((q) => mapQuestionText(q, cleanMathText));
   else if (chemMode) questions.forEach((q) => mapQuestionText(q, cleanChemText));
   else questions.forEach(cleanQuestionMath);
+  try { const sh = shuffleMcqOptions(questions); console.log(`[gen] options balanced: ${sh}`); } catch (e) { console.warn('Option shuffle skipped:', e.message); }
   questions.figureReport = figureReport;
   questions.repairReport = repairReport;
   if (examPlan) questions.examProfile = { key: examPlan.profile.key, label: examPlan.profile.label, basis: examPlan.profile.basis, notes: examPlan.profile.notes, style: examPlan.profile.style };
