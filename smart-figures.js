@@ -154,7 +154,8 @@ export function findBrokenQuestions(questions, { dangling = false, partPlan = nu
   questions.forEach((q, i) => {
     const text = String(q?.question || q?.text || '').trim();
     const posMcq = Array.isArray(partPlan) && partPlan.length ? /^(mcq|multiple)/i.test(partTypeAt(partPlan, i)) : false;
-    const isMcq = /^(mcq|multiple)/i.test(q?.type || '') || posMcq;
+    const posKnown = Array.isArray(partPlan) && partPlan.length > 0;
+    const isMcq = posKnown ? posMcq : /^(mcq|multiple)/i.test(q?.type || '');
     const opts = Array.isArray(q?.options) ? q.options.map((o) => String(o || '').trim()).filter(Boolean) : [];
     let why = '';
     if (text.length < 8 || (SECTION_LABEL.test(text) && text.length < 90)) why = 'empty-or-section-title';
@@ -164,6 +165,7 @@ export function findBrokenQuestions(questions, { dangling = false, partPlan = nu
     else if (OFF_TOPIC.test(text)) why = 'off-topic';
     else if (q?._fix) why = 'audit-fail';
     else if (isMcq && hasSynonymOptions(opts)) why = 'duplicate-options';
+    else if (!isMcq && posKnown && opts.length >= 2) why = 'mcq-style-in-written';
     else if (!isMcq && !opts.length && (MCQ_STYLE.test(text) || /^\s*[A-Da-d][.)]?\s*$/.test(String(q?.answer || '')))) why = 'mcq-style-in-written';
     else if (!isMcq && !opts.length && Number(q?.marks) >= 6 && text.split(/\s+/).length < 18 && !/\(a\)/i.test(text)) why = 'too-simple';
     if (!why) {
