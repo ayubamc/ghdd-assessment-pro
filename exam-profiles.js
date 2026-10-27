@@ -141,7 +141,7 @@ const SUBJECT_PATTERNS = [
   ['chemistry', /chem|kim[iy]|كيمياء/i],
   ['biology', /biolog|bayool|bayoloj|أحياء/i],
   ['math', /math|xisaab|hisaab|رياضيات/i],
-  ['geography', /geograph|ju[gq]raaf|ju[gq]raf|جغرافيا/i],
+  ['geography', /geograph|jiyo|ju[gq]?ra+f|jo[gq]?ra+f|juqra|جغرافيا/i],
   ['technology', /technolog|techno|tekno|tiknool|tiknolo|tiknoloj|computer|kombiyuutar|kumbiyuutar|\bi\.?c\.?t\.?(?![a-z])|informat|\bit\b|تقنية|تكنولوجيا|حاسوب/i],
   ['english', /english|ingiriis|ingiris/i],
   ['business', /business|busnis|ganacsi|تجارة/i],
