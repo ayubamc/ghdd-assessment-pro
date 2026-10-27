@@ -598,6 +598,7 @@ export function checkAndRepairMcq(q, { askFact = null, facts = null, spec = {}, 
   if (out.options.length !== 4 || out.options.some((o) => !optionText(o))) issues.push('MCQ waa inuu lahaadaa 4 doorasho oo buuxa');
   const norm = out.options.map((o) => normTxt(optionText(o)));
   if (new Set(norm).size !== norm.length) issues.push('doorashooyin is-dhigma ayaa jira');
+  if (out.options.some((o) => /^[?\-–—_.\s]*$/.test(optionText(o)))) issues.push('doorasho madhan ama "?" ayaa jirta');
   const exp = askFact && facts ? expectedFor(askFact, facts, spec) : null;
   if (exp) {
     const matches = out.options.map((o, i) => (optionMatches(optionText(o), exp) ? i : -1)).filter((i) => i >= 0);

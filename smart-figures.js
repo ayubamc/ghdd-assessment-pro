@@ -45,6 +45,15 @@ export function dropConflictingFigures(questions) {
   const nums = (t) => new Set((String(t || '').match(/\d+(?:\.\d+)?/g) || []).map((x) => String(Number(x))));
   questions.forEach((q) => {
     const svg = q?.diagramSvg; if (!svg || typeof svg !== 'string') return;
+    const fm = q.figureMeta;
+    if (fm && fm.kind === 'organic_structure') {
+      const isMcq = Array.isArray(q.options) && q.options.length > 0;
+      const txt = `${q.question || q.text || ''} ${(q.options || []).join(' ')} ${q.answer || ''}`;
+      const forms = (txt.match(/\b(?:C\d*H\d*[A-Za-z0-9]*|C[₀-₉]+H[₀-₉]+)\b/g) || []).map((f) => f.replace(/[₀-₉]/g, (d) => d.charCodeAt(0) - 8320));
+      const mine = String(fm.facts?.molecular_formula || '');
+      const bad = (isMcq && !fm.answerChecked) || (forms.length && mine && !forms.includes(mine));
+      if (bad) { delete q.diagramSvg; delete q.diagramPng; delete q.diagram; delete q.figureMeta; n++; return; }
+    }
     const labels = [...svg.matchAll(/<text[^>]*>([^<]*)<\/text>/gi)].map((m) => m[1]).join(' ');
     const fn = nums(labels); if (!fn.size) return;
     const text = `${q.question || q.text || ''} ${(q.options || []).join(' ')}`;
@@ -224,6 +233,7 @@ export function findBrokenQuestions(questions, { dangling = false, partPlan = nu
     else if (isMcq && DEFINE_STEM.test(text)) why = 'mcq-is-open-question';
     else if (OFF_TOPIC.test(text) || EDU_META.test(text)) why = 'off-topic';
     else if (q?._fix) why = 'audit-fail';
+    else if (isMcq && opts.some((o) => /^[?\-–—_.\s]*$/.test(o) || /^(undefined|null|n\/a)$/i.test(o))) why = 'blank-option';
     else if (isMcq && hasSynonymOptions(opts)) why = 'duplicate-options';
     else if (!isMcq && posKnown && opts.length >= 2) why = 'mcq-style-in-written';
     else if (!isMcq && !opts.length && (MCQ_STYLE.test(text) || /^\s*[A-Da-d][.)]?\s*$/.test(String(q?.answer || '')))) why = 'mcq-style-in-written';
