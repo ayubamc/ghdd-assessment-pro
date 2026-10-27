@@ -114,10 +114,10 @@ export const NATIONAL_PROFILES = {
   somali: P({
     style: {"mcq": "B. Goobo geli jawaabta saxda ah", "structured": "Qaybta 2aad: Curis", "marksWord": "Dhibcood", "letters": "btjx", "suffix": "."},
     label: 'Soomaali', basis: 'sampled', language: 'so', letters: 'somali',
-    mcq: { count: 40, marks: 80 }, structured: { marks: 20, count: 2 },
+    mcq: { count: 40, marks: 80 }, structured: { marks: 20, count: 1 },
     figureShare: [0, 0], figures: [],
     passage: true,
-    notes: 'Qaybta 1aad: qiidcada + MCQ luqad (40 su\'aal = 80 dhibcood); Qaybta 2aad: curis 20 dhibcood'
+    notes: "Sample-ka Soomaali: QAYBTA 1AAD = sheeko (title + qoraal) kadib 40 MCQ x 2 dhibcood = 80: Q1-10 fahamka sheekada iyo macnaha erayada, Q11-26 naxwaha (magac, fal, sifo, xiriiriye, wadar, jinsi, af-soomaaliga), Q27-35 suugaan/maahmaah/hal-ku-dhegyo iyo tix (tuduc gabay ah), Q36-40 erayada iyo higgaadda. QAYBTA 2AAD: Curis = 1 su'aal 20 dhibcood (hab qoraalka 12 + xeerarka naxwaha 4 + astaamaha qoraalka 4), ardaygu wuxuu dooranayaa 1 ka mid ah 2 mowduuc. Sawir/figure ma jiro marka laga reebo sawirka sheekada."
   }),
   arabic: P({
     style: {"mcq": "القسم الأول: أسئلة الاختيار من متعدد", "structured": "القسم الثاني: أجب عن الأسئلة التالية", "marksWord": "درجة", "letters": "ABCD", "suffix": ")"},
