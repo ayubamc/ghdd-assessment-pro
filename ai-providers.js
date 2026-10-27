@@ -237,6 +237,16 @@ globalThis.fetch = async (url, opts) => {
       cool.set(key + '|' + model, Date.now() + wait);
       continue; // key kale
     }
+    {
+      // Key xun (project la tirtiray / service account disabled / key invalid / 401 / 403): ka bood key-gan, isku day key kale
+      const bad = await r.clone().text().catch(() => '');
+      if (r.status === 401 || r.status === 403 || (r.status === 400 && /service account|API key (not valid|expired|invalid)|API_KEY_INVALID|key.*(deleted|disabled|suspended)|PERMISSION_DENIED/i.test(bad))) {
+        cool.set(key + '|' + model, Date.now() + 6 * 3600e3);
+        stats.lastError = `gemini key#${(start + i) % keys.length + 1} xun (${r.status}): ${bad.slice(0, 120)}`;
+        console.warn(`AI gemini ${model} key#${(start + i) % keys.length + 1} disabled for 6h: ${r.status} ${bad.slice(0, 160)}`);
+        continue;
+      }
+    }
     return r; // 400/404 eg: model/prompt khalad — server.js ayaa maareeya
   }
 
