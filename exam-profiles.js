@@ -120,11 +120,12 @@ export const NATIONAL_PROFILES = {
     notes: 'Qaybta 1aad: qiidcada + MCQ luqad (40 su\'aal = 80 dhibcood); Qaybta 2aad: curis 20 dhibcood'
   }),
   arabic: P({
-    style: {"mcq": "اختر الإجابة الصحيحة", "structured": "القسم الثاني: الأسئلة المباشرة", "marksWord": "درجة", "letters": "ABCD", "suffix": ")"},
-    label: 'Arabic', basis: 'assumed', language: 'ar', letters: 'latin',
+    style: {"mcq": "القسم الأول: أسئلة الاختيار من متعدد", "structured": "القسم الثاني: أجب عن الأسئلة التالية", "marksWord": "درجة", "letters": "ABCD", "suffix": ")"},
+    label: 'Arabic', basis: 'sampled', language: 'ar', letters: 'latin',
     mcq: { count: 40, marks: 40 }, structured: { marks: 60, count: 10 },
-    figureShare: [0, 0.05], figures: [],
-    notes: 'La qiyaasay: MCQ + qoraal; hubi sample-ka'
+    figureShare: [0, 0], figures: [],
+    passage: true,
+    notes: 'Isla qaab-dhismeedka English: passage (Q1-10) + naxwe + suugaan/balaagha + mufradaat + su\'aalo gaagaaban + ta\'biir; dhammaan qoraalku waa Carabi'
   }),
   tarbiya: P({
     style: {"mcq": "Dooro jawaabta saxda ah", "structured": "Qaybta 2aad: Su'aalaha toosan", "marksWord": "Dhibcood", "letters": "ABCD", "suffix": ")"},

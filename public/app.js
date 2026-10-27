@@ -483,7 +483,8 @@ async function diagramSvgToPng(svg){
   }catch(e){console.warn('Diagram PNG conversion skipped:',e.message);return '';}
 }
 
-function isEnglishF4Exam(subject,className){return /\benglish\b|ingiriis/i.test(String(subject||'')) && /form\s*4|form\s*four|f4|grade\s*12|secondary\s*4/i.test(String(className||''));}
+function isArabicSubjectName(subject){return /\barabic\b|carabi|carbi|عرب/i.test(String(subject||''));}
+function isEnglishF4Exam(subject,className){return (/\benglish\b|ingiriis/i.test(String(subject||''))||isArabicSubjectName(subject)) && /form\s*4|form\s*four|f4|grade\s*12|secondary\s*4/i.test(String(className||''));}
 function figureNoteHtml(q,withAnswers,lang){
   if(!withAnswers||!q.figureMeta)return '';
   const m=q.figureMeta,c=q.figureCheck;
@@ -521,12 +522,12 @@ function makePartPlan(totalCount,totalMarks,format,diagramCount,lang='en',passag
   const englishNational = isEnglishF4Exam(subject,className);
   const specs = englishNational && totalCount >= 20 && totalMarks === 100
     ? [
-        {section:'SECTION ONE — MULTIPLE CHOICE: PART 1 — READING COMPREHENSION',type:'MCQ',ratio:.2,weight:.1},
-        {section:'SECTION ONE — MULTIPLE CHOICE: PART 2 — GRAMMAR',type:'MCQ',ratio:.2,weight:.1},
-        {section:'SECTION ONE — MULTIPLE CHOICE: PART 3 — LITERATURE',type:'MCQ',ratio:.2,weight:.1},
-        {section:'SECTION ONE — MULTIPLE CHOICE: PART 4 — VOCABULARY',type:'MCQ',ratio:.2,weight:.1},
-        {section:'SECTION TWO — SHORT ANSWER QUESTIONS',type:'Structured',ratio:.18,weight:.5},
-        {section:'WRITING SKILLS — COMPOSITION (CHOOSE ONE TOPIC)',type:'Structured',ratio:.02,weight:.1}
+        {section:isArabicSubjectName(subject)?'القسم الأول — اختيار من متعدد: الجزء 1 — فهم المقروء':'SECTION ONE — MULTIPLE CHOICE: PART 1 — READING COMPREHENSION',type:'MCQ',ratio:.2,weight:.1},
+        {section:isArabicSubjectName(subject)?'القسم الأول — اختيار من متعدد: الجزء 2 — القواعد (النحو والصرف)':'SECTION ONE — MULTIPLE CHOICE: PART 2 — GRAMMAR',type:'MCQ',ratio:.2,weight:.1},
+        {section:isArabicSubjectName(subject)?'القسم الأول — اختيار من متعدد: الجزء 3 — الأدب والبلاغة':'SECTION ONE — MULTIPLE CHOICE: PART 3 — LITERATURE',type:'MCQ',ratio:.2,weight:.1},
+        {section:isArabicSubjectName(subject)?'القسم الأول — اختيار من متعدد: الجزء 4 — المفردات':'SECTION ONE — MULTIPLE CHOICE: PART 4 — VOCABULARY',type:'MCQ',ratio:.2,weight:.1},
+        {section:isArabicSubjectName(subject)?'القسم الثاني — أسئلة الإجابة القصيرة':'SECTION TWO — SHORT ANSWER QUESTIONS',type:'Structured',ratio:.18,weight:.5},
+        {section:isArabicSubjectName(subject)?'مهارات الكتابة — التعبير (اختر موضوعًا واحدًا)':'WRITING SKILLS — COMPOSITION (CHOOSE ONE TOPIC)',type:'Structured',ratio:.02,weight:.1}
       ]
     : passageMode
     ? [
