@@ -9,7 +9,7 @@ import fs from 'fs';
 import { fileURLToPath } from 'url';
 import { aiProviderStatus } from './ai-providers.js';
 import { getProfile, NATIONAL_PROFILES } from './exam-profiles.js';
-import { createSmartFigures, buildExamPlan, slotHint, plannedObjectives, cleanQuestionMath, findBrokenQuestions } from './smart-figures.js';
+import { createSmartFigures, buildExamPlan, slotHint, plannedObjectives, cleanQuestionMath, findBrokenQuestions, stripDanglingFigureRefs } from './smart-figures.js';
 import { renderFigure, verifySvg } from './figure-engine.js';
 
 const { Pool } = pg;
@@ -2154,6 +2154,8 @@ ${String(p.sourceText || p.text || '')}
   if (p.passage && passage) passage.text = stripSourceCitations(passage.text);
   // Su'aalaha oo sawir ka hadlaya laakiin sawir aan lahayn (diyaarin fashilantay) waa la hagaajiyaa
   try { const r2 = await smartFigures.repairBroken(p, questions, plannedObjectives(p, questions.length), { dangling: true }); if (repairReport) { repairReport.found += r2.found; repairReport.repaired += r2.repaired; repairReport.failed += r2.failed; } else repairReport = r2; } catch (e) { console.warn('Dangling-figure repair skipped:', e.message); }
+  try { const dropped = stripDanglingFigureRefs(questions); if (dropped) console.log(`Removed ${dropped} dangling figure reference(s)`); } catch (e) { console.warn('strip refs skipped:', e.message); }
+  questions.forEach(cleanQuestionMath); // LaTeX introduced by repair/figure stages
   questions.figureReport = figureReport;
   questions.repairReport = repairReport;
   if (examPlan) questions.examProfile = { key: examPlan.profile.key, label: examPlan.profile.label, basis: examPlan.profile.basis, notes: examPlan.profile.notes, style: examPlan.profile.style };

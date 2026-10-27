@@ -14,7 +14,7 @@ const tokens = (s) => new Set((String(s || '').toLowerCase().match(/[\p{L}\p{N}]
 
 // ---- Su'aalaha jajaban: qoraal la'aan, cinwaan qayb, MCQ doorasho la'aan, ama MCQ oo ah qeexid ("Define...") ----
 const SECTION_LABEL = /^\s*(part|section|qaybta|القسم)\b/i;
-const DEFINE_STEM = /^\s*(define|explain|describe|discuss|list|outline|state\s+(?:and|two|three|four|five)|qeex|sharax|faahfaahi|taxan|ka hadal|\u0634\u0631\u062d|\u0639\u0631\u0641)\b/i;
+const DEFINE_STEM = /^\s*(define|explain|describe|discuss|list|outline|state|name|relate|differentiate|distinguish|compare|examine|identify|select|choose|state\s+(?:and|two|three|four|five)|qeex|sharax|faahfaahi|taxan|ka hadal|\u0634\u0631\u062d|\u0639\u0631\u0641)\b/i;
 const FIG_REF = /\b(figure|diagram|graph|chart|table|picture|map|circuit)\s+(below|above|shown|given)|\b(in|from|on|by)\s+the\s+(figure|diagram|graph|chart|circuit|picture)\b|\bshown\s+(in|below|above)\b|\b(below|following)\s+(figure|diagram|graph|chart|circuit)|sawirka\s+(hoose|kor)|jaantuska\s+(hoose|kor)|khariidadda\s+hoose|shaxda\s+hoose/i;
 const STOP = new Set('a an the of in on at to is are was were be it its this that these those which what who whom whose how why when where following correct best one ones following statement statements below above shown figure given by for with from as and or not state identify determine find describe choose select'.split(' '));
 const toks = (t) => new Set(String(t || '').toLowerCase().replace(/[^\p{L}\p{N}.]+/gu, ' ').split(' ').filter((w) => w && !STOP.has(w)));
@@ -44,6 +44,31 @@ export function cleanQuestionMath(q) {
   return q;
 }
 const figSig = (q) => { try { const m = q?.figureMeta; if (!m || !m.spec) return ''; const st = (o) => Array.isArray(o) ? o.map(st) : o && typeof o === 'object' ? Object.fromEntries(Object.keys(o).sort().map((k) => [k, st(o[k])])) : o; return m.kind + JSON.stringify(st(m.spec)); } catch (_) { return ''; } };
+// Last resort: a question still points to a figure that does not exist -> drop only the sentence that mentions the figure (all data stays in the text).
+export function stripDanglingFigureRefs(questions) {
+  let n = 0;
+  for (const i of findBrokenQuestions(questions, { dangling: true }).filter((b) => b.why === 'dangling-figure').map((b) => b.index)) {
+    const q = questions[i];
+    for (const k of ['question', 'text']) {
+      if (typeof q[k] !== 'string') continue;
+      const parts = q[k].split(/(?<=[.?!:])\s+/);
+      const kept = parts.filter((x) => !FIG_REF.test(x));
+      const out = kept.join(' ').trim();
+      if (kept.length < parts.length && out.length >= 25) { q[k] = out; n++; }
+    }
+  }
+  return n;
+}
+export function similarToOthers(q, questions, index) {
+  const text = String(q?.question || q?.text || '');
+  const st = toks(text), ot = toks((Array.isArray(q?.options) ? q.options : []).join(' '));
+  return questions.some((o, i) => {
+    if (i === index || !o) return false;
+    const ost = toks(o.question || o.text || ''), oot = toks((Array.isArray(o.options) ? o.options : []).join(' '));
+    const j = jac(st, ost);
+    return st.size >= 3 && (j >= 0.7 || (j >= 0.5 && jac(ot, oot) >= 0.5));
+  });
+}
 export function findBrokenQuestions(questions, { dangling = false, partPlan = null } = {}) {
   const bad = [];
   const seenSig = new Map(), seenTxt = new Map(), seenTok = [];
@@ -279,8 +304,17 @@ Return ONLY JSON: {"question":"","options":["","","",""],"answer":"","keyPoints"
 
   // Hagaaji su'aalaha jajaban (ilaa 5 isku mar). Haddii hagaajinta fashilanto, su'aasha asalka ah ayaa hadhaysa.
   async function repairBroken(p, questions, objs = [], opts = {}) {
+    const first = await repairRound(p, questions, objs, opts);
+    let last = first;
+    for (let r = 0; r < 2 && last.remaining > 0 && last.repaired > 0; r++) {
+      const nxt = await repairRound(p, questions, objs, opts);
+      first.repaired += nxt.repaired; first.failed = nxt.failed; last = nxt;
+    }
+    return { found: first.found, repaired: first.repaired, failed: last.remaining };
+  }
+  async function repairRound(p, questions, objs = [], opts = {}) {
     const bad = findBrokenQuestions(questions, { dangling: !!opts.dangling, partPlan: p.partPlan });
-    const report = { found: bad.length, repaired: 0, failed: 0 };
+    const report = { found: bad.length, repaired: 0, failed: 0, remaining: bad.length };
     let next = 0;
     const lang = langName(String(p.examLanguage || 'en'));
     const worker = async () => {
@@ -295,7 +329,7 @@ OBJECTIVE: ${objective}
 TOPIC: ${topic}
 ${why === 'dangling-figure' || why === 'duplicate' ? (why === 'duplicate' ? 'This replaces a duplicate question: test a DIFFERENT idea of the same objective in plain text (concept, unit, definition or reasoning). ' : '') + 'IMPORTANT: no figure, diagram, graph or table exists. The question must be fully answerable from the text alone; NEVER refer to any figure/diagram/graph/table/"below"/"above".' : ''}
 ${isMcq ? 'The stem must be a complete question or sentence to complete (never "Define..." or "Explain..."). Options are short and plausible; wrong options come from typical mistakes. "answer" = A, B, C or D.' : 'The question must be a WRITTEN question (never "which of the following" / "choose" / "true statement" and never an MCQ). ' + (Number(q.marks) >= 6 ? `It is worth ${q.marks} marks, so write it as 2-4 labelled parts (a), (b), (c)... with the marks of each part in brackets adding up to ${q.marks}: mix recall, calculation (with given numbers) and explanation. ` : '') + 'Give a model answer with working, and 2-5 short "keyPoints".'}
-Marks: ${q.marks || 1}.
+${avoidList(questions, index)}Marks: ${q.marks || 1}.
 Return ONLY JSON: {"question":"","options":${isMcq ? '["","","",""]' : '[]'},"answer":"","keyPoints":[]}`;
         try {
           let j = null, lastErr = null;
@@ -309,13 +343,21 @@ Return ONLY JSON: {"question":"","options":${isMcq ? '["","","",""]' : '[]'},"an
             Object.assign(fixed, chk.q);
           } else { fixed.options = []; if (fixed.question.length < 12 || !fixed.answer) throw new Error('structured repair incomplete'); }
           if (why === 'duplicate') { delete fixed.diagramSvg; delete fixed.diagram; delete fixed.diagramPng; delete fixed.figureMeta; }
+          cleanQuestionMath(fixed);
           if (findBrokenQuestions([fixed], { dangling: true }).length) throw new Error('still broken');
+          if (similarToOthers(fixed, questions, index)) throw new Error('still similar to another question');
           questions[index] = fixed; report.repaired++;
         } catch (e) { report.failed++; log.warn?.(`Repair of question ${index + 1} (${why}) failed: ${e.message}`); }
       }
     };
     await Promise.all(Array.from({ length: Math.min(5, bad.length) }, worker));
+    report.remaining = findBrokenQuestions(questions, { dangling: !!opts.dangling, partPlan: p.partPlan }).length;
     return report;
+  }
+
+  function avoidList(questions, index) {
+    const L = questions.map((o, i) => (i === index ? null : String(o?.question || o?.text || '').replace(/\s+/g, ' ').slice(0, 90))).filter(Boolean).slice(0, 60);
+    return L.length ? `DO NOT repeat or rephrase any of these existing questions (the new question must test a clearly different fact, quantity or situation):\n- ${L.join('\n- ')}\n` : '';
   }
 
   return { smartFigureStage, visionVerify, repairBroken };
