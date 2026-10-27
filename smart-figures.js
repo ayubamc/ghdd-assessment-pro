@@ -332,7 +332,7 @@ Return ONLY JSON: {"question":"","options":["","","",""],"answer":"","keyPoints"
   async function repairBroken(p, questions, objs = [], opts = {}) {
     const first = await repairRound(p, questions, objs, opts);
     let last = first;
-    for (let r = 0; r < 2 && last.remaining > 0 && last.repaired > 0; r++) {
+    for (let r = 0; r < 2 && last.remaining > 0 && last.repaired > 0 && !(opts.deadline && Date.now() > opts.deadline); r++) {
       const nxt = await repairRound(p, questions, objs, opts);
       first.repaired += nxt.repaired; first.failed = nxt.failed; last = nxt;
     }

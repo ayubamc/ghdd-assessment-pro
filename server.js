@@ -2004,12 +2004,32 @@ function slicePlan(plan, from, n) {
   }
   return out;
 }
+// Each batch only needs the pages of ITS planned objectives (not the whole 70-page book): far fewer tokens -> faster, cheaper, works on small-context fallbacks.
+function sourceForRange(p, range) {
+  const full = String(p.sourceText || p.text || '');
+  try {
+    if (!p.blueprint?.interleaved || !range) return full;
+    const objs = plannedObjectives(p, Math.max(1, Number(p.count) || 1)).slice(range.from, range.to);
+    const pages = new Set(objs.map((o) => Number(o?.page)).filter(Number.isInteger));
+    if (!pages.size) return full;
+    const parts = splitMarkedPages(full).filter((x) => pages.has(x.page));
+    if (!parts.length) return full;
+    let out = '', used = 0;
+    for (const pg of parts) {
+      const block = `[BOGGA ${pg.page} — QORAALKA BOGGAN]\n${pg.text}\n\n--- DHAMMAADKA BOGGA ---\n\n`;
+      if (used + block.length > 60000) break;
+      out += block; used += block.length;
+    }
+    return out || full;
+  } catch (_) { return full; }
+}
 async function aiGenerate(p) {
   const key = process.env.GEMINI_API_KEY;
   if (!key) return null;
 
   const model = process.env.GEMINI_MODEL || 'gemini-2.5-flash';
   const targetLanguage = LANGUAGE_NAMES[normalizeLang(p.examLanguage)];
+  const T0 = Date.now(); const tlog = (what) => console.log(`[gen] ${what} +${Math.round((Date.now() - T0) / 1000)}s`);
   const mathMode = isMathSubject(p.subject) || isMathSubject(p.className) || isMathSubject(p.sourceTitle);
   const chemMode = !mathMode && (isChemSubject(p.subject) || isChemSubject(p.className) || isChemSubject(p.sourceTitle));
   // Mabda'a 1-3: maadada + sample-ka qaranka + nooca su'aasha ee casharka ku habboon (kaliya marka figureMode='smart')
@@ -2047,7 +2067,7 @@ Class: ${p.className || p.klass || ''}
 Source title: ${p.sourceTitle || ''}
 Page range: ${JSON.stringify(p.pageRange || {})}
 Source text (content reference only; not the output language):
-${String(p.sourceText || p.text || '')}
+${sourceForRange(p, range || { from: 0, to: count })}
 `;
 
   let passage = null;
@@ -2090,6 +2110,7 @@ ${String(p.sourceText || p.text || '')}
     } catch (e) { console.warn('Top-up batch failed:', e.message); break; }
   }
   // Bloom is teacher-only: strip any leaked label, then make sure the whole paper is in the selected language.
+  tlog(`questions written (${questions.length})`);
   questions.forEach(stripBloomFromQuestion);
   if (p.passage) {
     if (!passage?.text) throw new Error('AI did not return a reading passage. Try again.');
@@ -2102,9 +2123,11 @@ ${String(p.sourceText || p.text || '')}
   // Su'aalaha jajaban (qoraal la'aan / cinwaan qayb / MCQ doorasho la'aan ama qeexid) waa la hagaajiyaa ka hor sawirrada
   questions.forEach(cleanQuestionMath); // LaTeX -> π, √, ², ×
   let repairReport = null;
-  try { repairReport = await smartFigures.repairBroken(p, questions, plannedObjectives(p, questions.length)); } catch (e) { console.warn('Repair skipped:', e.message); }
+  try { repairReport = await smartFigures.repairBroken(p, questions, plannedObjectives(p, questions.length), { deadline: T0 + 150000 }); } catch (e) { console.warn('Repair skipped:', e.message); }
+  tlog('repair done');
   const figPromise = (p.figureMode === 'smart' && examPlan) ? asFigure(() => smartFigures.smartFigureStage(p, questions, examPlan)) : null;
-  try { await diversifyStems(questions, p.examLanguage); } catch (e) { console.warn('Stem variety skipped:', e.message); }
+  try { if (Date.now() - T0 < 110000) await diversifyStems(questions, p.examLanguage); else console.log('[gen] stem variety skipped (time budget)'); } catch (e) { console.warn('Stem variety skipped:', e.message); }
+  tlog('stems done');
   const passageCheck = await enforcePassageGrounding(questions, passage, p, targetLanguage);
   const requestedDiagrams = Math.max(0, Math.min(30, Number(p.diagramCount || 0)));
   // Never expose "undefined" or text-only placeholders as diagrams.
@@ -2115,6 +2138,7 @@ ${String(p.sourceText || p.text || '')}
   let figureReport = null;
   if (p.figureMode === 'smart' && examPlan) {
     figureReport = await figPromise;
+    tlog('figures done');
   } else if (requestedDiagrams > 0) {
     const candidates = questions.filter(q => /structured|direct/i.test(String(q.type || '')) || /STRUCTURED|DIRECT/i.test(String(q.section || '')));
     if (candidates.length < requestedDiagrams) {
