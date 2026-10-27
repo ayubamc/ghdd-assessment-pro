@@ -237,6 +237,7 @@ export function findBrokenQuestions(questions, { dangling = false, partPlan = nu
     else if (isMcq && /^\s*(?:match\b|(?:use|using)\s+the\s+(?:two\s+)?columns?\b)|\bcolumn\s*(?:i|1|a)\b.*\bcolumn\s*(?:ii|2|b)\b/i.test(text)) why = 'matching-in-mcq';
     else if (!isMcq && /structured\s+(items?|exercises?)|missing\s+details|by\s+completing\s+the|complete\s+the\s+(table|items)\s+below/i.test(text)) why = 'vague-stem';
     else if (isMcq && opts.some((o) => /^[?\-–—_.\s]*$/.test(o) || /^(undefined|null|n\/a)$/i.test(o))) why = 'blank-option';
+    else if (isMcq && new Set(opts.map((o) => o.toLowerCase().replace(/[^\p{L}\p{N}()]+/gu, ''))).size < opts.length) why = 'duplicate-options';
     else if (isMcq && hasSynonymOptions(opts)) why = 'duplicate-options';
     else if (!isMcq && posKnown && opts.length >= 2) why = 'mcq-style-in-written';
     else if (!isMcq && !opts.length && (MCQ_STYLE.test(text) || /^\s*[A-Da-d][.)]?\s*$/.test(String(q?.answer || '')))) why = 'mcq-style-in-written';
