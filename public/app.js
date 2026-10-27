@@ -817,6 +817,21 @@ $('generateExam').onclick=async()=>{
      if(usePassage){const mcqPart=partPlan.find(x=>x.type==='MCQ');if(mcqPart)mcqPart.section=`${mcqPart.section} — ${examText(examLanguage,'mcqPassageNote')}`;}
     if(!sourceText.trim())throw new Error('Qoraal lagama helin bogagga la doortay.');
 
+    let generated=null;
+    if(($('useBank')||{}).checked&&!usePassage){
+      try{
+        status.textContent='Waxaa laga eegayaa keydka su’aalaha la ansixiyay...';
+        const pk=await api('/api/approved-questions/pick',{method:'POST',body:JSON.stringify({bookId:String(id),start,end,subject:subject,className,lang:examLanguage,partPlan})});
+        if(pk&&pk.complete&&Array.isArray(pk.questions)){
+          generated={questions:varyBankQuestions(pk.questions,partPlan),examProfile:{style:(pk.questions[0]||{}).natStyle||null},fromBank:true};
+          status.textContent='✅ Su’aalaha waxaa laga qaaday keydka (AI token ma isticmaalin).';
+          restoreExamBlueprint(examBlueprintKey(id,start,end,totalMarks,effectiveCount,format,chosenExamLanguage,levels));
+        }else if(pk&&pk.missing){
+          status.textContent='Keydku ma buuxinayo imtixaankan ('+pk.missing.map(m=>m.type+' '+m.have+'/'+m.need).join(', ')+') — AI ayaa samaynaya.';
+        }
+      }catch(e){console.warn('bank pick failed',e.message);}
+    }
+    if(!generated){
     const blueprintKeyNow=examBlueprintKey(id,start,end,totalMarks,effectiveCount,format,chosenExamLanguage,levels);
     if(!currentExamBlueprint || currentExamBlueprintKey!==blueprintKeyNow){
       restoreExamBlueprint(blueprintKeyNow);
@@ -828,12 +843,13 @@ $('generateExam').onclick=async()=>{
     }
     status.textContent='Tallaabada 2/2: AI ayaa Blueprint-ka raacaya si uu u sameeyo su’aalaha...';
 
-    const generated=await apiJob('/api/generate',{
+    generated=await apiJob('/api/generate',{
         sourceText,subject,className,count:effectiveCount,questionCount:effectiveCount,
         totalMarks,format,diagramCount:diagramCountUsed,figureTarget:diagramCount,figureMode,bookId:id,passage:usePassage,passageTheme:(($('genPassageTheme')||{}).value||''),partPlan,blueprint:currentExamBlueprint,levels,type:'Isku-dhafan',sourceSelectionRule:'Spread questions across different headings/topics. Do not take consecutive questions from the same paragraph or same heading. Prefer passages separated by at least two headings or at least one full page. Record source pages and topic/heading for each question.',examLanguage,
         sourceTitle:d.title,
         pageRange:{start,end}
       },sec=>{status.textContent='Tallaabada 2/2: AI ayaa Blueprint-ka raacaya si uu u sameeyo su’aalaha... ('+sec+' ilbiriqsi). Ha xirin bogga.';});
+    }
 
     let qs=generated.questions||[];
     const passage=(usePassage&&generated.passage&&String(generated.passage.text||'').trim())?generated.passage:null;
@@ -875,7 +891,7 @@ $('generateExam').onclick=async()=>{
 
     const renderPaperQuestions=(withAnswers)=>paperQuestionsHtml(normalized,passage,lang,withAnswers,isMathSubjectClient(subject));
     const total=buildPrintRoot({lang,examTitle,subject,className,normalized,passage,instructions:$('examInstructions').value});
-    lastGenerated={lang,passage};
+    lastGenerated={lang,passage,bookId:id,start,end,fromBank:!!generated.fromBank};
     if(currentExamBlueprint&&Array.isArray(currentExamBlueprint.coverage)){computeTos(currentExamBlueprint,normalized);renderExamBlueprint(currentExamBlueprint,lastBlueprintValidation||{marksMatch:true,questionsMatch:true});}
     let preflight={average:0,questions:[],status:'Hubinta tayada lama helin'};
     try{preflight=await api('/api/quality-check',{method:'POST',body:JSON.stringify({questions:qs})});}catch(checkError){console.warn('Quality pre-check unavailable:',checkError.message);}
@@ -1156,6 +1172,29 @@ function printSelection(which){
   setTimeout(()=>document.body.classList.remove('print-mode'),700);
 }
 
+function varyBankQuestions(list,partPlan){
+  const shuf=arr=>{const r=arr.slice();for(let i=r.length-1;i>0;i--){const k=Math.floor(Math.random()*(i+1));[r[i],r[k]]=[r[k],r[i]];}return r;};
+  const byPart=[];let idx=0;
+  (partPlan||[]).forEach(p=>{byPart.push(list.slice(idx,idx+(Number(p.count)||0)));idx+=Number(p.count)||0;});
+  if(!byPart.length)byPart.push(list);
+  const out=[];
+  byPart.forEach(g=>shuf(g).forEach(q0=>{
+    const q=JSON.parse(JSON.stringify(q0));
+    if(/^(mcq|multiple)/i.test(q.type||'')&&Array.isArray(q.options)&&q.options.length===4){
+      const L='ABCD';const ans=String(q.answer||'').trim();
+      let correct=-1;
+      if(/^[A-Da-d]$/.test(ans))correct=L.indexOf(ans.toUpperCase());
+      else correct=q.options.findIndex(o=>String(o).trim().toLowerCase()===ans.toLowerCase());
+      const order=shuf([0,1,2,3]);
+      const opts=order.map(k=>q.options[k]);
+      q.options=opts;
+      if(correct>=0){const ni=order.indexOf(correct);q.answer=/^[A-Da-d]$/.test(ans)?L[ni]:opts[ni];}
+    }
+    out.push(q);
+  }));
+  return out;
+}
+
 async function saveExamPackage(){
   if(!questions.length)return alert('Ku dar su’aalo marka hore.');
   const meta=lastGenerated||{};
@@ -1178,6 +1217,9 @@ async function saveExamPackage(){
   questionBank.push(...exam.questions.map(q=>({...q,subject:exam.subject,className:exam.className})));
   try{localStorage.setItem('ghdd_exams',JSON.stringify(exams));localStorage.setItem('ghdd_bank',JSON.stringify(questionBank));}catch(e){console.warn('Local storage full:',e.message);}
   renderBank();
+  if(meta.bookId&&!meta.fromBank){
+    api('/api/approved-questions',{method:'POST',body:JSON.stringify({bookId:String(meta.bookId),start:meta.start,end:meta.end,subject:exam.subject,className:exam.className,lang,items:exam.questions.map(q=>({data:{...q,natStyle:q.natStyle||null}}))})}).catch(e=>console.warn('bank save failed',e.message));
+  }
   try{
     const saved=await api('/api/assessments',{method:'POST',body:JSON.stringify({title:exam.title,subject:exam.subject,klass:exam.className,totalMarks:exam.totalMarks,school:'GHDD',blueprint:exam.blueprint,data:{kind:'exam',language:lang,passage:exam.passage,instructions:exam.instructions,questions:exam.questions}})});
     exam.databaseId=saved.id;

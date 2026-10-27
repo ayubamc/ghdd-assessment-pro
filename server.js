@@ -9,7 +9,7 @@ import fs from 'fs';
 import { fileURLToPath } from 'url';
 import { aiProviderStatus } from './ai-providers.js';
 import { getProfile, NATIONAL_PROFILES } from './exam-profiles.js';
-import { createSmartFigures, buildExamPlan, slotHint, plannedObjectives, cleanQuestionMath } from './smart-figures.js';
+import { createSmartFigures, buildExamPlan, slotHint, plannedObjectives, cleanQuestionMath, findBrokenQuestions } from './smart-figures.js';
 import { renderFigure, verifySvg } from './figure-engine.js';
 
 const { Pool } = pg;
@@ -992,6 +992,23 @@ async function initDb() {
   `);
 
   await db(`
+    CREATE TABLE IF NOT EXISTS approved_questions(
+      id TEXT PRIMARY KEY,
+      book_id TEXT,
+      page_start INT,
+      page_end INT,
+      subject TEXT,
+      klass TEXT,
+      lang TEXT,
+      qtype TEXT,
+      marks INT,
+      data JSONB,
+      uses INT DEFAULT 0,
+      created_at TIMESTAMPTZ DEFAULT now()
+    )
+  `);
+
+  await db(`
     CREATE TABLE IF NOT EXISTS item_analysis(
       id TEXT PRIMARY KEY,
       assessment_id TEXT,
@@ -1804,6 +1821,83 @@ app.post('/api/question-bank', async (req, res) => {
     ]);
 
     res.json({ ok: true, id });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// ---------- Approved-question bank: questions the teacher saved are reused without AI ----------
+const normQ = (t) => String(t || '').toLowerCase().replace(/[^a-z0-9\u0600-\u06ff]+/g, ' ').trim();
+
+app.post('/api/approved-questions', async (req, res) => {
+  try {
+    await dbReady;
+    const b = req.body || {};
+    const items = Array.isArray(b.items) ? b.items.slice(0, 200) : [];
+    let saved = 0;
+    const badIdx = new Set(findBrokenQuestions(items.map((i) => i.data || {}), { dangling: true }).map((x) => x.index));
+    for (const [ix, it] of items.entries()) {
+      if (badIdx.has(ix)) continue;
+      const d = it.data || {};
+      const text = normQ(d.text || d.question);
+      if (text.length < 8) continue;
+      const id = crypto.createHash('sha1')
+        .update([b.bookId, b.subject, b.className, b.lang, text].join('|')).digest('hex');
+      const r = await db(`
+        INSERT INTO approved_questions(id,book_id,page_start,page_end,subject,klass,lang,qtype,marks,data)
+        VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)
+        ON CONFLICT(id) DO UPDATE SET data=EXCLUDED.data, qtype=EXCLUDED.qtype, marks=EXCLUDED.marks,
+          page_start=LEAST(approved_questions.page_start, EXCLUDED.page_start),
+          page_end=GREATEST(approved_questions.page_end, EXCLUDED.page_end)
+      `, [id, String(b.bookId || ''), Number(b.start) || 0, Number(b.end) || 0,
+          String(b.subject || '').toLowerCase().trim(), String(b.className || '').toLowerCase().trim(),
+          String(b.lang || 'en'), String(d.type || ''), Number(d.marks) || 1, JSON.stringify(d)]);
+      saved += r.rowCount || 0;
+    }
+    res.json({ ok: true, saved });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+app.post('/api/approved-questions/pick', async (req, res) => {
+  try {
+    await dbReady;
+    const b = req.body || {};
+    const parts = Array.isArray(b.partPlan) ? b.partPlan : [];
+    if (!parts.length) return res.json({ complete: false, reason: 'no-plan' });
+    const chosen = [];
+    const used = new Set();
+    const missing = [];
+    for (const part of parts) {
+      const count = Number(part.count) || 0;
+      const target = Math.max(1, Math.round((Number(part.targetMarks) || count) / Math.max(1, count)));
+      const r = await db(`
+        SELECT id, data, marks FROM approved_questions
+        WHERE book_id=$1 AND subject=$2 AND klass=$3 AND lang=$4 AND qtype=$5
+          AND page_start>=$6 AND page_end<=$7
+        ORDER BY (marks=$8) DESC, uses ASC, random()
+        LIMIT $9
+      `, [String(b.bookId || ''), String(b.subject || '').toLowerCase().trim(),
+          String(b.className || '').toLowerCase().trim(), String(b.lang || 'en'),
+          String(part.type || ''), Number(b.start) || 0, Number(b.end) || 0, target, count + 5]);
+      const rows = r.rows.filter((x) => !used.has(x.id)).slice(0, count);
+      if (rows.length < count) { missing.push({ type: part.type, need: count, have: rows.length }); continue; }
+      rows.forEach((x) => { used.add(x.id); chosen.push({ ...x.data, section: part.section, type: part.type }); });
+    }
+    if (missing.length) return res.json({ complete: false, missing });
+    await db('UPDATE approved_questions SET uses=uses+1 WHERE id = ANY($1)', [Array.from(used)]);
+    res.json({ complete: true, questions: chosen });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+app.get('/api/approved-questions/count', async (req, res) => {
+  try {
+    await dbReady;
+    const r = await db('SELECT subject, klass, qtype, COUNT(*)::int n FROM approved_questions GROUP BY 1,2,3 ORDER BY 1,2,3');
+    res.json(r.rows);
   } catch (e) {
     res.status(500).json({ error: e.message });
   }
