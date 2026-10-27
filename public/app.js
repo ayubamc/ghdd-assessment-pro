@@ -563,12 +563,25 @@ function makePartPlan(totalCount,totalMarks,format,diagramCount,lang='en',passag
   return plan;
 }
 function partAtIndex(index,plan){let n=0;for(const p of plan){n+=p.count;if(index<n)return p;}return plan[plan.length-1];}
+function rescaleSubMarks(text,total){
+  const re=/\[(\d+)(\s*marks?)?\]/gi;const found=[...String(text||'').matchAll(re)];
+  if(found.length<2)return text;
+  const vals=found.map(m=>Number(m[1]));const sum=vals.reduce((a,b)=>a+b,0);
+  if(sum===total||total<found.length)return text;
+  const raw=vals.map(v=>v*total/sum);let out=raw.map(v=>Math.max(1,Math.floor(v)));
+  let diff=total-out.reduce((a,b)=>a+b,0);
+  const order=raw.map((v,i)=>[v-Math.floor(v),i]).sort((x,y)=>y[0]-x[0]);
+  for(let k=0;diff>0&&k<1000;k++){out[order[k%order.length][1]]++;diff--;}
+  for(let k=0;diff<0&&k<1000;k++){const i=out.map((v,j)=>[v,j]).sort((x,y)=>y[0]-x[0])[0][1];if(out[i]>1){out[i]--;diff++;}else break;}
+  let n=0;return String(text).replace(re,(m,v,w)=>`[${out[n++]}${w||''}]`);
+}
 function applyExactMarks(items,plan,totalMarks){
   items.forEach((q,i)=>{const p=partAtIndex(i,plan);q.section=p.section;q.type=p.type;});
   let offset=0;
   for(const p of plan){const group=items.slice(offset,offset+p.count);offset+=p.count;if(!group.length)continue;const base=Math.floor(p.targetMarks/group.length),extra=p.targetMarks-base*group.length;group.forEach((q,i)=>q.marks=base+(i<extra?1:0));}
   const sum=items.reduce((s,q)=>s+Number(q.marks||0),0);
   if(items.length&&sum!==totalMarks)items[items.length-1].marks+=totalMarks-sum;
+  items.forEach(q=>{if(q.question)q.question=rescaleSubMarks(q.question,Number(q.marks)||0);if(q.text)q.text=rescaleSubMarks(q.text,Number(q.marks)||0);});
   return items;
 }
 function cleanMatches(q){
@@ -1182,7 +1195,7 @@ function buildPrintRoot(pkg){
   const instructions=String(pkg.instructions||'').trim()||examText(lang,'allQuestions');
   wordExamTitle=examTitle||'Exam';
   const total=normalized.reduce((sum,q)=>sum+(Number(q.marks)||0),0);
-  const header=`<div class="paper-head" ${lang==='ar'?'dir="rtl" lang="ar"':''}><img class="exam-logo" src="/letterhead.jpg" alt="GHDD logo"><h1>${esc(schoolName)}</h1><h2>${esc(examTitle)}</h2><p>${esc(subject)} · ${esc(className)}</p></div>`;
+  const header=`<div class="paper-head" ${lang==='ar'?'dir="rtl" lang="ar"':''}><img class="exam-logo" src="/letterhead.jpg" alt="GHDD logo"><h1>${esc(schoolName)}</h1><h2>${esc(examTitle)}</h2>${(String(examTitle).toLowerCase().includes(String(subject).toLowerCase())&&(!className||String(examTitle).toLowerCase().includes(String(className).toLowerCase())))?'':`<p>${esc(subject)} · ${esc(className)}</p>`}</div>`;
   const meta=`<div class="paper-meta"><div><strong>${examText(lang,'name')}:</strong> ________________________</div><div><strong>${examText(lang,'date')}:</strong> ________________________</div><div><strong>${examText(lang,'class')}:</strong> ${esc(className)}</div><div><strong>${examText(lang,'total')}:</strong> ${total}</div></div>`;
   const examPaper=`<div class="student-paper-no-solutions" ${lang==='ar'?'dir="rtl" lang="ar"':''}>${header}${meta}<p><strong>${examText(lang,'instructions')}:</strong> ${esc(instructions)}${passage?' '+esc(examText(lang,'passageInstruction')):''}</p>${paperQuestionsHtml(normalized,passage,lang,false,isMathSubjectClient(subject))}<p><strong>${examText(lang,'total')}: ${total} ${examText(lang,'marks')}</strong></p></div>`;
   const answerPaper=`<div ${lang==='ar'?'dir="rtl" lang="ar"':''}>${header}<h2>${examText(lang,'answer')}</h2><p><strong>${examText(lang,'total')}:</strong> ${total} ${examText(lang,'marks')}</p>${paperQuestionsHtml(normalized,passage,lang,true,isMathSubjectClient(subject))}</div>`;

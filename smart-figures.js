@@ -19,7 +19,7 @@ const FIG_REF = /\b(figure|diagram|graph|chart|table|picture|map|circuit)\s+(bel
 const STOP = new Set('a an the of in on at to is are was were be it its this that these those which what who whom whose how why when where following correct best one ones following statement statements below above shown figure given by for with from as and or not state identify determine find describe choose select'.split(' '));
 const toks = (t) => new Set(String(t || '').toLowerCase().replace(/[^\p{L}\p{N}.]+/gu, ' ').split(' ').filter((w) => w && !STOP.has(w)));
 const jac = (a, b) => { if (!a.size || !b.size) return 0; let i = 0; for (const x of a) if (b.has(x)) i++; return i / (a.size + b.size - i); };
-const MCQ_STYLE = /\b(which\s+(one\s+)?of\s+the\s+following|choose\s+the|select\s+the\s+(correct|best|true)|true\s+statement|correct\s+statement|best\s+describes)\b/i;
+const MCQ_STYLE = /\b(which\s+(one\s+)?of\s+the\s+following|choose\s+the|select\s+the\s+(correct|best|true)|true\s+statement|correct\s+statement|best\s+describes)\b|\b(is|are)\s+(called|known\s+as|termed|defined\s+as)\s*:?\s*(\(\s*\d+\s*marks?\s*\))?\s*$/i;
 // LaTeX / formulas oo qoraal caadi ah ka dhig (π, √, ², ×) si Word-ka u muuqdaan si fiican
 export function cleanMathText(t) {
   let s = String(t ?? '');
@@ -27,6 +27,7 @@ export function cleanMathText(t) {
   s = s.replace(/\$\$?([^$]+)\$\$?/g, '$1').replace(/\\[()\[\]]/g, '');
   for (let i = 0; i < 4; i++) s = s.replace(/\\d?frac\s*\{([^{}]*)\}\s*\{([^{}]*)\}/g, (_, a, b) => `${/^[\w.]+$/.test(a) ? a : '(' + a + ')'}/${/^[\w.]+$/.test(b) ? b : '(' + b + ')'}`);
   s = s.replace(/\\sqrt\s*\{([^{}]*)\}/g, '√($1)').replace(/\\sqrt\s*([\w.]+)/g, '√$1');
+  s = s.replace(/\\(?:text|textrm|mathrm|mathbf|textbf|mbox|rm)\s*\{([^{}]*)\}/g, '$1');
   const g = { pi: 'π', times: '×', cdot: '·', theta: 'θ', omega: 'ω', lambda: 'λ', Delta: 'Δ', delta: 'δ', mu: 'μ', rho: 'ρ', alpha: 'α', beta: 'β', phi: 'φ', approx: '≈', leq: '≤', geq: '≥', neq: '≠', rightarrow: '→', degree: '°', Omega: 'Ω', sigma: 'σ', epsilon: 'ε', infty: '∞', pm: '±' };
   s = s.replace(/\\([A-Za-z]+)/g, (m, w) => (g[w] !== undefined ? g[w] : m)).replace(/\^\{?\\?circ\}?/g, '°');
   const sup = { 0: '⁰', 1: '¹', 2: '²', 3: '³', 4: '⁴', 5: '⁵', 6: '⁶', 7: '⁷', 8: '⁸', 9: '⁹', '-': '⁻' };
