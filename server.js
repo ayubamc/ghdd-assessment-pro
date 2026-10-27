@@ -7,7 +7,7 @@ import { AsyncLocalStorage } from 'node:async_hooks';
 import path from 'path';
 import fs from 'fs';
 import { fileURLToPath } from 'url';
-import { aiProviderStatus, asFigure, inFigure } from './ai-providers.js';
+import { aiProviderStatus, asFigure, inFigure, asAudit, inAudit } from './ai-providers.js';
 import { getProfile, NATIONAL_PROFILES } from './exam-profiles.js';
 import { createSmartFigures, buildExamPlan, slotHint, plannedObjectives, interleavePlan, cleanQuestionMath, findBrokenQuestions, stripDanglingFigureRefs, similarToOthers, fixEchoKeys, dropConflictingFigures, EDU_META } from './smart-figures.js';
 import { renderFigure, verifySvg } from './figure-engine.js';
@@ -1183,15 +1183,29 @@ async function claudeUsageSummary() {
     estimatedRemainingUSD: +Math.max(0, budget - spent).toFixed(3), estimatedExamsLeft: perExam ? Math.floor(Math.max(0, budget - spent) / perExam) : null,
     note: 'Qiyaas ku salaysan tokens-ka (CLAUDE_PRICE_IN/OUT, CLAUDE_BUDGET). Haraagga saxda ah: console.anthropic.com → Billing.' };
 }
+
+// Answer-key check and repair of broken questions are done by Claude (paid) for the subjects in CLAUDE_AUDIT_SUBJECTS (default: math, chemistry).
+const auditViaClaude = (p, fn) => {
+  const subs = String(process.env.CLAUDE_AUDIT_SUBJECTS ?? 'math,chemistry').toLowerCase().split(/[,\s]+/).filter(Boolean);
+  const subj = `${p?.subject || ''} ${p?.className || ''} ${p?.sourceTitle || ''}`.toLowerCase();
+  const on = subs.length && subs.some((s) => (s === 'math' ? /math|xisaab|رياضيات/.test(subj) : s === 'chemistry' ? /chem|kimis|كيمياء/.test(subj) : subj.includes(s)));
+  return on ? asAudit(fn) : fn();
+};
 const claudeModel = () => process.env.CLAUDE_MODEL || 'claude-sonnet-5-5';
 function claudeWanted(promptText) {
   const mode = String(process.env.CLAUDE_FOR || 'so').toLowerCase();
   if (!process.env.ANTHROPIC_API_KEY || mode === 'off' || Date.now() < claudeState.until) return false;
   if (mode === 'all') return true;
-  if (mode === 'figures') return inFigure(); // Claude is paid: use it ONLY for figure generation (text calls)
+  if (mode === 'figures') return inFigure() || inAudit(); // Claude is paid: figures, plus the answer-key audit/repair of the subjects in CLAUDE_AUDIT_SUBJECTS (see auditViaClaude)
   const ctx = String(langStore.getStore()?.lang || '');
   if (ctx) return ctx === 'so' || ctx === 'somali';
   return /OUTPUT LANGUAGE:\s*Somali|(?:into|in)\s+Somali\s+only/i.test(promptText);
+}
+let claudeActive = 0;
+async function claudeSlot(max = Number(process.env.CLAUDE_CONCURRENCY || 2)) {
+  while (claudeActive >= max) await new Promise((x) => setTimeout(x, 200));
+  claudeActive++;
+  return () => { claudeActive--; };
 }
 async function tryClaude(opts) {
   const gb = JSON.parse(opts.body);
@@ -1205,10 +1219,21 @@ async function tryClaude(opts) {
   const body = { model: claudeModel(), max_tokens: Math.min(Math.max(Number(gc.maxOutputTokens) || 8000, 1024), 32000), messages: [{ role: 'user', content: text }] };
   if (system) body.system = system;
   let r, d;
+  const release = await claudeSlot();
   try {
-    r = await _beforeClaude('https://api.anthropic.com/v1/messages', { method: 'POST', headers: { 'content-type': 'application/json', 'x-api-key': process.env.ANTHROPIC_API_KEY, 'anthropic-version': '2023-06-01' }, body: JSON.stringify(body), signal: AbortSignal.timeout(240000) });
-    d = await r.json().catch(() => ({}));
+    for (let attempt = 0; attempt < 4; attempt++) {
+      r = await _beforeClaude('https://api.anthropic.com/v1/messages', { method: 'POST', headers: { 'content-type': 'application/json', 'x-api-key': process.env.ANTHROPIC_API_KEY, 'anthropic-version': '2023-06-01' }, body: JSON.stringify(body), signal: AbortSignal.timeout(240000) });
+      d = await r.json().catch(() => ({}));
+      // 429 (rate limit of a new account) / 529 (overloaded) / 5xx: wait and retry instead of switching Claude off for a minute
+      if (!r.ok && (r.status === 429 || r.status === 529 || r.status >= 500) && attempt < 3) {
+        const ra = Number(r.headers.get('retry-after')) || 0;
+        await new Promise((x) => setTimeout(x, Math.min(25, Math.max(4, ra || 6 * (attempt + 1))) * 1000));
+        continue;
+      }
+      break;
+    }
   } catch (e) { claudeState.until = Date.now() + 60e3; console.warn('Claude request error:', e.message); return null; }
+  finally { release(); }
   if (!r.ok) {
     const msg = String(d?.error?.message || '');
     const noMoney = r.status === 401 || r.status === 403 || (r.status === 400 && /credit|billing|balance/i.test(msg));
@@ -2272,19 +2297,19 @@ ${sourceForRange(p, range || { from: 0, to: count })}
   questions.forEach(cleanQuestionMath); // LaTeX -> π, √, ², ×
   try { arrangeByPlan(questions, p.partPlan); } catch (e) { console.warn('Arrange skipped:', e.message); }
   let repairReport = null;
-  try { repairReport = await smartFigures.repairBroken(p, questions, plannedObjectives(p, questions.length), { deadline: Math.max(T0 + 150000, Date.now() + 70000) }); } catch (e) { console.warn('Repair skipped:', e.message); }
+  try { repairReport = await auditViaClaude(p, () => smartFigures.repairBroken(p, questions, plannedObjectives(p, questions.length), { deadline: Math.max(T0 + 150000, Date.now() + 70000) })); } catch (e) { console.warn('Repair skipped:', e.message); }
   tlog('repair done');
-  try { if (Date.now() - T0 < 235000) { const vr = await verifyCalcMcqs(questions, p); console.log(`[gen] answer check: ${JSON.stringify(vr)}`); } } catch (e) { console.warn('Answer check skipped:', e.message); }
+  try { if (Date.now() - T0 < 235000) { const vr = await auditViaClaude(p, () => verifyCalcMcqs(questions, p)); console.log(`[gen] answer check: ${JSON.stringify(vr)}`); } } catch (e) { console.warn('Answer check skipped:', e.message); }
   tlog('answers checked');
   try { const ek = fixEchoKeys(questions); if (ek) console.log(`[gen] echo keys fixed: ${ek}`); } catch (e) { console.warn('Echo check skipped:', e.message); }
   // Hubin xoog leh (Gemini/Groq bilaash ah; Claude kaliya sawirrada): jawaabo khalad ah, laba doorasho oo sax ah, su'aalo is-diidaya -> waa la bedelaa. Iyo wixii ka hadhay dib-u-sameynta.
   try {
     if (Date.now() - T0 < 200000) {
-      const au = await smartFigures.auditMcqs(p, questions);
+      const au = await auditViaClaude(p, () => smartFigures.auditMcqs(p, questions));
       console.log(`[gen] audit: ${JSON.stringify(au)}`);
       const left = findBrokenQuestions(questions, { dangling: false, partPlan: p.partPlan });
       if (left.length) {
-        const rr = await smartFigures.repairBroken(p, questions, plannedObjectives(p, questions.length), { deadline: Math.max(T0 + 175000, Date.now() + 60000) });
+        const rr = await auditViaClaude(p, () => smartFigures.repairBroken(p, questions, plannedObjectives(p, questions.length), { deadline: Math.max(T0 + 175000, Date.now() + 60000) }));
         console.log(`[gen] rescue repair: ${JSON.stringify(rr)}`);
         if (repairReport) { repairReport.found += rr.found; repairReport.repaired += rr.repaired; repairReport.failed = rr.failed; } else repairReport = rr;
       }
@@ -2356,7 +2381,7 @@ ${sourceForRange(p, range || { from: 0, to: count })}
   });
   if (p.passage && passage) passage.text = stripSourceCitations(passage.text);
   // Su'aalaha oo sawir ka hadlaya laakiin sawir aan lahayn (diyaarin fashilantay) waa la hagaajiyaa
-  try { const r2 = await smartFigures.repairBroken(p, questions, plannedObjectives(p, questions.length), { dangling: true }); if (repairReport) { repairReport.found += r2.found; repairReport.repaired += r2.repaired; repairReport.failed += r2.failed; } else repairReport = r2; } catch (e) { console.warn('Dangling-figure repair skipped:', e.message); }
+  try { const r2 = await auditViaClaude(p, () => smartFigures.repairBroken(p, questions, plannedObjectives(p, questions.length), { dangling: true })); if (repairReport) { repairReport.found += r2.found; repairReport.repaired += r2.repaired; repairReport.failed += r2.failed; } else repairReport = r2; } catch (e) { console.warn('Dangling-figure repair skipped:', e.message); }
   try { const dc = dropConflictingFigures(questions); if (dc) console.log(`Removed ${dc} figure(s) whose numbers conflict with the question`); } catch (e) { console.warn('figure conflict check skipped:', e.message); }
   try { const dropped = stripDanglingFigureRefs(questions); if (dropped) console.log(`Removed ${dropped} dangling figure reference(s)`); } catch (e) { console.warn('strip refs skipped:', e.message); }
   // final symbol clean-up (repair/figure stages can re-introduce LaTeX): math -> Unicode math, chemistry -> plain formulas, other subjects -> generic

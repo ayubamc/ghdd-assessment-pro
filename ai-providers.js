@@ -21,6 +21,9 @@ const als = new AsyncLocalStorage();
 // Calls made inside asFigure(...) (sawirada / diagrams) use the paid GEMINI_FIGURE_API_KEY first, so figures never starve.
 export const asFigure = (fn) => als.run({ figure: true }, fn);
 export const inFigure = () => !!als.getStore()?.figure;
+// Calls made inside asAudit(...) (answer-key check + repair of broken questions) may use Claude for the subjects listed in CLAUDE_AUDIT_SUBJECTS.
+export const asAudit = (fn) => { const cur = als.getStore() || {}; return als.run({ ...cur, audit: true }, fn); };
+export const inAudit = () => !!als.getStore()?.audit;
 const figureKey = () => String(process.env.GEMINI_FIGURE_API_KEY || '').trim();
 
 // ───────── Gemini keys ─────────
