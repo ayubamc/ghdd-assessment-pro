@@ -28,7 +28,7 @@ export const KINDS = {
 // Noocyada sawirka ee uu app-ku si deterministic ah u sameyn karo (sax 100%)
 export const DETERMINISTIC_FIGURES = [
   'network_topology', 'spring_mass', 'pendulum', 'vt_graph', 'wave', 'forces', 'right_triangle', 'bar_chart', 'line_chart',
-  'pie_chart', 'data_table', 'logic_gate', 'flowchart', 'resistor_circuit', 'coord_line'
+  'pie_chart', 'data_table', 'logic_gate', 'flowchart', 'resistor_circuit', 'coord_line', 'organic_structure'
 ];
 // Noocyada u baahan sawir AI/buug (biology, geography, map)
 export const SCHEMATIC_FIGURES = ['labelled_schematic', 'map', 'textbook_diagram'];
@@ -49,7 +49,7 @@ export const NATIONAL_PROFILES = {
     label: 'Chemistry', basis: 'sampled', language: 'en', letters: 'latin',
     mcq: { count: 60, marks: 60 }, structured: { marks: 40, count: 8 },
     figureShare: [0.2, 0.35],
-    figures: ['labelled_schematic', 'bar_chart', 'data_table', 'textbook_diagram'],
+    figures: ['organic_structure', 'labelled_schematic', 'bar_chart', 'data_table', 'textbook_diagram'],
     calcShare: [0.15, 0.3],
     notes: 'Formula qaab, pH/mole xisaabin, jaantus xaaladaha shayga, qaab-dhismeed organic'
   }),
@@ -176,6 +176,7 @@ const FIGURE_RULES = [
   [['technology'], /flow ?chart|algorithm|decision symbol|process symbol|program flow|pseudocode/i, 'flowchart', ['symbol_type']],
   [['math', 'physics'], /straight line|gradient|slope|linear (graph|equation)|y ?= ?mx|coordinate/i, 'coord_line', ['gradient', 'y_intercept']],
   [['math'], /pythag|hypotenuse|right.?angle|trigonomet|triangle/i, 'right_triangle', ['hypotenuse', 'area', 'perimeter']],
+  [['chemistry'], /branch|isomer|structural formula|displayed formula|hydrocarbon|alkane|alkene|alkyne|alcohol|carboxylic|organic|functional group|homologous|ester|aldehyde|ketone|iupac|nomenclature|carbon compound/i, 'organic_structure', ['iupac_name', 'molecular_formula', 'carbon_count', 'hydrogen_count', 'longest_chain', 'branch_count', 'functional_group']],
   [['business', 'geography', 'history', 'chemistry', 'biology', 'math'], /trend|compare|data|statistic|bar chart|graph|chart|production|rainfall|population|sales|profit|price|demand|supply/i, 'bar_chart', ['max_label', 'min_label', 'total', 'difference']],
   [['geography', 'business'], /pie|percentage share|proportion/i, 'pie_chart', ['largest_share', 'smallest_share']],
   [['business', 'technology', 'geography'], /table|income statement|balance sheet|schedule/i, 'data_table', ['cell_lookup', 'column_total']],
@@ -225,7 +226,7 @@ export function chooseKindForObjective({ profileKey, objective = '', topic = '',
 // Qorshee dhammaan su'aalaha: sample-ka qaranka ayaa go'aaminaya TIRADA sawirrada; casharku wuxuu go'aaminayaa NOOCA.
 // items: [{index, type, objective, topic}]
 // Sawirka waa inuu ku habboonaa mawduuca su'aasha (tusaale: circuit-ka resistor-ka ma gelayo imtixaanka mowjadaha)
-const FIG_TOPIC = { resistor_circuit: /circuit|current|resistor|resistance|voltage|ohm|electric|electron|charge/i, spring_mass: /spring|oscillat|harmonic|hooke|vibrat|period|elastic/i, pendulum: /pendulum|oscillat|harmonic|period|gravity/i, wave: /wave|sound|frequency|wavelength|light|period|amplitude|ultrasound|echo|seismic/i, vt_graph: /motion|velocity|speed|accelerat|kinematic|displacement|distance/i, forces: /force|newton|friction|weight|equilibrium|moment|pressure/i };
+const FIG_TOPIC = { organic_structure: /organic|hydrocarbon|alkane|alkene|alkyne|alcohol|carboxyl|isomer|branch|functional|homologous|ester|aldehyde|ketone|carbon|iupac|structural/i, resistor_circuit: /circuit|current|resistor|resistance|voltage|ohm|electric|electron|charge/i, spring_mass: /spring|oscillat|harmonic|hooke|vibrat|period|elastic/i, pendulum: /pendulum|oscillat|harmonic|period|gravity/i, wave: /wave|sound|frequency|wavelength|light|period|amplitude|ultrasound|echo|seismic/i, vt_graph: /motion|velocity|speed|accelerat|kinematic|displacement|distance/i, forces: /force|newton|friction|weight|equilibrium|moment|pressure/i };
 const figFits = (f, it) => { const re = FIG_TOPIC[f]; if (!re) return true; return re.test(`${it?.objective || ''} ${it?.topic || ''}`); };
 export function planSlots({ profileKey, items, seed = 1, figureTarget = 0 }) {
   const prof = NATIONAL_PROFILES[profileKey] || null;

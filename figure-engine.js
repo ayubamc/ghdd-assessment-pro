@@ -339,6 +339,119 @@ RENDERERS.coord_line = (spec) => {
   return { svg: svgWrap(s), facts: { gradient: m, y_intercept: c, points: pts.map((x) => [x, m * x + c]) } };
 };
 
+
+// ---------- Organic structural (displayed) formulas, national-exam style: H–C–H with vertical bonds -------------
+const PARENT = ['', 'meth', 'eth', 'prop', 'but', 'pent', 'hex', 'hept', 'oct'];
+const MULT = ['', '', 'di', 'tri', 'tetra'];
+const GROUP_C = { methyl: 1, ethyl: 2 };
+function organicName(n, bonds, subs, end) {
+  const alkyl = subs.filter((x) => GROUP_C[x.group]);
+  if (subs.length !== alkyl.length || end) return null;
+  const dbl = bonds.map((b, i) => (b === 2 ? i + 1 : 0)).filter(Boolean), trp = bonds.map((b, i) => (b === 3 ? i + 1 : 0)).filter(Boolean);
+  if (!dbl.length && !trp.length) {
+    const fwd = alkyl.map((x) => ({ at: x.at + 1, g: x.group })), rev = alkyl.map((x) => ({ at: n - x.at, g: x.group }));
+    const key = (arr) => arr.map((x) => x.at).sort((a, b) => a - b);
+    const lt = (a, b) => { for (let i = 0; i < a.length; i++) if (a[i] !== b[i]) return a[i] < b[i]; return false; };
+    const use = lt(key(rev), key(fwd)) ? rev : fwd;
+    const parent = `${PARENT[n]}ane`;
+    if (!use.length) return n >= 4 ? `${parent}` : parent;
+    const by = {}; use.forEach((x) => { (by[x.g] = by[x.g] || []).push(x.at); });
+    const prefix = Object.keys(by).sort().map((g) => { const loc = by[g].sort((a, b) => a - b); return `${loc.join(',')}-${MULT[loc.length]}${g}`; }).join('-');
+    return `${prefix}${parent}`;
+  }
+  if (!alkyl.length && dbl.length + trp.length === 1) {
+    const p = (dbl[0] || trp[0]), pos = Math.min(p, n - p), kind = dbl.length ? 'ene' : 'yne';
+    const stem = PARENT[n];
+    return n <= 3 ? `${stem}${kind === 'ene' ? 'ene' : 'yne'}`.replace(/^(eth|prop)(ene|yne)$/, '$1$2') : `${stem}-${pos}-${kind}`.replace(/^but-/, 'but-').replace(/^(\w+)-(\d)-(ene|yne)$/, '$1-$2-$3');
+  }
+  return null;
+}
+RENDERERS.organic_structure = (spec) => {
+  const n = Math.round(num(spec.chain));
+  if (!(n >= 1 && n <= 7)) throw new Error('organic_structure: chain = 1..7 carbons');
+  const bonds = Array.from({ length: Math.max(0, n - 1) }, (_, i) => [1, 2, 3].includes(num((spec.bonds || [])[i], 1)) ? num((spec.bonds || [])[i], 1) : 1);
+  const subs = (Array.isArray(spec.subs) ? spec.subs : []).map((x) => ({ at: Math.round(num(x.at)), side: x.side === 'down' ? 'down' : 'up', group: String(x.group || '') }));
+  const end = ['OH', 'COOH', 'CHO', 'Cl', 'Br', 'F'].includes(spec.end) ? spec.end : '';
+  const OK = new Set(['methyl', 'ethyl', 'OH', 'Cl', 'Br', 'F', '=O']);
+  const bySlot = {};
+  for (const x of subs) {
+    if (!OK.has(x.group)) throw new Error(`organic_structure: group "${x.group}" lama taageero (methyl, ethyl, OH, Cl, Br, F, =O)`);
+    if (!(x.at >= 0 && x.at < n)) throw new Error('organic_structure: sub.at waa 0..chain-1');
+    const k = `${x.at}${x.side}`; if (bySlot[k]) throw new Error('organic_structure: hal meel laba group ma noqon karaan');
+    bySlot[k] = x;
+    if (x.group === 'methyl' && !(x.at >= 1 && x.at <= n - 2)) throw new Error('organic_structure: methyl waa inuu yaalaa carbon dhexe (2aad ... ugu dambeeya-1) si silsiladda ugu dheer aysan isbeddelin');
+    if (x.group === 'ethyl' && !(x.at >= 2 && x.at <= n - 3)) throw new Error('organic_structure: ethyl wuxuu u baahan yahay chain ≥ 5 iyo meel dhexe (3aad ... ugu dambeeya-2)');
+  }
+  const gap = 78, x0 = 300 - ((n - 1) * gap) / 2, y0 = 190, v = 56;
+  const atoms = [], bl = [];
+  const A = (x, y, label) => { atoms.push({ x, y, label }); return atoms.length - 1; };
+  const B = (a, b, order = 1) => bl.push({ a, b, order });
+  const cnt = { C: 0, H: 0, O: 0, Cl: 0, Br: 0, F: 0 };
+  const addH = (x, y, from) => { const h = A(x, y, 'H'); B(from, h); };
+  const chain = [];
+  for (let i = 0; i < n; i++) chain.push(A(x0 + i * gap, y0, 'C'));
+  for (let i = 0; i < n - 1; i++) B(chain[i], chain[i + 1], bonds[i]);
+  const hasKetone = subs.some((x) => x.group === '=O');
+  let hasOH = end === 'OH' || subs.some((x) => x.group === 'OH');
+  for (let i = 0; i < n; i++) {
+    const cx = x0 + i * gap, left = i > 0 ? bonds[i - 1] : 0, right = i < n - 1 ? bonds[i] : 0;
+    let rem = 4 - left - right;
+    const endHere = i === n - 1 ? end : '';
+    const slotGroup = (side) => bySlot[`${i}${side}`] || null;
+    if (endHere === 'COOH' || endHere === 'CHO') { // terminal carbon carries =O (up) ; COOH: –OH to the right ; CHO: H down
+      const o = A(cx, y0 - v, 'O'); B(chain[i], o, 2); rem -= 2;
+      if (endHere === 'COOH') { const o2 = A(cx + gap * 0.8, y0, 'O'); B(chain[i], o2); addH(cx + gap * 1.6, y0, o2); rem -= 1; }
+      else { addH(cx, y0 + v, chain[i]); rem -= 1; }
+      if (slotGroup('up') || slotGroup('down')) throw new Error('organic_structure: carbon-ka dhamaadka (COOH/CHO) ma qaadi karo group kale');
+    } else {
+      for (const side of ['up', 'down']) {
+        const sg = slotGroup(side), dy = side === 'up' ? -1 : 1, sy = y0 + dy * v;
+        if (!sg) continue;
+        if (sg.group === 'methyl' || sg.group === 'ethyl') {
+          const c1 = A(cx, sy, 'C'); B(chain[i], c1); rem -= 1;
+          addH(cx - 48, sy, c1); addH(cx + 48, sy, c1);
+          if (sg.group === 'methyl') addH(cx, y0 + dy * 2 * v, c1);
+          else { const c2 = A(cx, y0 + dy * 2 * v, 'C'); B(c1, c2); addH(cx - 48, y0 + dy * 2 * v, c2); addH(cx + 48, y0 + dy * 2 * v, c2); addH(cx, y0 + dy * 3 * v, c2); }
+        } else if (sg.group === 'OH') { const o = A(cx, sy, 'O'); B(chain[i], o); addH(cx, y0 + dy * 2 * v, o); rem -= 1; }
+        else if (sg.group === '=O') { const o = A(cx, sy, 'O'); B(chain[i], o, 2); rem -= 2; }
+        else { const h = A(cx, sy, sg.group); B(chain[i], h); rem -= 1; }
+      }
+      if (i === n - 1 && end) { // OH / halogen on the right end
+        const xe = cx + gap * 0.8;
+        if (end === 'OH') { const o = A(xe, y0, 'O'); B(chain[i], o); addH(cx + gap * 1.6, y0, o); } else { const h = A(xe, y0, end); B(chain[i], h); }
+        rem -= 1;
+      }
+      for (const side of ['up', 'down']) { if (!slotGroup(side) && rem > 0) { addH(cx, y0 + (side === 'up' ? -v : v), chain[i]); rem -= 1; } }
+      if (rem > 0 && i === 0) { for (let r = 0; r < rem; r++) { addH(cx - 48, y0 + (r === 0 ? 0 : 0), chain[i]); } rem = 0; }
+      else if (rem > 0 && i === n - 1) { addH(cx + 48, y0, chain[i]); rem -= 1; }
+    }
+    if (rem !== 0) throw new Error(`organic_structure: carbon ${i + 1} valence khalad (${rem > 0 ? 'wax ka yar 4' : 'wax ka badan 4'} bond) - hubi bonds/groups`);
+  }
+  if (n === 1 && chain.length === 1) { /* methane-like: left H handled above, right H below */ }
+  atoms.forEach((a) => { if (cnt[a.label] !== undefined) cnt[a.label]++; });
+  // draw
+  const ux = (a, b) => { const dx = b.x - a.x, dy = b.y - a.y, d = Math.hypot(dx, dy) || 1; return [dx / d, dy / d]; };
+  let sv = '';
+  for (const b of bl) {
+    const a1 = atoms[b.a], a2 = atoms[b.b], [dx, dy] = ux(a1, a2), sh = 13;
+    const p1 = [a1.x + dx * sh, a1.y + dy * sh], p2 = [a2.x - dx * sh, a2.y - dy * sh], nx = -dy, ny = dx;
+    const offs = b.order === 1 ? [0] : b.order === 2 ? [-3.2, 3.2] : [-5, 0, 5];
+    offs.forEach((o) => { sv += L(p1[0] + nx * o, p1[1] + ny * o, p2[0] + nx * o, p2[1] + ny * o, { w: 1.7 }); });
+  }
+  atoms.forEach((a) => { sv += T(a.x, a.y + 6, a.label, { size: 15, role: 'id' }); });
+  // facts
+  const branchC = subs.reduce((t, x) => t + (GROUP_C[x.group] || 0), 0);
+  const carbons = cnt.C, hydrogens = cnt.H;
+  const formula = ['C', 'H', 'Br', 'Cl', 'F', 'O'].map((e) => (cnt[e] ? `${e}${cnt[e] > 1 ? cnt[e] : ''}` : '')).join('');
+  let group = 'alkane';
+  if (end === 'COOH') group = 'carboxylic acid'; else if (end === 'CHO') group = 'aldehyde'; else if (hasKetone) group = 'ketone'; else if (hasOH) group = 'alcohol';
+  else if (end && end !== 'OH' || subs.some((x) => ['Cl', 'Br', 'F'].includes(x.group))) group = 'haloalkane'; else if (bonds.includes(3)) group = 'alkyne'; else if (bonds.includes(2)) group = 'alkene';
+  const name = organicName(n, bonds, subs.filter((x) => GROUP_C[x.group] || true), end);
+  const hgt = Math.max(0, ...atoms.map((a) => Math.abs(a.y - y0)));
+  const H2 = 2 * (hgt + 40);
+  return { svg: svgWrap(sv, Math.max(260, Math.round(H2)), Math.round((Math.max(260, H2) / 2) - y0)), facts: { carbon_count: carbons, hydrogen_count: hydrogens, longest_chain: n, branch_count: subs.filter((x) => GROUP_C[x.group]).length, molecular_formula: formula, functional_group: group, iupac_name: name, units: {} } };
+};
+
 export const FIGURE_SCHEMAS = {
   vt_graph: '{"points":[[0,0],[20,40],[30,40],[40,0]],"ids":["O","K","L","M"],"xLabel":"Time/s","yLabel":"Velocity/m s⁻¹"}  (times strictly increasing; exactly ONE constant-velocity stretch if you ask constant_interval)',
   wave: '{"amplitude":4,"period":30,"cycles":2,"tUnit":"ms","unit":"cm"}',
@@ -354,7 +467,8 @@ export const FIGURE_SCHEMAS = {
   network_topology: '{"type":"star","nodes":5}  (type star|ring|bus|mesh|tree; nodes 3-6; the figure never carries the topology name)',
   spring_mass: '{"k":100,"x":0.05,"direction":"right","xUnit":"m","kUnit":"N/m"}  (horizontal mass-spring system displaced from equilibrium; ask restoring_force or potential_energy; the figure shows k and x only)',
   pendulum: '{"length":1,"angle":15,"showLength":true}  (simple pendulum; period uses g = 9.8 m/s² and is rounded to 0.1 s; ask period or frequency; use L = 0.25, 1, 2.25 or 4 m)',
-  coord_line: '{"m":2,"c":1,"xMin":-4,"xMax":4,"points":[1,3]}'
+  coord_line: '{"m":2,"c":1,"xMin":-4,"xMax":4,"points":[1,3]}',
+  organic_structure: '{"chain":4,"bonds":[1,1,1],"subs":[{"at":1,"side":"up","group":"methyl"}],"end":""}  (displayed structural formula; chain = carbons in main chain (1-7); bonds = order of each C–C bond (1 single,2 double,3 triple), length chain-1; subs = branches/groups: group methyl|ethyl|OH|Cl|Br|F|=O (=O = ketone), side up|down, at = carbon index from 0; methyl only on carbons 1..chain-2, ethyl on 2..chain-3; end = ""|"OH"|"COOH"|"CHO"|"Cl" on the right-hand end. For BRANCHED-CHAIN questions use methyl/ethyl branches (e.g. 2-methylbutane = chain 4, methyl at 1). ask molecular_formula, carbon_count, hydrogen_count, longest_chain, branch_count, functional_group or iupac_name. Never print the name or formula in the figure)'
 };
 
 export function renderFigure(kind, spec) {
@@ -451,10 +565,11 @@ export function answerIndex(q) {
 
 // Soo saar qiimaha la sugayo ee su'aasha ka timaadda facts + askFact
 export function expectedFor(askFact, facts, spec = {}) {
-  const numKinds = ['restoring_force', 'potential_energy', 'extension', 'length', 'max_value', 'acceleration', 'amplitude', 'period', 'frequency', 'wavelength', 'resultant', 'equivalent_resistance', 'total_current', 'gradient', 'y_intercept', 'hypotenuse', 'area', 'perimeter', 'total', 'difference'];
+  const numKinds = ['restoring_force', 'potential_energy', 'extension', 'length', 'max_value', 'acceleration', 'amplitude', 'period', 'frequency', 'wavelength', 'resultant', 'equivalent_resistance', 'total_current', 'gradient', 'y_intercept', 'hypotenuse', 'area', 'perimeter', 'total', 'difference', 'carbon_count', 'hydrogen_count', 'longest_chain', 'branch_count'];
   if (numKinds.includes(askFact)) { const v = facts[askFact]; return v === null || v === undefined ? null : { type: 'number', value: Number(v), unit: (facts.units && facts.units[askFact]) || facts.unit || '' }; }
   if (askFact === 'constant_interval') { const c = facts.constant_intervals || []; return c.length === 1 ? { type: 'tokens', tokens: [c[0].from, c[0].to] } : null; }
   if (['max_label', 'min_label', 'largest_share', 'smallest_share'].includes(askFact)) return facts[askFact] ? { type: 'tokens', tokens: [String(facts[askFact])] } : null;
+  if (['molecular_formula', 'iupac_name', 'functional_group'].includes(askFact)) return facts[askFact] ? { type: 'tokens', tokens: [String(facts[askFact])] } : null;
   if (askFact === 'gate_name') return { type: 'tokens', tokens: [facts.gate_name] };
   if (askFact === 'topology_name') return { type: 'tokens', tokens: [facts.topology_name] };
   if (askFact === 'column_total') { const h = spec.ask && spec.ask.col; return h && facts.column_total && h in facts.column_total ? { type: 'number', value: facts.column_total[h] } : null; }
