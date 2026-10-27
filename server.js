@@ -9,7 +9,7 @@ import fs from 'fs';
 import { fileURLToPath } from 'url';
 import { aiProviderStatus, asFigure, inFigure } from './ai-providers.js';
 import { getProfile, NATIONAL_PROFILES } from './exam-profiles.js';
-import { createSmartFigures, buildExamPlan, slotHint, plannedObjectives, interleavePlan, cleanQuestionMath, findBrokenQuestions, stripDanglingFigureRefs } from './smart-figures.js';
+import { createSmartFigures, buildExamPlan, slotHint, plannedObjectives, interleavePlan, cleanQuestionMath, findBrokenQuestions, stripDanglingFigureRefs, similarToOthers } from './smart-figures.js';
 import { renderFigure, verifySvg } from './figure-engine.js';
 
 const { Pool } = pg;
@@ -1909,6 +1909,7 @@ app.post('/api/approved-questions/pick', async (req, res) => {
     const used = new Set();
     const missing = [];
     const outParts = [];
+    const pickedData = [];
     for (const part of parts) {
       const count = Number(part.count) || 0;
       const target = Math.max(1, Math.round((Number(part.targetMarks) || count) / Math.max(1, count)));
@@ -1920,8 +1921,17 @@ app.post('/api/approved-questions/pick', async (req, res) => {
         LIMIT $9
       `, [String(b.bookId || ''), String(b.subject || '').toLowerCase().trim(),
           String(b.className || '').toLowerCase().trim(), String(b.lang || 'en'),
-          String(part.type || ''), Number(b.start) || 0, Number(b.end) || 0, target, count + 5]);
-      const rows = r.rows.filter((x) => !used.has(x.id)).slice(0, count);
+          String(part.type || ''), Number(b.start) || 0, Number(b.end) || 0, target, count + 25]);
+      // ka tuur kuwa jaban, kuwa manhajka ku saabsan, iyo kuwa isku mid ah kuwa hore loo doortay (qayb kasta)
+      const rows = [];
+      for (const x of r.rows) {
+        if (rows.length >= count) break;
+        if (used.has(x.id)) continue;
+        const d = { ...(x.data || {}), type: x.data?.type || part.type };
+        if (findBrokenQuestions([d], { dangling: true }).length) continue;
+        if (similarToOthers(d, pickedData, -1)) continue;
+        rows.push(x); pickedData.push(d);
+      }
       rows.forEach((x) => used.add(x.id));
       if (rows.length < count) missing.push({ type: part.type, need: count, have: rows.length });
       outParts.push({ type: part.type, section: part.section, count,

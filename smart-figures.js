@@ -40,6 +40,8 @@ export function cleanMathText(t) {
 }
 export function cleanQuestionMath(q) {
   if (!q || typeof q !== 'object') return q;
+  for (const k of ['question', 'text', 'answer']) if (typeof q[k] === 'string') q[k] = greekWords(q[k]);
+  if (Array.isArray(q.options)) q.options = q.options.map((o) => (typeof o === 'string' ? greekWords(o) : o));
   for (const k of ['question', 'text', 'answer']) if (typeof q[k] === 'string') q[k] = cleanMathText(q[k]);
   if (Array.isArray(q.options)) q.options = q.options.map((o) => (typeof o === 'string' ? cleanMathText(o) : o));
   if (Array.isArray(q.keyPoints)) q.keyPoints = q.keyPoints.map((o) => (typeof o === 'string' ? cleanMathText(o) : o));
@@ -91,9 +93,29 @@ export function similarToOthers(q, questions, index) {
   const a = qsig(q);
   return questions.some((o, i) => i !== index && o && nearDup(a, qsig(o)));
 }
+// Su'aalo ku saabsan manhajka/habka waxbarashada (ma aha maaddada) iyo doorashooyin isku macne ah
+const OFF_TOPIC = /\b(national\s+curriculum|teaching\s+approach(es)?|core\s+values?\s+and|learner[- ]centred|competency[- ]based\s+curriculum)\b/i;
+const SYN = [[/spring\s+constant|force\s+constant|stiffness\s+constant/g, 'forceconst'], [/\bperiodic\s+time\b|\btime\s+period\b/g, 'period'], [/\bangular\s+velocity\b|\bangular\s+frequency\b/g, 'angfreq']];
+function hasSynonymOptions(opts) {
+  const n = opts.map((o) => { let t = String(o).toLowerCase(); for (const [re, to] of SYN) t = t.replace(re, to); return t.replace(/[^\p{L}\p{N}]+/gu, ''); });
+  return new Set(n).size < n.length;
+}
+// Greek words -> symbols (theta, omega, lambda ...) si calaamadaha u noqdaan kuwa saxda ah
+export function greekWords(t) {
+  return String(t ?? '').replace(/\b(theta|omega|lambda|Delta|delta)\b/g, (m) => ({ theta: 'θ', omega: 'ω', lambda: 'λ', Delta: 'Δ', delta: 'δ' }[m])).replace(/\bw(\s*=\s*)(?=[√(2π\d1/])/g, 'ω$1');
+}
+const GENERIC_V = new Set(['calculate', 'determine', 'explain', 'describe', 'state', 'identify', 'define', 'given', 'using', 'following', 'which', 'what', 'with', 'from', 'that', 'this', 'into', 'their', 'when', 'between', 'about', 'value', 'values', 'effect', 'compare']);
+const stemTok = (t) => new Set((String(t || '').toLowerCase().match(/[\p{L}]{4,}/gu) || []).map((w) => w.replace(/(ing|es|s)$/, '')).filter((w) => w.length >= 3 && !GENERIC_V.has(w)));
+// Objective-ku wuxuu ku habboon yahay su'aasha kaliya haddii ay wadaagaan >=3 eray oo macno leh
+export function objectiveFits(q) {
+  const o = stemTok(q?.objective || ''); if (!o.size) return false;
+  const t = stemTok(`${q?.question || q?.text || ''} ${correctText(q)} ${(q?.keyPoints || []).join(' ')} ${(q?.options || []).join(' ')}`);
+  let n = 0; for (const w of o) if (t.has(w)) n++;
+  return n >= Math.min(3, Math.ceil(o.size / 2));
+}
 export function findBrokenQuestions(questions, { dangling = false, partPlan = null } = {}) {
   const bad = [];
-  const seenSig = new Map(), seenTxt = new Map(), seenTok = [];
+  const seenSig = new Map(), seenTxt = new Map(), seenTok = [], seenKP = [];
   questions.forEach((q, i) => {
     const text = String(q?.question || q?.text || '').trim();
     const posMcq = Array.isArray(partPlan) && partPlan.length ? /^(mcq|multiple)/i.test(partTypeAt(partPlan, i)) : false;
@@ -104,6 +126,8 @@ export function findBrokenQuestions(questions, { dangling = false, partPlan = nu
     else if (dangling && FIG_REF.test(text) && !q?.diagramSvg && !q?.diagramPng && !(q?.diagram && q.diagram !== 'undefined')) why = 'dangling-figure';
     else if (isMcq && opts.length !== 4) why = 'mcq-without-options';
     else if (isMcq && DEFINE_STEM.test(text)) why = 'mcq-is-open-question';
+    else if (OFF_TOPIC.test(text)) why = 'off-topic';
+    else if (isMcq && hasSynonymOptions(opts)) why = 'duplicate-options';
     else if (!isMcq && !opts.length && MCQ_STYLE.test(text)) why = 'mcq-style-in-written';
     else if (!isMcq && !opts.length && Number(q?.marks) >= 6 && text.split(/\s+/).length < 18 && !/\(a\)/i.test(text)) why = 'too-simple';
     if (!why) {
@@ -113,6 +137,12 @@ export function findBrokenQuestions(questions, { dangling = false, partPlan = nu
       const near = seenTok.some((p) => nearDup(cur, p.sg));
       if ((sig && seenSig.has(sig)) || (tx.length > 20 && seenTxt.has(tx)) || (st.size >= 3 && near)) why = 'duplicate';
       else { if (sig) seenSig.set(sig, i); if (tx.length > 20) seenTxt.set(tx, i); seenTok.push({ st, ot, sg: cur }); }
+    }
+    if (!why && !isMcq && !opts.length && Array.isArray(q?.keyPoints) && q.keyPoints.length >= 2) {
+      const kt = toks(q.keyPoints.join(' ').replace(/[0-9.]+/g, ' '));
+      const same = seenKP.filter((x) => jac(x, kt) >= 0.3).length;
+      if (same >= 2) why = 'duplicate';
+      else seenKP.push(kt);
     }
     if (why) bad.push({ index: i, why, mcq: isMcq });
   });

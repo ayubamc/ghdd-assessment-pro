@@ -836,6 +836,19 @@ $('generateExam').onclick=async()=>{
       try{
         status.textContent='Waxaa laga eegayaa keydka su’aalaha la ansixiyay...';
         const pk=await api('/api/approved-questions/pick',{method:'POST',body:JSON.stringify({bookId:String(id),start,end,subject:subject,className,lang:examLanguage,partPlan})});
+        // Macallinku wuxuu dalbaday sawirro: haddii keydku ku filan la'yahay sawirro, qayb ka mid ah su'aalaha MCQ ee keydka ayaa laga tegayaa si AI/Claude u sameeyo sawirrada la waayay
+        if(pk&&Array.isArray(pk.parts)&&figureMode==='smart'&&diagramCount>0){
+          const bankFigsNow=pk.parts.flatMap(x=>x.questions).filter(q=>q.diagramSvg||q.diagramPng).length;
+          let deficit=diagramCount-bankFigsNow;
+          if(deficit>0){
+            const mi=partPlan.findIndex(x=>/^(mcq|multiple)/i.test(x.type||''));
+            const arr=mi>=0&&pk.parts[mi]?pk.parts[mi].questions:null;
+            if(arr){
+              for(let j=arr.length-1;j>=0&&deficit>0;j--){if(!(arr[j].diagramSvg||arr[j].diagramPng)){arr.splice(j,1);deficit--;}}
+              pk.complete=false;pk.total=pk.parts.reduce((n,x)=>n+x.questions.length,0);
+            }
+          }
+        }
         if(pk&&pk.complete&&Array.isArray(pk.parts)){
           const all=pk.parts.flatMap(x=>x.questions);
           generated={questions:varyBankQuestions(all,partPlan),examProfile:{style:(all[0]||{}).natStyle||null},fromBank:true};
@@ -914,7 +927,7 @@ $('generateExam').onclick=async()=>{
       marks:Number(q.marks)||1,
       level:q.bloom||q.level||'Understand',
       answer:noBloom(q.answer||q.modelAnswer||''),
-      objective:noBloom(q.objective||''),
+      objective:objFits(q)?noBloom(q.objective||''):'',
       topic:q.topic||`${d.title} bogagga ${start}-${end}`,
       type:q.type||'Structured',
       section:q.section||'',
@@ -1720,6 +1733,15 @@ async function ensureDocxExporter(){
   try{await loadJsText('/docx-export.js?v=r30');}
   catch(e){throw new Error('Hubi in faylka public/docx-export.js la geliyay. '+e.message);}
   if(typeof window.buildExamDocx!=='function')throw new Error('docx-export.js si sax uma shaqeynin.');
+}
+function objFits(q){
+  const G=new Set(['calculate','determine','explain','describe','state','identify','define','given','using','following','which','what','with','from','that','this','into','their','when','between','about','value','values','effect','compare']);
+  const st=x=>new Set((String(x||'').toLowerCase().match(/[\p{L}]{4,}/gu)||[]).map(w=>w.replace(/(ing|es|s)$/,'')).filter(w=>w.length>=3&&!G.has(w)));
+  const o=st(q.objective);if(!o.size)return false;
+  let ans=String(q.answer||'');
+  const t=st((q.question||q.text||'')+' '+ans+' '+((q.keyPoints||[]).join(' '))+' '+((q.options||[]).join(' ')));
+  let n=0;for(const w of o)if(t.has(w))n++;
+  return n>=Math.min(3,Math.ceil(o.size/2));
 }
 async function downloadExamWord(which){
   if(!$('studentPaper')){return alert('Marka hore samee ama fur imtixaanka.');}
