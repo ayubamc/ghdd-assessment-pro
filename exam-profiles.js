@@ -45,27 +45,27 @@ export const NATIONAL_PROFILES = {
     notes: 'MCQ-yada waxaa ku jira v-t graph, wave, circuit, force, sawirro buug'
   }),
   chemistry: P({
-    style: {"mcq": "SECTION A: Circle the Correct Answer", "structured": "SECTION B: Direct Questions", "marksWord": "Marks", "letters": "abcd", "suffix": ")"},
+    style: {"mcq": "Choose the best answer for each of the following", "structured": "Part Two: Direct Questions", "marksWord": "Marks", "letters": "abcd", "suffix": "."},
     label: 'Chemistry', basis: 'sampled', language: 'en', letters: 'latin',
-    mcq: { count: 40, marks: 40 }, structured: { marks: 60, count: 10 },
-    figureShare: [0.1, 0.25],
-    figures: ['bar_chart', 'data_table', 'textbook_diagram'],
+    mcq: { count: 60, marks: 60 }, structured: { marks: 40, count: 8 },
+    figureShare: [0.2, 0.35],
+    figures: ['labelled_schematic', 'bar_chart', 'data_table', 'textbook_diagram'],
     calcShare: [0.15, 0.3],
     notes: 'Formula qaab, pH/mole xisaabin, jaantus xaaladaha shayga, qaab-dhismeed organic'
   }),
   biology: P({
-    style: {"mcq": "Section A: Multiple choice questions", "structured": "Section B: Structured Questions", "marksWord": "Marks", "letters": "ABCD", "suffix": "."},
+    style: {"mcq": "Choose the best answer for each of the following", "structured": "Part Two: Direct Questions", "marksWord": "Marks", "letters": "abcd", "suffix": "."},
     label: 'Biology', basis: 'sampled', language: 'en', letters: 'latin',
-    mcq: { count: 40, marks: 40 }, structured: { marks: 60, count: 11 },
-    figureShare: [0.12, 0.25],
+    mcq: { count: 60, marks: 60 }, structured: { marks: 40, count: 8 },
+    figureShare: [0.25, 0.4],
     figures: ['labelled_schematic', 'textbook_diagram', 'bar_chart', 'data_table'],
     notes: 'Jaantus unugyada, maqaarka, neuron, ubaxa, sawirro qalab (PCR) - badanaa sawir buug'
   }),
   math: P({
-    style: {"mcq": "Circle the letter of the correct answer", "structured": "Part Two: Answer the following questions", "marksWord": "Marks", "letters": "abcd", "suffix": "."},
+    style: {"mcq": "Choose the best answer for each of the following", "structured": "Part Two: Direct Questions", "marksWord": "Marks", "letters": "abcd", "suffix": "."},
     label: 'Xisaab', basis: 'sampled', language: 'so', letters: 'latin',
-    mcq: { count: 40, marks: 40 }, structured: { marks: 60, count: 14 },
-    figureShare: [0.03, 0.1],
+    mcq: { count: 60, marks: 60 }, structured: { marks: 40, count: 8 },
+    figureShare: [0.1, 0.2],
     calcShare: [0.5, 0.75],
     figures: ['coord_line', 'right_triangle', 'bar_chart', 'data_table'],
     notes: 'Badanaa xisaabin; calculus, complex numbers, probability, sets; sawir yar'

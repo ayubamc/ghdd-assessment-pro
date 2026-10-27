@@ -55,6 +55,38 @@ export function dropConflictingFigures(questions) {
   });
   return n;
 }
+// ---- Chemistry / general science notation: H2SO4 -> H₂SO₄, Fe3+ -> Fe³⁺, SO4^2- -> SO₄²⁻, -> -> →, <= -> ≤, degrees C -> °C
+const ELEMS = new Set('H He Li Be B C N O F Ne Na Mg Al Si P S Cl Ar K Ca Sc Ti V Cr Mn Fe Co Ni Cu Zn Ga Ge As Se Br Kr Rb Sr Ag Cd Sn Sb I Xe Cs Ba Au Hg Pb Bi Ra U Pt'.split(' '));
+const DIATOMIC = new Set(['H2', 'O2', 'N2', 'F2', 'Cl2', 'Br2', 'I2', 'P4', 'S8', 'O3']);
+const SUB = '₀₁₂₃₄₅₆₇₈₉', SUP = '⁰¹²³⁴⁵⁶⁷⁸⁹';
+const toSub = (d) => String(d).replace(/\d/g, (x) => SUB[x]);
+const toSup = (d) => String(d).replace(/\d/g, (x) => SUP[x]).replace(/\+/g, '⁺').replace(/-/g, '⁻');
+function validFormula(tok) {
+  const parts = tok.match(/[A-Z][a-z]?|\d+|[()]/g) || [];
+  if (parts.join('') !== tok) return false;
+  let groups = 0, depth = 0;
+  for (const p of parts) { if (p === '(') depth++; else if (p === ')') { if (--depth < 0) return false; } else if (/^[A-Z]/.test(p)) { if (!ELEMS.has(p)) return false; groups++; } }
+  return depth === 0 && groups >= 1;
+}
+export function chemFormat(t) {
+  let x = String(t ?? '');
+  if (!x) return x;
+  x = x.replace(/\\(?=[πωθλΔ])/g, '').replace(/\s*<->\s*|\s*<=>\s*|\s*⇄\s*/g, ' ⇌ ').replace(/\s*(?:-->|->|=>)\s*/g, ' → ').replace(/<=(?!>)/g, '≤').replace(/>=/g, '≥').replace(/\b(\d+(?:\.\d+)?)\s*degrees?\s*(?:C(?:elsius)?|c)\b/g, '$1 °C').replace(/(\d)\s*°\s*C\b/g, '$1 °C');
+  // formula tokens (must contain a digit and be built only from real element symbols)
+  x = x.replace(/(?<![A-Za-z0-9_.])(\d*)((?:[A-Z][a-z]?|\((?:[A-Z][a-z]?\d*)+\))(?:[A-Z][a-z]?|\d+|\((?:[A-Z][a-z]?\d*)+\))*)(?:\^?(\d*[+-]))?(?![A-Za-z0-9_])/g, (m, coef, f, ion) => {
+    if (!/\d/.test(f) && !ion) return m;
+    if (ion && /^[+-]$/.test(ion) && /^[A-Z][a-z]?\d$/.test(f)) return coef + f.replace(/\d$/, '') + toSup(f.slice(-1) + ion);
+    if (!validFormula(f)) return m;
+    const groups = (f.match(/[A-Z][a-z]?/g) || []).length;
+    if (!ion && groups < 2 && !DIATOMIC.has(f)) return m;
+    const body = f.replace(/(?<=[A-Za-z)])(\d+)/g, (_, d) => toSub(d));
+    return coef + body + (ion ? toSup(ion) : '');
+  });
+  // already-converted subscripts followed by charge: SO₄²- / SO₄2-
+  x = x.replace(/([₀-₉)])\^?(\d?)([+-])(?![A-Za-z0-9])/g, (m, a, d, sg) => a + toSup((d || '') + sg));
+  x = x.replace(/([A-Za-z₀-₉)])\^(\d*[+-])/g, (m, a, c) => a + toSup(c));
+  return x;
+}
 export function cleanQuestionMath(q) {
   if (!q || typeof q !== 'object') return q;
   for (const k of ['question', 'text', 'answer']) if (typeof q[k] === 'string') q[k] = timesX(q[k]);
@@ -64,6 +96,9 @@ export function cleanQuestionMath(q) {
   for (const k of ['question', 'text', 'answer']) if (typeof q[k] === 'string') q[k] = cleanMathText(q[k]);
   if (Array.isArray(q.options)) q.options = q.options.map((o) => (typeof o === 'string' ? cleanMathText(o) : o));
   if (Array.isArray(q.keyPoints)) q.keyPoints = q.keyPoints.map((o) => (typeof o === 'string' ? cleanMathText(o) : o));
+  for (const k of ['question', 'text', 'answer']) if (typeof q[k] === 'string') q[k] = chemFormat(q[k]);
+  if (Array.isArray(q.options)) q.options = q.options.map((o) => (typeof o === 'string' ? chemFormat(o) : o));
+  if (Array.isArray(q.keyPoints)) q.keyPoints = q.keyPoints.map((o) => (typeof o === 'string' ? chemFormat(o) : o));
   return q;
 }
 const figSig = (q) => { try { const m = q?.figureMeta; if (!m || !m.spec) return ''; const st = (o) => Array.isArray(o) ? o.map(st) : o && typeof o === 'object' ? Object.fromEntries(Object.keys(o).sort().map((k) => [k, st(o[k])])) : o; return m.kind + JSON.stringify(st(m.spec)); } catch (_) { return ''; } };
