@@ -137,18 +137,18 @@ export const NATIONAL_PROFILES = {
 };
 
 const SUBJECT_PATTERNS = [
-  ['physics', /phys|fiisi|فيزياء/i],
-  ['chemistry', /chem|kimis|كيمياء/i],
-  ['biology', /biolog|bayooloj|أحياء/i],
-  ['math', /math|xisaab|رياضيات/i],
-  ['geography', /geograph|jugraaf|جغرافيا/i],
-  ['technology', /technolog|tiknooloj|computer|ict|\bit\b|تقنية/i],
-  ['english', /english|ingiriis/i],
-  ['business', /business|ganacsi|تجارة/i],
-  ['history', /histor|taariikh|تاريخ/i],
+  ['physics', /phys|fiis[iy]|فيزياء/i],
+  ['chemistry', /chem|kim[iy]|كيمياء/i],
+  ['biology', /biolog|bayool|bayoloj|أحياء/i],
+  ['math', /math|xisaab|hisaab|رياضيات/i],
+  ['geography', /geograph|ju[gq]raaf|ju[gq]raf|جغرافيا/i],
+  ['technology', /technolog|techno|tekno|tiknool|tiknolo|tiknoloj|computer|kombiyuutar|kumbiyuutar|\bi\.?c\.?t\.?(?![a-z])|informat|\bit\b|تقنية|تكنولوجيا|حاسوب/i],
+  ['english', /english|ingiriis|ingiris/i],
+  ['business', /business|busnis|ganacsi|تجارة/i],
+  ['history', /histor|taariikh|tariikh|تاريخ/i],
   ['somali', /soomaali|somali(?!a\b)/i],
   ['arabic', /arab|carab|عربي/i],
-  ['tarbiya', /tarbiy|islaam|islam|تربية/i]
+  ['tarbiya', /tarbiy|islaam|islam|diinta|quraan|تربية/i]
 ];
 
 export function detectSubject(subject = '', className = '', sourceTitle = '') {

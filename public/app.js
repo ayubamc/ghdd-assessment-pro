@@ -805,7 +805,7 @@ $('generateExam').onclick=async()=>{
   const subjectForPlan=$('genSubject').value.trim()||$('bookSubject').value.trim()||books.find(b=>String(b.id)===String(id))?.subject||'';
   const classForPlan=$('genClass').value.trim();
   const format=$('genFormat').value;
-  if(format==='national'){const np=await loadNationalProfile(subjectForPlan,classForPlan,'');if(!np)return alert('Maadadan sample-ka qaranka lagama helin. Hubi magaca maadada (Physics, Chemistry, Biology, Xisaab, Geography, Technology, English, Business, History, Soomaali...).');}
+  if(format==='national'){const np=await loadNationalProfile(subjectForPlan,classForPlan,'');if(!np)return alert('Maadada "'+(subjectForPlan||'(madhan)')+'" sample-ka qaranka lagama helin. Hubi magaca maadada (Physics, Chemistry, Biology, Xisaab, Geography, Technology (ICT), English, Business, History, Soomaali...).');}
   const effectiveCount=(count===null?(isEnglishF4Exam(subjectForPlan,classForPlan)&&totalMarks===100?50:Math.min(50,Math.max(10,Math.round(totalMarks*0.44)))):count);
   let partPlan;
   try{partPlan=makePartPlan(effectiveCount,totalMarks,format,(format==='national'||($('figureMode')||{}).value==='smart')?0:diagramCount,'en',false,subjectForPlan,classForPlan);}
