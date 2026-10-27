@@ -16,6 +16,12 @@ const FALLBACK_MS = () => num(process.env.AI_FALLBACK_TIMEOUT_MS, 60000);
 const estTokens = (body) => Math.ceil(JSON.stringify(body.contents || '').length / 3.2);
 const num = (v, d) => (Number.isFinite(Number(v)) && Number(v) > 0 ? Number(v) : d);
 
+import { AsyncLocalStorage } from 'node:async_hooks';
+const als = new AsyncLocalStorage();
+// Calls made inside asFigure(...) (sawirada / diagrams) use the paid GEMINI_FIGURE_API_KEY first, so figures never starve.
+export const asFigure = (fn) => als.run({ figure: true }, fn);
+const figureKey = () => String(process.env.GEMINI_FIGURE_API_KEY || '').trim();
+
 // ───────── Gemini keys ─────────
 function geminiKeys() {
   const out = [];
@@ -183,6 +189,22 @@ globalThis.fetch = async (url, opts) => {
   const keys = geminiKeys();
   const hasFallback = providers().length > 0;
 
+  // Sawirada: furaha lacagta ah marka hore (haddii la dejiyay)
+  const fk = als.getStore()?.figure ? figureKey() : '';
+  if (fk && !isCool(fk, model)) {
+    try {
+      const [uf, of] = withKey(url, opts, fk);
+      stats.gemini++;
+      const rf = await tfetch(uf, of, GEMINI_MS());
+      if (rf.ok) { stats.figurePaid = (stats.figurePaid || 0) + 1; return rf; }
+      stats.geminiFail++;
+      const msg = await rf.clone().text().catch(() => '');
+      console.warn(`AI figure key ${model}: ${rf.status} ${msg.slice(0, 160)}`);
+      if (rf.status === 429 || rf.status >= 500) cool.set(fk + '|' + model, Date.now() + 60e3);
+      else if (rf.status !== 404) return rf;
+    } catch (e) { console.warn(`AI figure key ${model}: ${e.message}`); cool.set(fk + '|' + model, Date.now() + 60e3); }
+  }
+
   // Gemini oo dhamaaday -> si toos ah AI kale (ha sugin 429 kasta)
   if (hasFallback && geminiExhausted()) {
     const r = await viaFallback(body);
@@ -231,6 +253,7 @@ export function aiProviderStatus() {
   const now = Date.now();
   return {
     geminiKeys: geminiKeys().length,
+    figureKey: !!figureKey(),
     geminiExhausted: geminiExhausted(),
     geminiCooldowns: [...cool].filter(([, t]) => t > now).map(([id, t]) => ({ id: id.replace(/^.*\|/, ''), mins: Math.round((t - now) / 60000) })),
     fallbackProviders: providers().map(p => ({ name: p.name, model: p.model, coolingSecs: Math.max(0, Math.round(((provCool.get(p.name) || 0) - now) / 1000)) })),

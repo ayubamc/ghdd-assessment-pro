@@ -7,7 +7,7 @@ import { AsyncLocalStorage } from 'node:async_hooks';
 import path from 'path';
 import fs from 'fs';
 import { fileURLToPath } from 'url';
-import { aiProviderStatus } from './ai-providers.js';
+import { aiProviderStatus, asFigure } from './ai-providers.js';
 import { getProfile, NATIONAL_PROFILES } from './exam-profiles.js';
 import { createSmartFigures, buildExamPlan, slotHint, plannedObjectives, cleanQuestionMath, findBrokenQuestions, stripDanglingFigureRefs } from './smart-figures.js';
 import { renderFigure, verifySvg } from './figure-engine.js';
@@ -2092,7 +2092,7 @@ ${String(p.sourceText || p.text || '')}
   questions.forEach(cleanQuestionMath); // LaTeX -> π, √, ², ×
   let repairReport = null;
   try { repairReport = await smartFigures.repairBroken(p, questions, plannedObjectives(p, questions.length)); } catch (e) { console.warn('Repair skipped:', e.message); }
-  const figPromise = (p.figureMode === 'smart' && examPlan) ? smartFigures.smartFigureStage(p, questions, examPlan) : null;
+  const figPromise = (p.figureMode === 'smart' && examPlan) ? asFigure(() => smartFigures.smartFigureStage(p, questions, examPlan)) : null;
   try { await diversifyStems(questions, p.examLanguage); } catch (e) { console.warn('Stem variety skipped:', e.message); }
   const passageCheck = await enforcePassageGrounding(questions, passage, p, targetLanguage);
   const requestedDiagrams = Math.max(0, Math.min(30, Number(p.diagramCount || 0)));
@@ -2131,7 +2131,7 @@ ${String(p.sourceText || p.text || '')}
       const q = selected[i];
       // Always rebuild requested diagrams with the dedicated student-facing illustrator.
       // This avoids carrying through a diagram from the question-generation response that may expose answers.
-      q.diagramSvg = await aiGenerateDiagram(p, q, i + 1);
+      q.diagramSvg = await asFigure(() => aiGenerateDiagram(p, q, i + 1));
       q.diagram = '';
     }
     // Remove any unrequested diagrams that the main response added.
