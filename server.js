@@ -228,6 +228,7 @@ function cleanMathText(text) {
   t = t.replace(/\$\$([\s\S]*?)\$\$/g, '$1').replace(/\$([^$\n]*)\$/g, '$1').replace(/\\\(|\\\)|\\\[|\\\]/g, '');
   // \text{...}, \mathrm{...}, \textbf{...}
   t = t.replace(/\\(?:text|mathrm|textbf|mathbf|operatorname)\s*\{([^{}]*)\}/g, '$1');
+  t = t.replace(/\\lim\s*_\{([^{}]*)\}/g, (_, x) => 'lim(' + x.replace(/\\to\b|\\rightarrow\b/g, '→') + ')');
   // fractions and roots (repeat for simple nesting)
   for (let i = 0; i < 4; i++) {
     t = t.replace(/\\[dt]?frac\s*\{([^{}]*)\}\s*\{([^{}]*)\}/g, (_, a, b) => `${wrapIfComplex(a)}/${wrapIfComplex(b)}`);
@@ -236,7 +237,7 @@ function cleanMathText(text) {
   }
   // degrees: ^\circ, ^{\circ}
   t = t.replace(/\^\s*(?:\{\s*\\circ\s*\}|\\circ)/g, '°');
-  const sym = { times:'×', div:'÷', cdot:'·', pm:'±', mp:'∓', leq:'≤', le:'≤', geq:'≥', ge:'≥', neq:'≠', ne:'≠', approx:'≈', pi:'π', infty:'∞', therefore:'∴', angle:'∠', triangle:'△', perp:'⊥', parallel:'∥', circ:'°', degree:'°', alpha:'α', beta:'β', theta:'θ', sum:'Σ', Delta:'Δ', rightarrow:'→', to:'→', in:'∈', cup:'∪', cap:'∩', subset:'⊂', emptyset:'∅', sim:'∼', cong:'≅' };
+  const sym = { times:'×', div:'÷', cdot:'·', pm:'±', mp:'∓', leq:'≤', le:'≤', geq:'≥', ge:'≥', neq:'≠', ne:'≠', approx:'≈', pi:'π', infty:'∞', therefore:'∴', angle:'∠', triangle:'△', perp:'⊥', parallel:'∥', circ:'°', degree:'°', alpha:'α', beta:'β', theta:'θ', sum:'Σ', int:'∫', oint:'∮', prod:'∏', lim:'lim', log:'log', ln:'ln', sin:'sin', cos:'cos', tan:'tan', cot:'cot', sec:'sec', csc:'csc', exp:'exp', min:'min', max:'max', ldots:'…', dots:'…', cdots:'⋯', forall:'∀', exists:'∃', notin:'∉', propto:'∝', sim:'∼', equiv:'≡', ll:'≪', gg:'≫', leftarrow:'←', leftrightarrow:'↔', Rightarrow:'⇒', Leftrightarrow:'⇔', mu:'μ', lambda:'λ', omega:'ω', Omega:'Ω', sigma:'σ', Sigma:'Σ', phi:'φ', varphi:'φ', epsilon:'ε', gamma:'γ', delta:'δ', rho:'ρ', tau:'τ', nabla:'∇', partial:'∂', hbar:'ħ', Delta:'Δ', rightarrow:'→', to:'→', in:'∈', cup:'∪', cap:'∩', subset:'⊂', emptyset:'∅', sim:'∼', cong:'≅' };
   t = t.replace(/\\([A-Za-z]+)/g, (m, name) => {
     if (name === 'left' || name === 'right' || name === 'displaystyle' || name === 'quad' || name === 'qquad') return '';
     return sym[name] !== undefined ? sym[name] : name;   // unknown command: keep the plain word, drop the backslash
@@ -2023,6 +2024,58 @@ function sourceForRange(p, range) {
     return out || full;
   } catch (_) { return full; }
 }
+// Calculation MCQs: an independent solver checks the answer key; if the key is wrong (or no option matches) the options+key are rebuilt from the exact result.
+const optStrip = (o) => String(o ?? '').replace(/^\s*[A-Da-d][.)]\s+/, '').trim();
+function mcqKeyIndex(q) {
+  const opts = (Array.isArray(q.options) ? q.options : []).map(optStrip);
+  const a = String(q.answer || '').trim();
+  if (/^[A-Da-d][.)]?$/.test(a)) return 'ABCD'.indexOf(a[0].toUpperCase());
+  const m = a.match(/^([A-Da-d])[.)]\s/);
+  if (m) return 'ABCD'.indexOf(m[1].toUpperCase());
+  return opts.findIndex((o) => o && o.toLowerCase() === optStrip(a).toLowerCase());
+}
+async function verifyCalcMcqs(questions, p) {
+  const pick = [];
+  questions.forEach((q, i) => {
+    const opts = Array.isArray(q.options) ? q.options : [];
+    const t = String(q.question || '');
+    if (opts.length !== 4 || !/^(mcq|multiple)/i.test(q.type || 'mcq')) return;
+    if ((t.match(/\d+(?:\.\d+)?/g) || []).length >= 2 && /calculat|determin|find|what is|how (?:much|many|long|far|fast)|compute|evaluate|solve|simplif|work out|value of|energy|speed|period|frequency|force|constant|wavelength|mass|volume|concentration|mole/i.test(t)) pick.push(i);
+  });
+  if (!pick.length) return { checked: 0, wrong: 0, fixed: 0 };
+  const wrong = [];
+  for (let b = 0; b < pick.length; b += 20) {
+    const group = pick.slice(b, b + 20);
+    const items = group.map((i) => ({ i, question: String(questions[i].question || ''), options: questions[i].options.map(optStrip) }));
+    const prompt = `You are a careful ${p.subject || 'science'} teacher checking multiple-choice exam questions. For EACH item, solve the problem yourself with exact arithmetic and correct units (the data you need is in the text; if a figure is mentioned, rely on the numbers in the text). Then say which option letter (A, B, C or D) equals YOUR result, or "NONE" if no option matches it. Do not guess.\nITEMS: ${JSON.stringify(items)}\nReturn ONLY JSON: {"results":[{"i":0,"working":"short calculation","result":"your value","letter":"A|B|C|D|NONE"}]}`;
+    let out = null;
+    try { out = await callGeminiJson(prompt, { maxTokens: 8000, temperature: 0, thinking: 1500 }); } catch (e) { console.warn('Answer check skipped:', e.message); continue; }
+    for (const r of (Array.isArray(out?.results) ? out.results : [])) {
+      const q = questions[Number(r.i)]; if (!q) continue;
+      const key = mcqKeyIndex(q), got = 'ABCD'.indexOf(String(r.letter || '').trim().toUpperCase());
+      if (got < 0 || got !== key) wrong.push({ i: Number(r.i), solver: r });
+    }
+  }
+  let fixed = 0;
+  let next = 0;
+  const worker = async () => {
+    while (next < wrong.length) {
+      const { i, solver } = wrong[next++];
+      const q = questions[i];
+      const prompt = `Exam question (multiple choice, keep this exact stem):\n${q.question}\nA previous check suggests the answer key may be wrong${solver?.result ? ` (a solver got: ${String(solver.result).slice(0, 80)})` : ''}. Solve it carefully with exact arithmetic, then write FOUR options: exactly one is the correct result (correct units, sensible rounding) and three are plausible wrong answers from typical mistakes. Return ONLY JSON: {"working":"calculation","correct":"the correct value","options":["","","",""],"answer":"A|B|C|D"}`;
+      try {
+        const j = await callGeminiJson(prompt, { maxTokens: 3000, temperature: 0, thinking: 1500 });
+        const opts = (Array.isArray(j.options) ? j.options : []).map((o) => optStrip(o));
+        const ai = 'ABCD'.indexOf(String(j.answer || '').trim().toUpperCase());
+        if (opts.length === 4 && ai >= 0 && new Set(opts.map((o) => o.toLowerCase())).size === 4) {
+          q.options = opts; q.answer = 'ABCD'[ai]; fixed++;
+        }
+      } catch (e) { console.warn(`Answer fix failed for Q${i + 1}:`, e.message); }
+    }
+  };
+  await Promise.all(Array.from({ length: Math.min(4, wrong.length) }, worker));
+  return { checked: pick.length, wrong: wrong.length, fixed };
+}
 async function aiGenerate(p) {
   const key = process.env.GEMINI_API_KEY;
   if (!key) return null;
@@ -2125,6 +2178,8 @@ ${sourceForRange(p, range || { from: 0, to: count })}
   let repairReport = null;
   try { repairReport = await smartFigures.repairBroken(p, questions, plannedObjectives(p, questions.length), { deadline: T0 + 150000 }); } catch (e) { console.warn('Repair skipped:', e.message); }
   tlog('repair done');
+  try { if (Date.now() - T0 < 140000) { const vr = await verifyCalcMcqs(questions, p); console.log(`[gen] answer check: ${JSON.stringify(vr)}`); } } catch (e) { console.warn('Answer check skipped:', e.message); }
+  tlog('answers checked');
   const figPromise = (p.figureMode === 'smart' && examPlan) ? asFigure(() => smartFigures.smartFigureStage(p, questions, examPlan)) : null;
   try { if (Date.now() - T0 < 110000) await diversifyStems(questions, p.examLanguage); else console.log('[gen] stem variety skipped (time budget)'); } catch (e) { console.warn('Stem variety skipped:', e.message); }
   tlog('stems done');
@@ -2617,7 +2672,16 @@ app.post('/api/generate', async (req, res) => {
       const idsFromAI=Array.isArray(q.objectiveIds)?q.objectiveIds.map(String):[];
       const planned=objectivePlan[i] && selectedIds.includes(objectivePlan[i]) ? objectivePlan[i] : (selectedIds.length ? selectedIds[i%selectedIds.length] : '');
       const validSelected=idsFromAI.find(id=>selectedIds.includes(id));
-      const id=planned || validSelected;
+      // Link by CONTENT (the question may not sit at the planned index after de-duplication / repair / top-up).
+      const qWords=new Set((String(`${q.question||''} ${q.answer||''} ${q.objective||''}`).toLowerCase().match(/[\p{L}\p{N}]{4,}/gu)||[]));
+      let bestId='',bestScore=0;
+      for(const sid of selectedIds){const o=inventoryById.get(sid);if(!o)continue;
+        const ow=new Set((String(`${o.text||''} ${o.topic||''} ${o.unit||''}`).toLowerCase().match(/[\p{L}\p{N}]{4,}/gu)||[]));
+        let sc=0;for(const w of ow)if(qWords.has(w))sc++;
+        if(String(q.objective||'').trim().toLowerCase()===String(o.text||'').trim().toLowerCase())sc+=10;
+        if(sid===planned)sc+=0.5;
+        if(sc>bestScore){bestScore=sc;bestId=sid;}}
+      const id=(bestScore>=2?bestId:'') || planned || validSelected;
       const ids=id ? [id] : [];
       const requiredPages=[...new Set(ids.map(x=>inventoryById.get(x)?.page).filter(Number.isInteger))].sort((a,b)=>a-b);
       // Source pages are authoritative metadata: derive them from the selected objective, never from untrusted AI output.

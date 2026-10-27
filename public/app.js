@@ -1094,21 +1094,20 @@ function chemistryHtml(value,opts){
 }
 function splitSubParts(text){
   const s=String(text||'');
-  const hits=[];let want='a';const re=/\(([a-h])\)/g;let m;
+  const hits=[];let want='a';const re=/\(?([a-h])\)/g;let m;
   while((m=re.exec(s))){
-    if(m[1]!==want)continue;
-    const before=m.index===0||/\s/.test(s[m.index-1]);const after=/\s/.test(s[m.index+3]||' ');
+    if(m[1].toLowerCase()!==want)continue;
+    const before=m.index===0||/\s/.test(s[m.index-1]);const after=/\s/.test(s[m.index+m[0].length]||' ');
     if(!before||!after)continue;
-    hits.push(m.index);want=String.fromCharCode(want.charCodeAt(0)+1);
+    hits.push({i:m.index,len:m[0].length,letter:want});want=String.fromCharCode(want.charCodeAt(0)+1);
   }
   if(hits.length<2)return {stem:s.trim(),parts:[]};
-  const stem=s.slice(0,hits[0]).trim();
+  const stem=s.slice(0,hits[0].i).trim();
   const parts=hits.map((h,k)=>{
-    let t=s.slice(h,k+1<hits.length?hits[k+1]:s.length).trim();
-    const lab=t.slice(0,3);t=t.slice(3).trim();
+    let t=s.slice(h.i+h.len,k+1<hits.length?hits[k+1].i:s.length).trim();
     let marks=null;const mm=t.match(/\s*\[\s*(\d+)\s*(?:marks?)?\s*\]\s*$/i);
     if(mm){marks=Number(mm[1]);t=t.slice(0,mm.index).trim();}
-    return {label:lab,text:t,marks};
+    return {label:'('+h.letter+')',text:t,marks};
   });
   return {stem,parts};
 }

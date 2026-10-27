@@ -25,6 +25,7 @@ export function cleanMathText(t) {
   let s = String(t ?? '');
   if (!/[\\^$]/.test(s)) return s;
   s = s.replace(/\$\$?([^$]+)\$\$?/g, '$1').replace(/\\[()\[\]]/g, '');
+  s = s.replace(/\\(?:text|textrm|mathrm|mathbf|textbf|mbox|rm)\s*\{([^{}]*)\}/g, '$1');
   for (let i = 0; i < 4; i++) s = s.replace(/\\d?frac\s*\{([^{}]*)\}\s*\{([^{}]*)\}/g, (_, a, b) => `${/^[\w.]+$/.test(a) ? a : '(' + a + ')'}/${/^[\w.]+$/.test(b) ? b : '(' + b + ')'}`);
   s = s.replace(/\\sqrt\s*\{([^{}]*)\}/g, '√($1)').replace(/\\sqrt\s*([\w.]+)/g, '√$1');
   s = s.replace(/\\(?:text|textrm|mathrm|mathbf|textbf|mbox|rm)\s*\{([^{}]*)\}/g, '$1');
