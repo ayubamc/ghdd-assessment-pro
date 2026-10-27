@@ -1184,9 +1184,9 @@ async function claudeUsageSummary() {
     note: 'Qiyaas ku salaysan tokens-ka (CLAUDE_PRICE_IN/OUT, CLAUDE_BUDGET). Haraagga saxda ah: console.anthropic.com → Billing.' };
 }
 
-// Answer-key check and repair of broken questions are done by Claude (paid) for the subjects in CLAUDE_AUDIT_SUBJECTS (default: math, chemistry).
+// Answer-key check and repair of broken questions are done by Claude (paid) for the subjects in CLAUDE_AUDIT_SUBJECTS (default: none = Claude is used ONLY for figures; set CLAUDE_AUDIT_SUBJECTS=math,chemistry to enable).
 const auditViaClaude = (p, fn) => {
-  const subs = String(process.env.CLAUDE_AUDIT_SUBJECTS ?? 'math,chemistry').toLowerCase().split(/[,\s]+/).filter(Boolean);
+  const subs = String(process.env.CLAUDE_AUDIT_SUBJECTS ?? '').toLowerCase().split(/[,\s]+/).filter(Boolean);
   const subj = `${p?.subject || ''} ${p?.className || ''} ${p?.sourceTitle || ''}`.toLowerCase();
   const on = subs.length && subs.some((s) => (s === 'math' ? /math|xisaab|رياضيات/.test(subj) : s === 'chemistry' ? /chem|kimis|كيمياء/.test(subj) : subj.includes(s)));
   return on ? asAudit(fn) : fn();
