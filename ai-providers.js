@@ -5,6 +5,15 @@
 // Jawaabta had iyo jeer waxay u noqotaa qaabka Gemini, sidaas darteed server.js kale isma bedelayo.
 const _fetch = globalThis.fetch;
 
+// Waqti-xad: codsi kasta wuu go'aa haddii uu hakado (ka hortag Blueprint 8+ daqiiqo ah)
+async function tfetch(url, opts, ms) {
+  const ac = new AbortController();
+  const t = setTimeout(() => ac.abort(), ms);
+  try { return await _fetch(url, { ...opts, signal: ac.signal }); } finally { clearTimeout(t); }
+}
+const GEMINI_MS = () => num(process.env.AI_GEMINI_TIMEOUT_MS, 90000);
+const FALLBACK_MS = () => num(process.env.AI_FALLBACK_TIMEOUT_MS, 60000);
+const estTokens = (body) => Math.ceil(JSON.stringify(body.contents || '').length / 3.2);
 const num = (v, d) => (Number.isFinite(Number(v)) && Number(v) > 0 ? Number(v) : d);
 
 // ───────── Gemini keys ─────────
@@ -22,13 +31,13 @@ function providers() {
   const list = [];
   const P = (name, keyEnv, base, modelEnv, defModel, extra = {}) => {
     const key = process.env[keyEnv];
-    if (key) list.push({ name, key, base, model: process.env[modelEnv] || defModel, maxOut: extra.maxOut || num(process.env.AI_FALLBACK_MAX_TOKENS, 16000), json: extra.json !== false, headers: extra.headers || {} });
+    if (key) list.push({ name, key, base, model: process.env[modelEnv] || defModel, maxOut: extra.maxOut || num(process.env.AI_FALLBACK_MAX_TOKENS, 16000), json: extra.json !== false, maxIn: extra.maxIn || num(process.env.AI_FALLBACK_MAX_INPUT_TOKENS, 30000), headers: extra.headers || {} });
   };
-  P('groq', 'GROQ_API_KEY', 'https://api.groq.com/openai/v1', 'GROQ_MODEL', 'llama-3.3-70b-versatile', { maxOut: 32000 });
+  P('groq', 'GROQ_API_KEY', 'https://api.groq.com/openai/v1', 'GROQ_MODEL', 'llama-3.3-70b-versatile', { maxOut: 32000, maxIn: 9000 });
   P('cerebras', 'CEREBRAS_API_KEY', 'https://api.cerebras.ai/v1', 'CEREBRAS_MODEL', 'gpt-oss-120b', { maxOut: 16000 });
   P('openrouter', 'OPENROUTER_API_KEY', 'https://openrouter.ai/api/v1', 'OPENROUTER_MODEL', 'meta-llama/llama-3.3-70b-instruct:free', { json: false });
-  P('mistral', 'MISTRAL_API_KEY', 'https://api.mistral.ai/v1', 'MISTRAL_MODEL', 'mistral-small-latest', { maxOut: 16000 });
-  P('github', 'GITHUB_MODELS_TOKEN', 'https://models.github.ai/inference', 'GITHUB_MODELS_MODEL', 'openai/gpt-4o-mini', { maxOut: 8000 });
+  P('mistral', 'MISTRAL_API_KEY', 'https://api.mistral.ai/v1', 'MISTRAL_MODEL', 'mistral-small-latest', { maxOut: 16000, maxIn: 100000 });
+  P('github', 'GITHUB_MODELS_TOKEN', 'https://models.github.ai/inference', 'GITHUB_MODELS_MODEL', 'openai/gpt-4o-mini', { maxOut: 8000, maxIn: 6500 });
   if (process.env.CUSTOM_AI_KEY && process.env.CUSTOM_AI_BASE_URL) P('custom', 'CUSTOM_AI_KEY', process.env.CUSTOM_AI_BASE_URL.replace(/\/+$/, ''), 'CUSTOM_AI_MODEL', 'gpt-4o-mini');
   const order = String(process.env.AI_FALLBACK_ORDER || '').split(',').map(s => s.trim()).filter(Boolean);
   if (order.length) list.sort((a, b) => (order.indexOf(a.name) + 1 || 99) - (order.indexOf(b.name) + 1 || 99));
@@ -107,14 +116,15 @@ async function slot(name, max = num(process.env.AI_FALLBACK_CONCURRENCY, 3)) {
 async function callProvider(p, body) {
   const req = toChat(body, p);
   if (!req) return null;
+  if (estTokens(body) > p.maxIn) { console.log(`AI fallback ${p.name} skipped: prompt ~${estTokens(body)} tokens > ${p.maxIn}`); return null; }
   const release = await slot(p.name);
   try {
     for (let attempt = 0; attempt < 2; attempt++) {
-      const r = await _fetch(p.base + '/chat/completions', {
+      const r = await tfetch(p.base + '/chat/completions', {
         method: 'POST',
         headers: { 'content-type': 'application/json', authorization: 'Bearer ' + p.key, ...p.headers },
         body: JSON.stringify(req)
-      });
+      }, FALLBACK_MS());
       const d = await r.json().catch(() => ({}));
       if (!r.ok) {
         const msg = JSON.stringify(d).slice(0, 300);
@@ -180,7 +190,15 @@ globalThis.fetch = async (url, opts) => {
     if (isCool(key, model)) continue;
     const [u2, o2] = withKey(url, opts, key);
     stats.gemini++;
-    const r = await _fetch(u2, o2);
+    let r;
+    try { r = await tfetch(u2, o2, GEMINI_MS()); }
+    catch (e) {
+      stats.geminiFail++; stats.lastError = `gemini ${model} ${e.name === 'AbortError' ? 'timeout' : e.message}`;
+      console.warn(`AI gemini ${model} key#${(start + i) % keys.length + 1}: ${stats.lastError}`);
+      cool.set(key + '|' + model, Date.now() + 120e3);
+      last = new Response(JSON.stringify({ error: { code: 504, message: 'AI timeout' } }), { status: 504, headers: { 'content-type': 'application/json' } });
+      continue;
+    }
     if (r.ok) return r;
     stats.geminiFail++;
     last = r;
@@ -194,7 +212,8 @@ globalThis.fetch = async (url, opts) => {
   }
 
   // Dhammaan key-yada model-kan way dhamaadeen
-  if (hasFallback && (!last || geminiExhausted() || !keys.length)) {
+  if (hasFallback) {
+    console.log(`AI route: Gemini ${model} unavailable on all ${keys.length} key(s) -> fallback`);
     const r = await viaFallback(body);
     if (r) return r;
   }

@@ -671,7 +671,7 @@ async function saveCurrentBlueprint(){
   const lang=currentExamLang();
   const subject=($('genSubject').value||'').trim()||currentExamBlueprint.subject||'';
   const className=($('genClass').value||'').trim();
-  const entry={id:uid(),title:`Blueprint — ${subject||'—'}${className?' — '+className:''}`,subject,className,lang,savedAt:new Date().toISOString(),blueprint:JSON.parse(JSON.stringify(currentExamBlueprint))};
+  const entry={id:uid(),title:`Blueprint — ${subject||'—'}${className?' — '+className:''}`,subject,className,lang,savedAt:new Date().toISOString(),key:currentExamBlueprintKey||'',blueprint:JSON.parse(JSON.stringify(currentExamBlueprint))};
   const list=loadSavedBlueprints();list.unshift(entry);
   try{localStorage.setItem(BP_STORE,JSON.stringify(list.slice(0,50)));}catch(e){alert('Browser-ka kaydin ma suurtagalin: '+e.message);return;}
   renderSavedBlueprints();
@@ -701,15 +701,23 @@ function renderSavedBlueprints(){
   if(!list.length){el.innerHTML='';return;}
   el.innerHTML='<h3>Blueprint-yada la keydiyay</h3>'+list.map(x=>`<div class="item"><b>${esc(x.title)}</b><p class="muted">${esc(new Date(x.savedAt).toLocaleString())} · ${Number(x.blueprint?.totalMarks)||0} · ${(x.blueprint?.coverage||[]).length}</p><div class="paper-tools no-print"><button class="secondary" data-bp-open="${x.id}">Fur</button><button class="secondary" data-bp-print="${x.id}">Daabac</button><button class="danger" data-bp-del="${x.id}">Tir</button></div></div>`).join('');
   const find=id=>loadSavedBlueprints().find(x=>x.id===id);
-  el.querySelectorAll('[data-bp-open]').forEach(b=>b.onclick=()=>{const x=find(b.dataset.bpOpen);if(!x)return;currentExamBlueprint=x.blueprint;currentExamBlueprintKey='';const sel=$('examLanguage');if(sel&&x.lang)sel.value=x.lang;renderExamBlueprint(x.blueprint,{marksMatch:true,questionsMatch:true});});
+  el.querySelectorAll('[data-bp-open]').forEach(b=>b.onclick=()=>{const x=find(b.dataset.bpOpen);if(!x)return;currentExamBlueprint=x.blueprint;currentExamBlueprintKey=x.key||'';const sel=$('examLanguage');if(sel&&x.lang)sel.value=x.lang;renderExamBlueprint(x.blueprint,{marksMatch:true,questionsMatch:true});});
   el.querySelectorAll('[data-bp-print]').forEach(b=>b.onclick=()=>{const x=find(b.dataset.bpPrint);if(x)printBlueprintDoc(x.blueprint,x.lang||currentExamLang());});
   el.querySelectorAll('[data-bp-del]').forEach(b=>b.onclick=()=>{if(!confirm('Ma tirtirtaa Blueprint-kan?'))return;localStorage.setItem(BP_STORE,JSON.stringify(loadSavedBlueprints().filter(x=>x.id!==b.dataset.bpDel)));renderSavedBlueprints();});
+}
+// Blueprint-yada hore waxay ku jiraan browser-ka (ma baahna AI dambe) — isla buug/bogag/dhibcaha/tirada/luqadda => dib loo isticmaalo
+const BP_CACHE='ghdd_bp_cache';
+function bpCacheLoad(){try{const v=JSON.parse(localStorage.getItem(BP_CACHE)||'[]');return Array.isArray(v)?v:[];}catch(_){return [];}}
+function bpCachePut(key,blueprint,validation){
+  if(!key||!blueprint)return;
+  try{const list=bpCacheLoad().filter(x=>x.key!==key);list.unshift({key,blueprint,validation:validation||null,at:Date.now()});localStorage.setItem(BP_CACHE,JSON.stringify(list.slice(0,25)));}catch(_){}
 }
 async function requestExamBlueprint(sourceText,p){
   const d=await apiJob('/api/blueprint',{...p,sourceText});
   currentExamBlueprint=d.blueprint;
   currentExamBlueprintKey=p.blueprintKey;
   try{sessionStorage.setItem('ghdd.examBlueprint.v1',JSON.stringify({key:p.blueprintKey,blueprint:d.blueprint,validation:d.validation}));}catch(_){}
+  bpCachePut(p.blueprintKey,d.blueprint,d.validation);
   renderExamBlueprint(d.blueprint,d.validation);
   return d.blueprint;
 }
@@ -717,9 +725,17 @@ function restoreExamBlueprint(key){
   if(currentExamBlueprint&&currentExamBlueprintKey===key)return true;
   try{
     const saved=JSON.parse(sessionStorage.getItem('ghdd.examBlueprint.v1')||'null');
-    if(!saved||saved.key!==key||!saved.blueprint||!Array.isArray(saved.blueprint.coverage))return false;
-    currentExamBlueprint=saved.blueprint;currentExamBlueprintKey=saved.key;
-    renderExamBlueprint(saved.blueprint,saved.validation||{marksMatch:true,questionsMatch:true});
+    if(saved&&saved.key===key&&saved.blueprint&&Array.isArray(saved.blueprint.coverage)){
+      currentExamBlueprint=saved.blueprint;currentExamBlueprintKey=saved.key;
+      renderExamBlueprint(saved.blueprint,saved.validation||{marksMatch:true,questionsMatch:true});
+      return true;
+    }
+  }catch(_){}
+  try{
+    const hit=bpCacheLoad().find(x=>x.key===key&&x.blueprint&&Array.isArray(x.blueprint.coverage))||loadSavedBlueprints().find(x=>x.key===key&&x.blueprint&&Array.isArray(x.blueprint.coverage));
+    if(!hit)return false;
+    currentExamBlueprint=hit.blueprint;currentExamBlueprintKey=key;
+    renderExamBlueprint(hit.blueprint,hit.validation||{marksMatch:true,questionsMatch:true});
     return true;
   }catch(_){return false;}
 }
@@ -748,6 +764,7 @@ $('makeExamBlueprint').onclick=async()=>{
     const partPlan=makePartPlan(effectiveCount,totalMarks,format,smartBp?0:diagramCount,lang,false,bpSubject,className);
     const key=examBlueprintKey(id,start,end,totalMarks,effectiveCount,format,chosen,levels);
     const usePassageBp=resolvePassageMode(subject);
+    if(restoreExamBlueprint(key)){status.textContent='Blueprint-kii hore ee isla buugga/bogagga/dhibcaha ayaa dib loo isticmaalay — AI lama isticmaalin (tokens lama bixin). Si aad cusub u samayso, beddel bogagga/dhibcaha/tirada su’aalaha.';return;}
     const bp=await requestExamBlueprint(sourceText,{subject,className,sourceTitle:d.title,pageRange:{start,end},totalMarks,count:effectiveCount,format,diagramCount:(usePassageBp||smartBp)?0:diagramCount,partPlan,levels,examLanguage:chosen,passage:usePassageBp,blueprintKey:key});
     status.textContent=`Blueprint waa diyaar: ${bp.coverage.length} mawduuc ayaa la aqoonsaday.`;
   }catch(e){status.textContent='Khalad: '+e.message;alert('AI Blueprint: '+e.message);}
@@ -1579,7 +1596,7 @@ async function ensureDocxExporter(){
     catch(_){try{await loadJsText('https://cdn.jsdelivr.net/npm/docx@9.8.1/dist/index.iife.js');}catch(__){}}
   }
   if(!window.docx)throw new Error('Maktabadda docx lama helin. Geli faylka public/vendor/docx.iife.js oo dib u deploy garee.');
-  try{await loadJsText('/docx-export.js?v=r27');}
+  try{await loadJsText('/docx-export.js?v=r28');}
   catch(e){throw new Error('Hubi in faylka public/docx-export.js la geliyay. '+e.message);}
   if(typeof window.buildExamDocx!=='function')throw new Error('docx-export.js si sax uma shaqeynin.');
 }
