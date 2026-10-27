@@ -136,8 +136,16 @@ function hasSynonymOptions(opts) {
   return new Set(n).size < n.length;
 }
 // Greek words -> symbols (theta, omega, lambda ...) si calaamadaha u noqdaan kuwa saxda ah
+const PART_PREFIX = /^\s*(?:PART|QAYBTA)\s+[IVX\d]+\s*[—–:-]\s*(?:DIRECT\s*\/?\s*STRUCTURED\s*QUESTIONS?|MULTIPLE\s*CHOICE\s*QUESTIONS?)\s*/i;
+// Notation: w -> ω inside formulas, 2pi -> 2π, sqrt(..) -> √(..), "PART IV — DIRECT / STRUCTURED QUESTIONS" prefix removed from a question
+export function fixNotation(t, formulaCtx = false) {
+  let x = String(t ?? '').replace(PART_PREFIX, '');
+  x = x.replace(/\bsqrt\s*\(/gi, '√(').replace(/(\d|\))\s*pi\b/g, '$1π').replace(/\bpi\b(?=\s*[/*)=]|\s*$|\s*rad)/g, 'π');
+  if (formulaCtx || /[=²]|\(wt\)|\bsin\b|\bcos\b/.test(x)) x = x.replace(/\(wt\)/g, '(ωt)').replace(/\bw\b(?=\s*(?:[=²*\/)(]|t\b|\^|$)|\s+[A-Za-z√(]|\s*\d)/g, 'ω').replace(/(?<=[A-Za-z]\s)w\b/g, 'ω');
+  return x;
+}
 export function greekWords(t) {
-  return String(t ?? '').replace(/\b(theta|omega|lambda|Delta|delta)\b/g, (m) => ({ theta: 'θ', omega: 'ω', lambda: 'λ', Delta: 'Δ', delta: 'δ' }[m])).replace(/\bw(\s*=\s*)(?=[√(2π\d1/])/g, 'ω$1');
+  return fixNotation(t).replace(/\b(theta|omega|lambda|Delta|delta)\b/g, (m) => ({ theta: 'θ', omega: 'ω', lambda: 'λ', Delta: 'Δ', delta: 'δ' }[m])).replace(/\bw(\s*=\s*)(?=[√(2π\d1/])/g, 'ω$1');
 }
 const GENERIC_V = new Set(['calculate', 'determine', 'explain', 'describe', 'state', 'identify', 'define', 'given', 'using', 'following', 'which', 'what', 'with', 'from', 'that', 'this', 'into', 'their', 'when', 'between', 'about', 'value', 'values', 'effect', 'compare']);
 const stemTok = (t) => new Set((String(t || '').toLowerCase().match(/[\p{L}]{4,}/gu) || []).map((w) => w.replace(/(ing|es|s)$/, '')).filter((w) => w.length >= 3 && !GENERIC_V.has(w)));
