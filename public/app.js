@@ -1717,7 +1717,7 @@ async function ensureDocxExporter(){
     catch(_){try{await loadJsText('https://cdn.jsdelivr.net/npm/docx@9.8.1/dist/index.iife.js');}catch(__){}}
   }
   if(!window.docx)throw new Error('Maktabadda docx lama helin. Geli faylka public/vendor/docx.iife.js oo dib u deploy garee.');
-  try{await loadJsText('/docx-export.js?v=r29');}
+  try{await loadJsText('/docx-export.js?v=r30');}
   catch(e){throw new Error('Hubi in faylka public/docx-export.js la geliyay. '+e.message);}
   if(typeof window.buildExamDocx!=='function')throw new Error('docx-export.js si sax uma shaqeynin.');
 }
@@ -1727,7 +1727,7 @@ async function downloadExamWord(which){
   const parts=[];
   if(which!=='key')parts.push($('studentPaper').cloneNode(true));
   if(which!=='exam'&&$('keyPaper')){const k=$('keyPaper').cloneNode(true);k.removeAttribute('style');parts.push(k);}
-  const blob=await window.buildExamDocx(parts,{title:wordExamTitle});
+  const blob=await window.buildExamDocx(parts,{title:wordExamTitle,lang:(lastGenerated||{}).lang});
   const suffix=which==='key'?'_answer-key':which==='both'?'_exam+key':'';
   const fname=(String(wordExamTitle||'Exam').replace(/[\\/:*?"<>|]+/g,'').trim().replace(/\s+/g,'_')||'Exam')+suffix+'.docx';
   const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download=fname;document.body.appendChild(a);a.click();

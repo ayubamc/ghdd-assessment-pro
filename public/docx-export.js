@@ -625,9 +625,12 @@
     });
     const blocks = separateTables(children);
     if (!blocks.length || blocks[blocks.length - 1] instanceof D.Table) blocks.push(emptyPara());
+    const L = opts.lang || (rtlRoot ? 'ar' : (typeof lastGenerated !== 'undefined' && lastGenerated && lastGenerated.lang) || 'en');
+    const pgWord = L === 'so' ? 'Bogga' : L === 'ar' ? 'صفحة' : 'Page';
+    const ofWord = L === 'so' ? 'ee' : L === 'ar' ? 'من' : 'of';
     const footer = new D.Footer({ children: [new D.Paragraph({
       alignment: D.AlignmentType.CENTER,
-      children: [new D.TextRun({ children: [D.PageNumber.CURRENT, ' / ', D.PageNumber.TOTAL_PAGES], font: FONT, size: 18, color: '666666' })]
+      children: [new D.TextRun({ children: [pgWord + ' ', D.PageNumber.CURRENT, ' ' + ofWord + ' ', D.PageNumber.TOTAL_PAGES], font: FONT, size: 18, color: '555555', bold: true })]
     })] });
     const doc = new D.Document({
       creator: 'GHDD Assessment Pro', title: opts.title || 'Exam',
