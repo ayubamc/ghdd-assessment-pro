@@ -9,7 +9,7 @@ import fs from 'fs';
 import { fileURLToPath } from 'url';
 import { aiProviderStatus, asFigure, inFigure } from './ai-providers.js';
 import { getProfile, NATIONAL_PROFILES } from './exam-profiles.js';
-import { createSmartFigures, buildExamPlan, slotHint, plannedObjectives, cleanQuestionMath, findBrokenQuestions, stripDanglingFigureRefs } from './smart-figures.js';
+import { createSmartFigures, buildExamPlan, slotHint, plannedObjectives, interleavePlan, cleanQuestionMath, findBrokenQuestions, stripDanglingFigureRefs } from './smart-figures.js';
 import { renderFigure, verifySvg } from './figure-engine.js';
 
 const { Pool } = pg;
@@ -1016,6 +1016,16 @@ async function initDb() {
       source TEXT,
       status TEXT DEFAULT 'Approved',
       created_at TIMESTAMPTZ DEFAULT now()
+    )
+  `);
+
+  await db(`
+    CREATE TABLE IF NOT EXISTS page_usage(
+      book_id TEXT,
+      page INT,
+      uses INT DEFAULT 0,
+      last_used TIMESTAMPTZ DEFAULT now(),
+      PRIMARY KEY(book_id, page)
     )
   `);
 
@@ -2156,7 +2166,10 @@ ${String(p.sourceText || p.text || '')}
   // Su'aalaha oo sawir ka hadlaya laakiin sawir aan lahayn (diyaarin fashilantay) waa la hagaajiyaa
   try { const r2 = await smartFigures.repairBroken(p, questions, plannedObjectives(p, questions.length), { dangling: true }); if (repairReport) { repairReport.found += r2.found; repairReport.repaired += r2.repaired; repairReport.failed += r2.failed; } else repairReport = r2; } catch (e) { console.warn('Dangling-figure repair skipped:', e.message); }
   try { const dropped = stripDanglingFigureRefs(questions); if (dropped) console.log(`Removed ${dropped} dangling figure reference(s)`); } catch (e) { console.warn('strip refs skipped:', e.message); }
-  questions.forEach(cleanQuestionMath); // LaTeX introduced by repair/figure stages
+  // final symbol clean-up (repair/figure stages can re-introduce LaTeX): math -> Unicode math, chemistry -> plain formulas, other subjects -> generic
+  if (mathMode) questions.forEach((q) => mapQuestionText(q, cleanMathText));
+  else if (chemMode) questions.forEach((q) => mapQuestionText(q, cleanChemText));
+  else questions.forEach(cleanQuestionMath);
   questions.figureReport = figureReport;
   questions.repairReport = repairReport;
   if (examPlan) questions.examProfile = { key: examPlan.profile.key, label: examPlan.profile.label, basis: examPlan.profile.basis, notes: examPlan.profile.notes, style: examPlan.profile.style };
@@ -2453,6 +2466,65 @@ app.post('/api/blueprint', async (req, res) => {
   }
 });
 
+// Spread the exam across the WHOLE page range, preferring pages used least in earlier exams of the same book,
+// so pages skipped before are picked up by the next exam (the saved Blueprint stays reusable: only this assignment changes).
+async function rebalanceBlueprint(p, count) {
+  try {
+    if (isEnglishForm4(p) || p.passage) return;
+    const bp = p.blueprint, inv = bp?.objectiveInventory?.objectives, rows = bp?.coverage;
+    if (!Array.isArray(inv) || inv.length < 2 || !Array.isArray(rows) || !rows.length) return;
+    const N = Math.max(1, Number(count) || 1);
+    const usage = new Map();
+    if (p.bookId) {
+      try { (await db('SELECT page, uses FROM page_usage WHERE book_id=$1', [String(p.bookId)])).rows.forEach((r) => usage.set(Number(r.page), Number(r.uses))); } catch (_) { /* optional */ }
+    }
+    const sorted = inv.slice().sort((a, b) => Number(a.page) - Number(b.page) || String(a.id).localeCompare(String(b.id), undefined, { numeric: true }));
+    const M = sorted.length;
+    const chosen = [];
+    if (M <= N) { for (let k = 0; k < N; k++) chosen.push(sorted[k % M]); }
+    else {
+      for (let k = 0; k < N; k++) {
+        const a = Math.floor((k * M) / N), b = Math.max(a + 1, Math.floor(((k + 1) * M) / N));
+        const bucket = sorted.slice(a, b);
+        const minUse = Math.min(...bucket.map((o) => usage.get(Number(o.page)) || 0));
+        const pool = bucket.filter((o) => (usage.get(Number(o.page)) || 0) === minUse);
+        chosen.push(pool[Math.floor(Math.random() * pool.length)]);
+      }
+    }
+    chosen.sort((x, y) => Number(x.page) - Number(y.page));
+    // apportion N questions over the rows that have questions (largest remainder)
+    const live = rows.filter((r) => Number(r.questionCount) > 0);
+    const tot = live.reduce((n, r) => n + Number(r.questionCount), 0) || 1;
+    const raw = live.map((r) => (Number(r.questionCount) * N) / tot);
+    const cnt = raw.map(Math.floor);
+    let left = N - cnt.reduce((a, b) => a + b, 0);
+    raw.map((v, i) => [v - Math.floor(v), i]).sort((a, b) => b[0] - a[0]).forEach(([, i]) => { if (left > 0) { cnt[i]++; left--; } });
+    let pos = 0;
+    live.forEach((row, i) => {
+      const take = chosen.slice(pos, pos + cnt[i]); pos += cnt[i];
+      row.questionCount = cnt[i];
+      if (!take.length) return;
+      row.objectiveIds = [...new Set(take.map((o) => String(o.id)))];
+      row.sourcePages = [...new Set(take.map((o) => Number(o.page)))].sort((a, b) => a - b).join(', ');
+      if (take[0].unit) row.unit = take[0].unit;
+      if (take[0].topic) row.topic = take[0].topic;
+      row.learningOutcomes = [...new Set(take.map((o) => o.text))].slice(0, 6);
+    });
+    bp.interleaved = true;
+  } catch (e) { console.warn('rebalanceBlueprint skipped:', e.message); }
+}
+async function recordPageUsage(bookId, questions) {
+  try {
+    if (!bookId) return;
+    const pages = new Map();
+    for (const q of questions) for (const pg of new Set(parsePageRefs(q.sourcePages))) pages.set(pg, (pages.get(pg) || 0) + 1);
+    for (const [pg] of pages) {
+      await db(`INSERT INTO page_usage(book_id,page,uses) VALUES($1,$2,1)
+        ON CONFLICT(book_id,page) DO UPDATE SET uses=page_usage.uses+1, last_used=now()`, [String(bookId), pg]);
+    }
+  } catch (e) { console.warn('page usage not recorded:', e.message); }
+}
+
 app.post('/api/generate', async (req, res) => {
   try {
     const p = req.body || {};
@@ -2469,6 +2541,7 @@ app.post('/api/generate', async (req, res) => {
     let languageReport = null;
     let passage = null;
     let figureReport = null, examProfile = null, repairReport = null;
+    await rebalanceBlueprint(p, count);
 
     try {
       const generated = await aiGenerate({ ...p, count, levels, partPlan: Array.isArray(p.partPlan) ? p.partPlan : [] });
@@ -2514,6 +2587,7 @@ app.post('/api/generate', async (req, res) => {
       const n=Math.max(0,Number(row.questionCount)||0);
       for(let j=0;j<n;j++) if(ids.length) objectivePlan.push(ids[j%ids.length]);
     }
+    if (p.blueprint?.interleaved) { const ip = interleavePlan(objectivePlan); objectivePlan.length = 0; objectivePlan.push(...ip); }
     // Round-robin the approved objectives so generated IDs cannot silently escape the Blueprint.
     questions=questions.map((q,i)=>{
       const idsFromAI=Array.isArray(q.objectiveIds)?q.objectiveIds.map(String):[];
@@ -2552,8 +2626,10 @@ app.post('/api/generate', async (req, res) => {
     const objectiveCoverage = linkQuestionsToObjectives(questions, p.blueprint);
     questions = questions.map(q => ({ ...q, quality: qualityCheck(q) }));
 
+    recordPageUsage(p.bookId, questions);
     res.json({
       questions,
+      rebalancedCoverage: p.blueprint?.interleaved ? p.blueprint.coverage : null,
       totalMarks: questions.reduce((s, q) => s + Number(q.marks || 0), 0),
       objectiveCoverage,
       validation:{ok:true,pageRange:sourcePageCheck,pageIssues:[],englishIssues:[],objectiveIssues:[],objectivePageIssues:[],objectiveCount:p.blueprint?.objectiveInventory?.objectives?.length||0,allSelectedQuestionObjectivesLinked:true},

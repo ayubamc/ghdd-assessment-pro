@@ -893,6 +893,7 @@ $('generateExam').onclick=async()=>{
     }
     }
 
+    if(generated&&generated.rebalancedCoverage&&currentExamBlueprint){currentExamBlueprint={...currentExamBlueprint,coverage:generated.rebalancedCoverage,interleaved:true};}
     let qs=generated.questions||[];
     const passage=(usePassage&&generated.passage&&String(generated.passage.text||'').trim())?generated.passage:null;
     if(usePassage&&!passage)throw new Error('AI ma soo celin passage (sheeko). Isku day mar kale.');

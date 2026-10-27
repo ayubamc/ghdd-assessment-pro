@@ -128,6 +128,13 @@ export function partTypeAt(plan, i, count) {
 }
 
 // Isla qaabka /api/generate ee objectivePlan: su'aal kasta ujeeddadeeda
+// Golden-ratio stride permutation: neighbours (and the MCQ / structured parts) end up on far-apart pages.
+export function interleavePlan(plan) {
+  const n = plan.length; if (n < 3) return plan.slice();
+  const gcd = (a, b) => (b ? gcd(b, a % b) : a);
+  let step = Math.max(1, Math.round(n * 0.618)); while (gcd(step, n) !== 1) step++;
+  return Array.from({ length: n }, (_, i) => plan[(i * step) % n]);
+}
 export function plannedObjectives(p, count) {
   const inv = Array.isArray(p.blueprint?.objectiveInventory?.objectives) ? p.blueprint.objectiveInventory.objectives : [];
   const byId = new Map(inv.map((o) => [String(o.id), o]));
@@ -139,6 +146,7 @@ export function plannedObjectives(p, count) {
     const n = Math.max(0, Number(row.questionCount) || 0);
     for (let j = 0; j < n; j++) if (ids.length) plan.push(ids[j % ids.length]);
   }
+  if (p.blueprint?.interleaved) { const ip = interleavePlan(plan); plan.length = 0; plan.push(...ip); }
   return Array.from({ length: count }, (_, i) => byId.get(plan[i] || selected[i % Math.max(1, selected.length)]) || null);
 }
 
