@@ -41,8 +41,8 @@ export const NATIONAL_PROFILES = {
     label: 'Physics', basis: 'sampled', language: 'en', letters: 'latin',
     mcq: { count: 40, marks: 40 }, structured: { marks: 60, count: 8 },
     figureShare: [0.35, 0.5],
-    figures: ['vt_graph', 'wave', 'forces', 'spring_mass', 'pendulum', 'resistor_circuit', 'logic_gate', 'coord_line', 'textbook_diagram'],
-    notes: 'MCQ-yada waxaa ku jira v-t graph, wave, circuit, force, logic gate, sawirro buug'
+    figures: ['vt_graph', 'wave', 'forces', 'spring_mass', 'pendulum', 'resistor_circuit', 'coord_line', 'textbook_diagram'],
+    notes: 'MCQ-yada waxaa ku jira v-t graph, wave, circuit, force, sawirro buug'
   }),
   chemistry: P({
     style: {"mcq": "SECTION A: Circle the Correct Answer", "structured": "SECTION B: Direct Questions", "marksWord": "Marks", "letters": "abcd", "suffix": ")"},
@@ -168,10 +168,10 @@ const FIGURE_RULES = [
   [['physics'], /pendulum/i, 'pendulum', ['period', 'frequency']],
   [['physics'], /spring|hooke|restoring force|elastic potential|mass-?spring/i, 'spring_mass', ['restoring_force', 'potential_energy']],
   [['physics'], /velocity.?time|v-?t graph|speed.?time|displacement.?time|acceler|uniform motion|kinematic|dhaqdhaqaaq/i, 'vt_graph', ['constant_interval', 'max_value', 'acceleration']],
-  [['physics'], /amplitude|wavelength|frequency|period|wave|hirar|mowjad|sound|light wave/i, 'wave', ['amplitude', 'period', 'frequency']],
+  [['physics'], /amplitude|wavelength|frequency|period|wave|hirar|mowjad|sound|light wave/i, 'wave', ['amplitude', 'period', 'frequency', 'wavelength']],
   [['physics'], /resultant|net force|balanced|unbalanced|tug|newton'?s (first|second|third)|force/i, 'forces', ['resultant', 'direction']],
   [['physics'], /series|parallel|resist|ohm|circuit|current|voltage|potential diff/i, 'resistor_circuit', ['equivalent_resistance', 'total_current']],
-  [['physics', 'technology'], /logic gate|and gate|or gate|not gate|nand|nor|boolean|digital electronics/i, 'logic_gate', ['gate_name']],
+  [['physics', 'technology'], /logic gate|and gate|or gate|not gate|\bnand\b|\bnor\b|boolean|digital electronics/i, 'logic_gate', ['gate_name']],
   [['technology'], /topology|network layout|star network|ring network|bus network|mesh network|hub and switch/i, 'network_topology', ['topology_name']],
   [['technology'], /flow ?chart|algorithm|decision symbol|process symbol|program flow|pseudocode/i, 'flowchart', ['symbol_type']],
   [['math', 'physics'], /straight line|gradient|slope|linear (graph|equation)|y ?= ?mx|coordinate/i, 'coord_line', ['gradient', 'y_intercept']],
@@ -224,7 +224,7 @@ export function chooseKindForObjective({ profileKey, objective = '', topic = '',
 
 // Qorshee dhammaan su'aalaha: sample-ka qaranka ayaa go'aaminaya TIRADA sawirrada; casharku wuxuu go'aaminayaa NOOCA.
 // items: [{index, type, objective, topic}]
-export function planSlots({ profileKey, items, seed = 1 }) {
+export function planSlots({ profileKey, items, seed = 1, figureTarget = 0 }) {
   const prof = NATIONAL_PROFILES[profileKey] || null;
   const rnd = seededRand(hashStr(`${profileKey}:${seed}:${items.length}`));
   const mcqs = items.filter((x) => /mcq|multiple/i.test(x.type || ''));
@@ -279,6 +279,33 @@ export function planSlots({ profileKey, items, seed = 1 }) {
   const structTotal = slots.filter((s) => /^struct/.test(s.kind)).length || 1;
   const maxStructFig = prof.figureShare[1] > 0.1 ? Math.max(1, Math.round(structTotal * 0.25)) : (prof.figureShare[1] > 0 ? 1 : 0);
   structFig.slice(maxStructFig).forEach((s) => { s.kind = KINDS.STRUCT_TEXT; delete s.figure; delete s.askFacts; delete s.deterministic; });
+  // 4) Macallinku wuxuu dejiyay tirada sawirrada -> imtixaanku wuxuu sameeyaa TIRADAAS saxda ah (kala firdhisan)
+  const T = Math.max(0, Math.floor(Number(figureTarget) || 0));
+  if (T > 0) {
+    const isFig = (s) => s.kind === KINDS.MCQ_FIGURE || s.kind === KINDS.STRUCT_FIGURE;
+    const pick = (arr, n) => { const out = []; for (let i = 0; i < n && i < arr.length; i++) out.push(arr[Math.min(arr.length - 1, Math.floor((i + 0.5) * arr.length / n))]); return [...new Set(out)]; };
+    const figs = slots.filter(isFig);
+    if (figs.length > T) {
+      const keep = new Set(pick(figs, T));
+      for (const s of figs) if (!keep.has(s)) { s.kind = s.kind === KINDS.STRUCT_FIGURE ? KINDS.STRUCT_TEXT : KINDS.MCQ_TEXT; delete s.figure; delete s.askFacts; delete s.deterministic; }
+    } else if (figs.length < T) {
+      const det = prof.figures.filter((f) => DETERMINISTIC_FIGURES.includes(f));
+      const cnt = (k) => slots.filter((x) => x.figure === k).length;
+      let need = T - figs.length;
+      for (const kindSet of [[KINDS.MCQ_TEXT, KINDS.MCQ_CALC], [KINDS.STRUCT_TEXT]]) {
+        if (need <= 0) break;
+        const pool = slots.filter((s) => kindSet.includes(s.kind));
+        for (const s of pick(pool, Math.min(need, pool.length))) {
+          const f = det.length ? [...det].sort((x, y) => cnt(x) - cnt(y) || rnd() - 0.5)[0] : prof.figures[0];
+          if (!f) break;
+          Object.assign(s, { kind: kindSet[0] === KINDS.STRUCT_TEXT ? KINDS.STRUCT_FIGURE : KINDS.MCQ_FIGURE, figure: f, askFacts: defaultFacts(f), deterministic: DETERMINISTIC_FIGURES.includes(f), forced: true });
+          need--;
+        }
+      }
+    }
+    const seen2 = {};
+    for (const sl of slots.filter((x) => x.figure && /figure/.test(x.kind))) { const n = (seen2[sl.figure] = (seen2[sl.figure] || 0) + 1); sl.variant = n; const f = sl.askFacts || []; if (f.length > 1) { const r = (n - 1) % f.length; sl.askFacts = [...f.slice(r), ...f.slice(0, r)]; } }
+  }
   return slots;
 }
 

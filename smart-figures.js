@@ -16,18 +16,26 @@ const tokens = (s) => new Set((String(s || '').toLowerCase().match(/[\p{L}\p{N}]
 const SECTION_LABEL = /^\s*(part|section|qaybta|القسم)\b/i;
 const DEFINE_STEM = /^\s*(define|explain|describe|discuss|list|outline|state\s+(?:and|two|three|four|five)|qeex|sharax|faahfaahi|taxan|ka hadal|\u0634\u0631\u062d|\u0639\u0631\u0641)\b/i;
 const FIG_REF = /\b(figure|diagram|graph|chart|table|picture|map|circuit)\s+(below|above|shown)|\b(below|following)\s+(figure|diagram|graph|chart|circuit)|sawirka\s+(hoose|kor)|jaantuska\s+(hoose|kor)|khariidadda\s+hoose|shaxda\s+hoose/i;
-export function findBrokenQuestions(questions, { dangling = false } = {}) {
+const figSig = (q) => { try { const m = q?.figureMeta; if (!m || !m.spec) return ''; const st = (o) => Array.isArray(o) ? o.map(st) : o && typeof o === 'object' ? Object.fromEntries(Object.keys(o).sort().map((k) => [k, st(o[k])])) : o; return m.kind + JSON.stringify(st(m.spec)); } catch (_) { return ''; } };
+export function findBrokenQuestions(questions, { dangling = false, partPlan = null } = {}) {
   const bad = [];
+  const seenSig = new Map(), seenTxt = new Map();
   questions.forEach((q, i) => {
     const text = String(q?.question || q?.text || '').trim();
-    const isMcq = /^(mcq|multiple)/i.test(q?.type || '');
+    const posMcq = Array.isArray(partPlan) && partPlan.length ? /^(mcq|multiple)/i.test(partTypeAt(partPlan, i)) : false;
+    const isMcq = /^(mcq|multiple)/i.test(q?.type || '') || posMcq;
     const opts = Array.isArray(q?.options) ? q.options.map((o) => String(o || '').trim()).filter(Boolean) : [];
     let why = '';
     if (text.length < 8 || (SECTION_LABEL.test(text) && text.length < 90)) why = 'empty-or-section-title';
     else if (dangling && FIG_REF.test(text) && !q?.diagramSvg && !q?.diagramPng && !(q?.diagram && q.diagram !== 'undefined')) why = 'dangling-figure';
     else if (isMcq && opts.length !== 4) why = 'mcq-without-options';
     else if (isMcq && DEFINE_STEM.test(text)) why = 'mcq-is-open-question';
-    if (why) bad.push({ index: i, why });
+    if (!why) {
+      const sig = figSig(q), tx = text.toLowerCase().replace(/[^\p{L}\p{N}]+/gu, ' ').trim();
+      if ((sig && seenSig.has(sig)) || (tx.length > 20 && seenTxt.has(tx))) why = 'duplicate';
+      else { if (sig) seenSig.set(sig, i); if (tx.length > 20) seenTxt.set(tx, i); }
+    }
+    if (why) bad.push({ index: i, why, mcq: isMcq });
   });
   return bad;
 }
@@ -65,7 +73,7 @@ export function buildExamPlan(p, count) {
   if (!profile) return null;
   const objs = plannedObjectives(p, count);
   const items = objs.map((o, i) => ({ index: i, type: partTypeAt(p.partPlan, i, count), objective: o?.text || '', topic: o?.topic || '' }));
-  const slots = planSlots({ profileKey: profile.key, items, seed: hash(`${p.sourceTitle || ''}|${JSON.stringify(p.pageRange || {})}|${count}`) });
+  const slots = planSlots({ profileKey: profile.key, items, seed: hash(`${p.sourceTitle || ''}|${JSON.stringify(p.pageRange || {})}|${count}`), figureTarget: Number(p.figureTarget) || 0 });
   return { profile, slots, objs };
 }
 
@@ -101,6 +109,7 @@ FIGURE: the system DRAWS a "${slot.figure}" from the "spec" you return. You neve
 ASK ABOUT one of: ${slot.askFacts.join(', ')} - prefer "${slot.askFacts[0]}" (put its name in "askFact"). The student must READ or COMPUTE the answer from the figure.
 TOPIC FIT: the figure must belong to the same topic as the objective; if it cannot test this exact objective, test the closest idea of the same topic that the figure can show. VARIANT ${slot.variant || 1}: choose values clearly different from other figures of the same kind in this paper (different numbers, shape and number of cycles).
 RULES: (1) the stem must send the student to the figure (e.g. "Study the figure below ..."); (2) the stem and the figure must NOT contain the answer; (3) choose numbers that give ONE clear, sensible answer; (4) ${isMcq ? 'exactly four options, one correct, plausible distractors from typical mistakes (wrong operation, unit slip, reading the wrong point); options are short (value + unit); "answer" is the correct letter A, B, C or D' : 'structured question: "answer" is a full model answer with working and units; "keyPoints" has 2 to 5 short marking points'}; (5) "unit" is the unit of the answer (or "").
+${slot.figure === 'wave' ? 'WAVE RULE: for period/frequency use a time graph (tUnit "ms" or "s"; never mention wave speed). For wavelength use a distance graph (tUnit "m", y against x) and set askFact=wavelength. Never pair a t-axis graph with a wave speed.' : ''}
 ${feedback ? `PREVIOUS ATTEMPT FAILED THESE CHECKS - FIX THEM: ${feedback}` : ''}
 Return ONLY JSON: {"spec":{},"askFact":"","unit":"","question":"","options":["","","",""],"answer":"A","keyPoints":[],"topic":""}`;
   }
@@ -239,33 +248,34 @@ Return ONLY JSON: {"question":"","options":["","","",""],"answer":"","keyPoints"
 
   // Hagaaji su'aalaha jajaban (ilaa 5 isku mar). Haddii hagaajinta fashilanto, su'aasha asalka ah ayaa hadhaysa.
   async function repairBroken(p, questions, objs = [], opts = {}) {
-    const bad = findBrokenQuestions(questions, { dangling: !!opts.dangling });
+    const bad = findBrokenQuestions(questions, { dangling: !!opts.dangling, partPlan: p.partPlan });
     const report = { found: bad.length, repaired: 0, failed: 0 };
     let next = 0;
     const lang = langName(String(p.examLanguage || 'en'));
     const worker = async () => {
       while (next < bad.length) {
-        const { index, why } = bad[next++];
-        const q = questions[index], isMcq = /^(mcq|multiple)/i.test(q.type || '');
+        const { index, why, mcq } = bad[next++];
+        const q = questions[index], isMcq = !!mcq || /^(mcq|multiple)/i.test(q.type || '');
         const objective = q.objective || objs[index]?.text || '';
         const topic = q.topic || objs[index]?.topic || '';
         const prompt = `You are a national-examination item writer for ${p.subject || 'the subject'} (${p.className || 'secondary school'}). ${String(p.examLanguage) === 'so' ? somaliStyle : ''}
 Write ONE ${isMcq ? 'multiple-choice question with exactly four options and one correct answer' : 'direct written question with a short model answer'} in ${lang}.
 OBJECTIVE: ${objective}
 TOPIC: ${topic}
-${why === 'dangling-figure' ? 'IMPORTANT: no figure, diagram, graph or table exists. The question must be fully answerable from the text alone; NEVER refer to any figure/diagram/graph/table/"below"/"above".' : ''}
+${why === 'dangling-figure' || why === 'duplicate' ? (why === 'duplicate' ? 'This replaces a duplicate question: test a DIFFERENT idea of the same objective in plain text (concept, unit, definition or reasoning). ' : '') + 'IMPORTANT: no figure, diagram, graph or table exists. The question must be fully answerable from the text alone; NEVER refer to any figure/diagram/graph/table/"below"/"above".' : ''}
 ${isMcq ? 'The stem must be a complete question or sentence to complete (never "Define..." or "Explain..."). Options are short and plausible; wrong options come from typical mistakes. "answer" = A, B, C or D.' : 'The question must be complete (never a section title). Give 2-5 short "keyPoints".'}
 Marks: ${q.marks || 1}.
 Return ONLY JSON: {"question":"","options":${isMcq ? '["","","",""]' : '[]'},"answer":"","keyPoints":[]}`;
         try {
           const j = await callGeminiJson(prompt, { maxTokens: 1500, temperature: 0.3 });
-          const fixed = { ...q, question: String(j.question || '').trim(), answer: String(j.answer || '').trim(), keyPoints: Array.isArray(j.keyPoints) && j.keyPoints.length ? j.keyPoints.map(String) : q.keyPoints };
+          const fixed = { ...q, ...(isMcq ? { type: 'MCQ' } : {}), question: String(j.question || '').trim(), answer: String(j.answer || '').trim(), keyPoints: Array.isArray(j.keyPoints) && j.keyPoints.length ? j.keyPoints.map(String) : q.keyPoints };
           if (isMcq) {
             fixed.options = (Array.isArray(j.options) ? j.options : []).map((o) => optionText(String(o)));
             const chk = checkAndRepairMcq(fixed, {});
             if (!chk.ok) throw new Error(chk.issues.join('; '));
             Object.assign(fixed, chk.q);
           } else { fixed.options = []; if (fixed.question.length < 12 || !fixed.answer) throw new Error('structured repair incomplete'); }
+          if (why === 'duplicate') { delete fixed.diagramSvg; delete fixed.diagram; delete fixed.diagramPng; delete fixed.figureMeta; }
           if (findBrokenQuestions([fixed], { dangling: true }).length) throw new Error('still broken');
           questions[index] = fixed; report.repaired++;
         } catch (e) { report.failed++; log.warn?.(`Repair of question ${index + 1} (${why}) failed: ${e.message}`); }

@@ -45,7 +45,7 @@ textarea{min-height:90px}
 #printRoot h1,#printRoot h2,#printRoot h3{color:#111}
 .paper-head{text-align:center;border-bottom:2px solid #111;padding-bottom:12px;margin-bottom:18px}
 .paper-meta{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin:15px 0}
-.exam-logo{display:block;max-width:100%;width:100%;max-height:115px;object-fit:contain;margin:0 auto 10px}.answer-space{margin:8px 0 16px;break-inside:avoid}.answer-line{height:25px;border-bottom:1px solid #777}.student-answer-label{font-size:12px;color:#555;margin-top:8px}.exam-diagram{margin:10px 0;text-align:center;break-inside:avoid}.exam-diagram svg{max-width:100%;height:auto;max-height:330px}.diagram-drawing-space{height:110px;border:1px dashed #888;margin:8px 0}
+.exam-logo{display:block;max-width:100%;width:100%;max-height:115px;object-fit:contain;margin:0 auto 10px}.answer-space{margin:8px 0 16px;break-inside:avoid}.answer-line{height:19px;border-bottom:1px solid #777}.student-answer-label{font-size:12px;color:#555;margin-top:8px}.exam-diagram{margin:10px 0;text-align:center;break-inside:avoid}.exam-diagram svg{max-width:100%;height:auto;max-height:190px}.diagram-drawing-space{height:110px;border:1px dashed #888;margin:8px 0}
 .bloom-badge{display:inline-block;background:#ddeefc;color:#0b4f8a;font-weight:700;font-size:.85em;padding:6px 14px;border-radius:999px;white-space:nowrap}
 .q-card-head{display:flex;justify-content:space-between;align-items:center;gap:10px;margin-bottom:10px}
 .student-copy-preview{border-top:1px solid #ddd;margin-top:12px;padding-top:10px}
@@ -212,7 +212,7 @@ footer{text-align:center;color:#65738a;padding:22px;font-size:13px}
 
 /* national-exam look: diagrams, word box, stacked fractions, radicals */
 .exam-diagram{margin:12px auto;text-align:center;break-inside:avoid;background:#fff}
-.exam-diagram svg{width:100%;max-width:560px;height:auto;max-height:360px;background:#fff}
+.exam-diagram svg{width:100%;max-width:380px;height:auto;max-height:190px;background:#fff}
 .word-box{border:1.4px solid #333;padding:12px 16px;margin:8px 0 16px;display:grid;grid-template-columns:repeat(5,1fr);gap:6px 18px;text-align:left;font-weight:400;break-inside:avoid}.word-box span{overflow-wrap:anywhere}
 .fill-instruction{margin:6px 0 4px;font-weight:700;font-style:normal}
 .fill-question{margin:0 0 6px}
@@ -223,7 +223,7 @@ footer{text-align:center;color:#65738a;padding:22px;font-size:13px}
 .frac .den{padding:1px 3px 0}
 .rad{white-space:nowrap}
 .rad-in{border-top:1.3px solid currentColor;padding:0 2px;margin-left:1px}
-@media print{.word-box{border:1.4px solid #222}.exam-diagram svg{max-height:330px}}
+@media print{.word-box{border:1.4px solid #222}.exam-diagram svg{max-height:190px}}
 
 /* answer key: compact grids and key points */
 .key-label{margin:6px 0 4px}
@@ -354,7 +354,7 @@ PDF weyn wuxuu u baahan karaa xusuus badan, waqti dheeraad ah iyo kayd PostgreSQ
 <option value="national">Qaabka Qaranka (qaab-dhismeedka sample-ka F4; tirada iyo dhibcaha adigu dooro)</option>
 </select></div>
 <div><label for="figureMode">Habka sawirrada</label><select id="figureMode"><option value="smart">Caqli-badan — sample-ka qaranka ayaa go'aamiya (MCQ + Structured)</option><option value="manual">Gacanta — tirada hoose (Structured oo keliya)</option></select><small class="muted">Habka caqli-badan: app-ku wuxuu ogaadaa maadada, nooca su’aasha iyo sawirka ku habboon, wuxuuna hubiyaa jawaabta iyo sawirka. Qaabka Qaranka wuxuu had iyo jeer isticmaalaa habkan.</small></div>
-<div><label for="diagramCount">Tirada jaantusyada (0 haddii aadan rabin)</label><input id="diagramCount" type="number" min="0" max="30" value="0"><small class="muted">Geli 0, 1, 2, 5 ama tiro kale. Jaantusyada waxaa lagu xiriirinayaa su’aalaha Structured.</small></div>
+<div><label for="diagramCount">Tirada jaantusyada (0 = si toos ah / sida imtixaanka qaranka)</label><input id="diagramCount" type="number" min="0" max="30" value="0"><small class="muted">Geli tirada saxda ah ee sawirrada (tusaale 8); imtixaanka wuxuu sameeyaa sidaas tiro. 0 = appku isagu waa doortaa sida kan qaranka.</small></div>
 <div><label for="genPassage">Passage / Sheeko / قطعة (maaddooyinka luqadda)</label><select id="genPassage"><option value="auto">Si toos ah (haddii maaddadu tahay Carabi, Soomaali ama English)</option><option value="yes">Haa — imtixaanka ku bilow passage</option><option value="no">Maya</option></select><small class="muted">Imtixaanku wuxuu ku bilaabmayaa sheeko/qoraal akhris oo ku qoran luqadda imtixaanka, ee ku dhisan manhajka. Su’aalahana waxay ku salaysan yihiin sheekadaas iyo objectives-ka manhajka.</small></div>
 <div><label for="genPassageTheme">Mowduuca sheekada (marka passage la isticmaalo)</label><select id="genPassageTheme"><option value="">AI dooro (mid taabanaya ardayga)</option><option value="honesty">Run sheegid</option><option value="generosity">Deeqsinimo</option><option value="trust">Amaano</option><option value="patriotism">Dal jacayl</option><option value="loyalty">Daacadnimo</option><option value="success">Guul iyo dadaal</option><option value="student">Ardaynimo (edeb iyo barasho)</option><option value="cooperation">Iskaashi</option><option value="respect">Ixtiraam iyo edeb</option><option value="patience">Samir</option><option value="peace">Cafis iyo nabad</option></select><small class="muted">Sheekadu waxay ka hadlaysaa mowduuc taabanaya nolosha iyo akhlaaqda ardayga, waxaana lagu dhisayaa objectives-ka manhajka (naxwe, balaagha, mufradaad…) si su’aalaha loogu cabbiro awoodda faham ee ardayga.</small></div>
 </div>

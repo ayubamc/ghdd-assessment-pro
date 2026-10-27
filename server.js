@@ -7,6 +7,7 @@ import { AsyncLocalStorage } from 'node:async_hooks';
 import path from 'path';
 import fs from 'fs';
 import { fileURLToPath } from 'url';
+import { aiProviderStatus } from './ai-providers.js';
 import { getProfile, NATIONAL_PROFILES } from './exam-profiles.js';
 import { createSmartFigures, buildExamPlan, slotHint, plannedObjectives } from './smart-figures.js';
 import { renderFigure, verifySvg } from './figure-engine.js';
@@ -1207,6 +1208,7 @@ app.get('/api/ai-test', async (req, res) => {
   res.json({ claude, forcedModel: process.env.GEMINI_MODEL || null, listedFlashModels: listed, triedInOrder: candidates, blocked: [...badModels], results });
 });
 
+app.get('/api/ai-providers', (req, res) => res.json(aiProviderStatus()));
 app.get('/api/ai-models', async (req, res) => {
   try { res.json({ ok: true, models: await getGeminiModels(), blocked: [...badModels], forced: process.env.GEMINI_MODEL || null }); }
   catch (e) { res.status(500).json({ error: e.message }); }

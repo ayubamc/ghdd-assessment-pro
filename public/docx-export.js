@@ -7,7 +7,7 @@
   const D = window.docx;
   if (!D) { window.buildExamDocx = async () => { throw new Error('docx library lama soo rarin.'); }; return; }
 
-  const PAGE_W = 11906, PAGE_H = 16838, MARGIN = 1021;      // A4, 1.8 cm margins (twips)
+  const PAGE_W = 11906, PAGE_H = 16838, MARGIN = 680;       // A4, 1.2 cm margins (twips) - dhow sida imtixaanka qaranka
   const CONTENT_W = PAGE_W - 2 * MARGIN;                     // 9864 twips
   const FONT = { ascii: 'Arial', hAnsi: 'Arial', cs: 'Arial', eastAsia: 'Arial' };
   const SZ = { body: 22, small: 18, h1: 36, h2: 28, h3: 24 };
@@ -207,7 +207,7 @@
       children: kids,
       bidirectional: ctx.rtl || undefined,
       alignment: alignOf(ctx, o.align),
-      spacing: { before: o.before !== undefined ? o.before : 0, after: o.after !== undefined ? o.after : 60, line: o.line || 276, lineRule: D.LineRuleType.AUTO },
+      spacing: { before: o.before !== undefined ? o.before : 0, after: o.after !== undefined ? o.after : 40, line: o.line || 250, lineRule: D.LineRuleType.AUTO },
       border: o.border, shading: o.shading, keepNext: o.keepNext, keepLines: o.keepLines,
       indent: o.indent, pageBreakBefore: o.pageBreakBefore
     });
@@ -218,7 +218,7 @@
     return finalizeInline(out);
   }
   const emptyPara = (ctx) => new D.Paragraph({ bidirectional: ctx && ctx.rtl || undefined, spacing: { before: 0, after: 0, line: 240, lineRule: D.LineRuleType.AUTO }, children: [] });
-  const spacer = () => new D.Paragraph({ spacing: { before: 0, after: 0, line: 80, lineRule: D.LineRuleType.EXACT }, children: [new D.TextRun({ text: '', size: 4 })] });
+  const spacer = (keep) => new D.Paragraph({ keepNext: !!keep, spacing: { before: 0, after: 0, line: 80, lineRule: D.LineRuleType.EXACT }, children: [new D.TextRun({ text: '', size: 4 })] });
 
   // ---------------------------------------------------------------- tables
   function tableBorderMode(t, cls) {
@@ -356,7 +356,7 @@
     const row2 = new D.TableRow({ cantSplit: true, children: [optCell(opts[0], 0, 2), optCell(opts[1], 2, 3), optCell(opts[2], 3, 4), optCell(opts[3], 4, 6)] });
     let figRow = null;
     if (figEl) {
-      const keepW = env.maxW, keepH = env.figMaxH; env.maxW = Math.max(60, Math.floor(CONTENT_W / 15) - 24); env.figMaxH = 250;
+      const keepW = env.maxW, keepH = env.figMaxH; env.maxW = 340; env.figMaxH = 165;
       let kids2 = []; try { kids2 = blocksFromChildren(figEl, ctx, env, {}); } finally { env.maxW = keepW; env.figMaxH = keepH; }
       if (kids2.length) figRow = new D.TableRow({ cantSplit: true, children: [new D.TableCell({ width: { size: CONTENT_W, type: D.WidthType.DXA }, columnSpan: 6, borders: { top: none(), left: line(), right: line(), bottom: none() }, children: fixCellBlocks(kids2, ctx) })] });
     }
@@ -460,14 +460,14 @@
       if (!im) return;
       if (im.failed) { out.push(para([textRun('[Diagram]', { italics: true })], ctx, { align: 'center' })); return; }
       const logo = cls.contains('exam-logo');
-      out.push(para([imageRun(im, el, logo ? 650 : Math.min(560, env.maxW || 560), logo ? 115 : (env.figMaxH || 400))], ctx, { align: 'center', after: logo ? 60 : 120, before: logo ? 0 : 60, keepLines: true, keepNext: !logo }));
+      out.push(para([imageRun(im, el, logo ? 650 : Math.min(380, env.maxW || 380), logo ? 115 : (env.figMaxH || 190))], ctx, { align: 'center', after: logo ? 60 : 120, before: logo ? 0 : 60, keepLines: true, keepNext: !logo }));
       return;
     }
     if (cls.contains('nat-banner')) {
       const t = el.querySelector('.nb-title'), m = el.querySelector('.nb-marks');
       const bd = allBorders(line());
       const cellB = (node, w, align) => new D.TableCell({ width: { size: w, type: D.WidthType.DXA }, borders: bd, verticalAlign: D.VerticalAlign.CENTER, children: [para(node ? inlineKids(node, ctx, { bold: true, size: 24 }, env) : [], ctx, { align, after: 0, keepNext: true })] });
-      out.push(new D.Table({ rows: [new D.TableRow({ cantSplit: true, children: [cellB(t, CONTENT_W - 2200, undefined), cellB(m, 2200, 'end')] })], width: { size: CONTENT_W, type: D.WidthType.DXA }, columnWidths: [CONTENT_W - 2200, 2200], layout: D.TableLayoutType.FIXED, visuallyRightToLeft: ctx.rtl || undefined, margins: { top: 70, bottom: 70, left: 120, right: 120 }, borders: { ...bd, insideHorizontal: none(), insideVertical: none() } }), spacer());
+      out.push(new D.Table({ rows: [new D.TableRow({ cantSplit: true, children: [cellB(t, CONTENT_W - 2200, undefined), cellB(m, 2200, 'end')] })], width: { size: CONTENT_W, type: D.WidthType.DXA }, columnWidths: [CONTENT_W - 2200, 2200], layout: D.TableLayoutType.FIXED, visuallyRightToLeft: ctx.rtl || undefined, margins: { top: 70, bottom: 70, left: 120, right: 120 }, borders: { ...bd, insideHorizontal: none(), insideVertical: none() } }), spacer(true));
       return;
     }
     if (cls.contains('paper-meta')) { out.push(metaTable(el, ctx, env), spacer()); return; }
@@ -477,7 +477,7 @@
       const n = Math.max(1, el.querySelectorAll('.answer-line').length);
       const g = line('777777');
       const rows = Array.from({ length: n }, () => new D.TableRow({
-        height: { value: 480, rule: D.HeightRule.ATLEAST },
+        height: { value: 360, rule: D.HeightRule.ATLEAST },
         children: [new D.TableCell({ width: { size: CONTENT_W, type: D.WidthType.DXA }, borders: { top: none(), left: none(), right: none(), bottom: g }, children: [emptyPara(ctx)] })]
       }));
       out.push(new D.Table({ rows, width: { size: CONTENT_W, type: D.WidthType.DXA }, columnWidths: [CONTENT_W], layout: D.TableLayoutType.FIXED,
@@ -579,7 +579,7 @@
     })] });
     const doc = new D.Document({
       creator: 'GHDD Assessment Pro', title: opts.title || 'Exam',
-      styles: { default: { document: { run: { font: FONT, size: SZ.body }, paragraph: { spacing: { after: 60, line: 276 } } } } },
+      styles: { default: { document: { run: { font: FONT, size: SZ.body }, paragraph: { spacing: { after: 40, line: 250 } } } } },
       sections: [{
         properties: { page: { size: { width: PAGE_W, height: PAGE_H }, margin: { top: MARGIN, bottom: MARGIN, left: MARGIN, right: MARGIN } } },
         footers: { default: footer },

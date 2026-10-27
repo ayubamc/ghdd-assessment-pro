@@ -17,7 +17,8 @@ function svgWrap(body, h = H, dy = 0) {
   return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${W} ${h}" width="100%" height="auto"><rect width="${W}" height="${h}" fill="#ffffff"/>${g}${body}${ge}</svg>`;
 }
 // role: tick (hirka dhululubada) | id (xarfaha A,B,K..) | data (xog la siiyey) | annot (qoraal sharaxaad - waa la hubiyaa leak)
-function T(x, y, s, { size = 16, anchor = 'middle', role = 'data', weight = '' } = {}) {
+function T(x, y, s, { size: size0 = 16, anchor = 'middle', role = 'data', weight = '' } = {}) {
+  const size = Math.round(size0 * 1.2); // sawirradu way yaraadaan bogga, ka dhig qoraalka mid la akhriyi karo
   const halo = role === 'tick' ? ' stroke="#fff" stroke-width="4" paint-order="stroke"' : '';
   return `<text x="${r2(x)}" y="${r2(y)}" font-family="${FONT}" font-size="${size}" text-anchor="${anchor}" fill="#000" data-role="${role}"${halo}${weight ? ` font-weight="${weight}"` : ''}>${esc(s)}</text>`;
 }
@@ -89,7 +90,8 @@ RENDERERS.wave = (spec) => {
   const x0 = 90, xr = 560, yc = 190, amp = 105;
   const total = cycles * P, sx = (t) => x0 + (t / total) * (xr - x0), sy = (v) => yc - (v / A) * amp;
   let s = arrow(x0, yc, xr + 40, yc) + arrow(x0, yc + amp + 30, x0, yc - amp - 34);
-  s += T(xr + 40, yc - 10, `t/${tUnit}`, { size: 14, anchor: 'end', role: 'data' });
+  const distAxis = ['m', 'cm', 'km', 'mm'].includes(tUnit);
+  s += T(xr + 40, yc - 10, distAxis ? `x/${tUnit}` : `t/${tUnit}`, { size: 14, anchor: 'end', role: 'data' });
   s += T(x0 + 10, yc - amp - 38, yUnit === '' ? 'y' : `y/${yUnit}`, { size: 14, anchor: 'start', role: 'data' });
   let d = '';
   for (let i = 0; i <= 160; i++) { const t = (i / 160) * total; d += (i ? ' L' : 'M') + r2(sx(t)) + ' ' + r2(sy(A * Math.sin((2 * Math.PI * t) / P))); }
@@ -98,8 +100,8 @@ RENDERERS.wave = (spec) => {
   s += L(x0, sy(A), x0 - 6, sy(A), { w: 1 }) + T(x0 - 10, sy(A) + 5, fmtNum(A), { size: 14, anchor: 'end', role: 'tick' });
   s += L(x0, sy(-A), x0 - 6, sy(-A), { w: 1 }) + T(x0 - 10, sy(-A) + 5, '-' + fmtNum(A), { size: 14, anchor: 'end', role: 'tick' });
   s += T(x0 - 10, yc + 5, '0', { size: 14, anchor: 'end', role: 'tick' });
-  const freqHz = tUnit === 'ms' ? 1000 / P : tUnit === 's' ? 1 / P : null;
-  return { svg: svgWrap(s, 310, -30), facts: { amplitude: A, period: P, frequency: freqHz === null ? null : r2(freqHz), wavelength: null } };
+  const freqHz = distAxis ? null : tUnit === 'ms' ? 1000 / P : tUnit === 's' ? 1 / P : null;
+  return { svg: svgWrap(s, 310, -30), facts: { amplitude: A, period: distAxis ? null : P, frequency: freqHz === null ? null : r2(freqHz), wavelength: distAxis ? P : null } };
 };
 
 RENDERERS.forces = (spec) => {
@@ -449,7 +451,7 @@ export function answerIndex(q) {
 
 // Soo saar qiimaha la sugayo ee su'aasha ka timaadda facts + askFact
 export function expectedFor(askFact, facts, spec = {}) {
-  const numKinds = ['restoring_force', 'potential_energy', 'extension', 'length', 'max_value', 'acceleration', 'amplitude', 'period', 'frequency', 'resultant', 'equivalent_resistance', 'total_current', 'gradient', 'y_intercept', 'hypotenuse', 'area', 'perimeter', 'total', 'difference'];
+  const numKinds = ['restoring_force', 'potential_energy', 'extension', 'length', 'max_value', 'acceleration', 'amplitude', 'period', 'frequency', 'wavelength', 'resultant', 'equivalent_resistance', 'total_current', 'gradient', 'y_intercept', 'hypotenuse', 'area', 'perimeter', 'total', 'difference'];
   if (numKinds.includes(askFact)) { const v = facts[askFact]; return v === null || v === undefined ? null : { type: 'number', value: Number(v), unit: (facts.units && facts.units[askFact]) || facts.unit || '' }; }
   if (askFact === 'constant_interval') { const c = facts.constant_intervals || []; return c.length === 1 ? { type: 'tokens', tokens: [c[0].from, c[0].to] } : null; }
   if (['max_label', 'min_label', 'largest_share', 'smallest_share'].includes(askFact)) return facts[askFact] ? { type: 'tokens', tokens: [String(facts[askFact])] } : null;

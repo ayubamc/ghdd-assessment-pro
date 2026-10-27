@@ -813,7 +813,7 @@ $('generateExam').onclick=async()=>{
 
     const generated=await apiJob('/api/generate',{
         sourceText,subject,className,count:effectiveCount,questionCount:effectiveCount,
-        totalMarks,format,diagramCount:diagramCountUsed,figureMode,bookId:id,passage:usePassage,passageTheme:(($('genPassageTheme')||{}).value||''),partPlan,blueprint:currentExamBlueprint,levels,type:'Isku-dhafan',sourceSelectionRule:'Spread questions across different headings/topics. Do not take consecutive questions from the same paragraph or same heading. Prefer passages separated by at least two headings or at least one full page. Record source pages and topic/heading for each question.',examLanguage,
+        totalMarks,format,diagramCount:diagramCountUsed,figureTarget:diagramCount,figureMode,bookId:id,passage:usePassage,passageTheme:(($('genPassageTheme')||{}).value||''),partPlan,blueprint:currentExamBlueprint,levels,type:'Isku-dhafan',sourceSelectionRule:'Spread questions across different headings/topics. Do not take consecutive questions from the same paragraph or same heading. Prefer passages separated by at least two headings or at least one full page. Record source pages and topic/heading for each question.',examLanguage,
         sourceTitle:d.title,
         pageRange:{start,end}
       },sec=>{status.textContent='Tallaabada 2/2: AI ayaa Blueprint-ka raacaya si uu u sameeyo su’aalaha... ('+sec+' ilbiriqsi). Ha xirin bogga.';});
@@ -1082,7 +1082,7 @@ function paperQuestionsHtml(normalized,passage,lang,withAnswers,mathMode){
          const pngSrc=typeof q.diagramPng==='string'&&q.diagramPng.startsWith('data:image/png;base64,')?q.diagramPng:'';
          const diagram=pngSrc?`<div class="exam-diagram"><img class="exam-diagram-png" src="${pngSrc}" alt="${lang==='ar'?'رسم توضيحي':lang==='so'?'Jaantus imtixaan':'Exam diagram'}"></div>`:(safeSvg?`<div class="exam-diagram">${safeSvg}</div>`:(q.diagram&&q.diagram!=='undefined'?`<div class="diagram-note"><strong>${lang==='ar'?'الرسم التوضيحي':lang==='so'?'Jaantus / sawir':'Diagram'}:</strong> ${esc(q.diagram)}</div>`:''));
          const isDirect=/structured|direct/i.test(q.type||'')||/STRUCTURED|DIRECT/i.test(section);
-         const answerSpace=(!withAnswers&&isDirect)?`<div class="student-answer-label">${examText(lang,'studentAnswer')}:</div><div class="answer-space">${Array.from({length:Math.max(2,Math.min(14,Math.ceil(Number(q.marks||1)*1.4)))},()=>'<div class="answer-line"></div>').join('')}</div>`:'';
+         const answerSpace=(!withAnswers&&isDirect)?`<div class="student-answer-label">${examText(lang,'studentAnswer')}:</div><div class="answer-space">${Array.from({length:Math.max(2,Math.min(7,Math.ceil(Number(q.marks||1)*0.55)))},()=>'<div class="answer-line"></div>').join('')}</div>`:'';
          const answer = withAnswers ? `<div class="answer-box"><strong>${examText(lang,'markingGuide')}:</strong> ${isFill?esc(q.answer||examText(lang,'notProvided')):fmt(q.answer||examText(lang,'notProvided'))}</div>` : '';
          const hasFig=!!(q.diagramSvg||q.diagramPng);
          const stemText=hasFig?String(q.text||'').replace(/\b(figure|diagram|graph|chart|table|picture|map)\s+above\b/gi,'$1 below').replace(/\b(sawirka|jaantuska|shaxda|khariidadda)\s+(kore|sare)\b/gi,'$1 hoose'):q.text;
@@ -1579,7 +1579,7 @@ async function ensureDocxExporter(){
     catch(_){try{await loadJsText('https://cdn.jsdelivr.net/npm/docx@9.8.1/dist/index.iife.js');}catch(__){}}
   }
   if(!window.docx)throw new Error('Maktabadda docx lama helin. Geli faylka public/vendor/docx.iife.js oo dib u deploy garee.');
-  try{await loadJsText('/docx-export.js?v=r25');}
+  try{await loadJsText('/docx-export.js?v=r27');}
   catch(e){throw new Error('Hubi in faylka public/docx-export.js la geliyay. '+e.message);}
   if(typeof window.buildExamDocx!=='function')throw new Error('docx-export.js si sax uma shaqeynin.');
 }

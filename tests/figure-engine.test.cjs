@@ -64,7 +64,7 @@ test('national profiles + question-kind planner follow the sample papers', async
   assert.equal(chooseKindForObjective({ profileKey: 'technology', objective: 'Identify the decision symbol in a flowchart', type: 'MCQ' }).figure, 'flowchart');
   const items = Array.from({ length: 40 }, (_, i) => ({ index: i, type: 'MCQ', objective: 'Interpret velocity-time graph and wave amplitude', topic: '' }));
   const figs = planSlots({ profileKey: 'physics', items, seed: 1 }).filter((s) => s.kind === KINDS.MCQ_FIGURE).length;
-  assert.ok(figs >= 14 && figs <= 20, `physics figure count ${figs}`);
+  assert.ok(figs >= 10 && figs <= 20, `physics figure count ${figs}`); // 35-50% target, a bit lower when the same kind would repeat
   const none = planSlots({ profileKey: 'english', items, seed: 1 }).filter((s) => s.kind === KINDS.MCQ_FIGURE).length;
   assert.equal(none, 0);
 });
@@ -90,4 +90,76 @@ test('smart stage: replaces figure slots, repairs wrong keys, never ships a brok
   assert.equal(questions[0].answer, 'B'); assert.match(questions[0].diagramSvg, /^<svg/); assert.equal(questions[0].figureMeta.answerChecked, true);
   assert.equal(questions[1].question, 'base2'); assert.equal(questions[1].diagramSvg, undefined);
   assert.equal(rep.built, 1); assert.equal(rep.repaired, 1); assert.equal(rep.fallback, 1);
+});
+
+test('broken questions are detected and repaired; figure direction fixed; topology drawn', async () => {
+  const { findBrokenQuestions, fixFigureDirection, createSmartFigures } = await load('smart-figures.js');
+  const { renderFigure, verifySvg } = await load('figure-engine.js');
+  const { getProfile } = await load('exam-profiles.js');
+  const qs = [
+    { type: 'MCQ', question: 'Define the System Development Life Cycle (SDLC):', options: ['Hargeysa', 'Kismayo', 'Garowe', 'Mogadishu'], answer: 'A' },
+    { type: 'MCQ', question: 'What is a database?', options: [], answer: '' },
+    { type: 'Structured', question: 'PART IV — DIRECT / STRUCTURED QUESTIONS', options: [] },
+    { type: 'MCQ', question: 'Which device connects computers in a LAN?', options: ['Hub', 'Pen', 'Cup', 'Bag'], answer: 'A' },
+    { type: 'Structured', question: 'Explain the Waterfall Model.', options: [] }
+  ];
+  assert.deepEqual(findBrokenQuestions(qs).map((b) => b.index), [0, 1, 2]);
+  assert.equal(fixFigureDirection('Study the figure above. Which one?'), 'Study the figure below. Which one?');
+  assert.equal(fixFigureDirection('Eeg sawirka kore'), 'Eeg sawirka hoose');
+  let n = 0;
+  const sf = createSmartFigures({ callGeminiJson: async (pr) => (++n && /four options/.test(pr) ? { question: 'Which term describes the process of building information systems? (' + n + ')', options: ['SDLC', 'Spreadsheet', 'Firewall', 'Router'], answer: 'A', keyPoints: [] } : { question: 'Explain how a query retrieves data from a table.', options: [], answer: 'It filters records.', keyPoints: ['filters', 'returns records'] }), aiGenerateDiagram: async () => '', splitMarkedPages: () => [] });
+  const rep = await sf.repairBroken({ subject: 'Technology', examLanguage: 'en' }, qs, []);
+  assert.equal(rep.repaired, 3); assert.equal(findBrokenQuestions(qs).length, 0);
+  assert.equal(qs[3].options[0], 'Hub'); // good questions untouched
+  for (const t of ['star', 'ring', 'bus', 'mesh', 'tree']) { const r = renderFigure('network_topology', { type: t, nodes: 5 }); assert.equal(verifySvg(r.svg).ok, true, t); assert.equal(r.facts.topology_name, t); }
+  const tech = getProfile('Technology', 'Form 4');
+  assert.equal(tech.style.mcq, 'Choose the Correct answer'); assert.equal(tech.style.letters, 'ABCD'); assert.equal(getProfile('Taariikh', '').style.letters, 'BTJX');
+});
+
+test('physics: real symbols (spring, pendulum), varied figure kinds and no dangling figure references', async () => {
+  const { renderFigure, verifySvg, checkAndRepairMcq } = await load('figure-engine.js');
+  const { planSlots, KINDS } = await load('exam-profiles.js');
+  const { findBrokenQuestions } = await load('smart-figures.js');
+  const sp = renderFigure('spring_mass', { k: 100, x: 0.05, direction: 'right' });
+  assert.equal(sp.facts.restoring_force, 5); assert.equal(sp.facts.potential_energy, 0.125); assert.equal(verifySvg(sp.svg).ok, true, verifySvg(sp.svg).issues.join('|'));
+  const pd = renderFigure('pendulum', { length: 1 }); assert.equal(pd.facts.period, 2); assert.equal(verifySvg(pd.svg).ok, true);
+  const r = checkAndRepairMcq({ options: ['0.5 N', '5 N', '50 N', '500 N'], answer: 'C' }, { askFact: 'restoring_force', facts: sp.facts });
+  assert.equal(r.q.answer, 'B');
+  // tight canvas: forces figure is much shorter than the default canvas
+  assert.match(renderFigure('forces', { left: [300], right: [300] }).svg, /viewBox="0 0 640 1[0-9]{2}"/);
+  const objs = ['Determine the amplitude of a wave from a graph', 'Find the period of a wave', 'Find the frequency of a wave from the graph', 'Calculate the restoring force of a spring', 'State the energy stored in a spring', 'Period of a simple pendulum', 'Interpret velocity-time graph', 'Calculate the resultant force', 'Define sound'];
+  const items = Array.from({ length: 40 }, (_, i) => ({ index: i, type: 'MCQ', objective: objs[i % objs.length], topic: '' }));
+  const slots = planSlots({ profileKey: 'physics', items, seed: 7 });
+  const figs = slots.filter((s) => s.kind === KINDS.MCQ_FIGURE), by = {};
+  figs.forEach((s) => { by[s.figure] = (by[s.figure] || 0) + 1; });
+  assert.ok(Math.max(...Object.values(by)) <= Math.max(2, Math.ceil(figs.length / 3)), JSON.stringify(by));
+  assert.ok(Object.keys(by).length >= 3, JSON.stringify(by));
+  const waves = figs.filter((s) => s.figure === 'wave'); assert.ok(new Set(waves.map((s) => s.askFacts[0])).size >= Math.min(2, waves.length));
+  const dang = findBrokenQuestions([{ type: 'MCQ', question: 'Study the figure below. What is the frequency?', options: ['a', 'b', 'c', 'd'] }, { type: 'MCQ', question: 'Study the figure below. What is the period?', options: ['a', 'b', 'c', 'd'], diagramSvg: '<svg/>' }], { dangling: true });
+  assert.deepEqual(dang.map((b) => b.why), ['dangling-figure']);
+});
+
+test('duplicates and position-aware MCQ gaps are detected; wave distance graph gives wavelength', async () => {
+  const { findBrokenQuestions } = await load('smart-figures.js');
+  const { renderFigure } = await load('figure-engine.js');
+  const spec = { kind: 'spring_mass', spec: { k: 150, x: 0.04 } };
+  const qs = [
+    { type: 'MCQ', question: 'Study the figure below. What is the restoring force?', options: ['a', 'b', 'c', 'd'], figureMeta: spec },
+    { type: 'MCQ', question: 'Study the figure below. Determine the force needed to hold it.', options: ['a', 'b', 'c', 'd'], figureMeta: { kind: 'spring_mass', spec: { x: 0.04, k: 150 } } },
+    { type: 'Calculation', question: 'A suspended mass makes 40 oscillations in 10 s. Find frequency.', options: [] }
+  ];
+  const bad = findBrokenQuestions(qs, { partPlan: [{ type: 'MCQ', count: 3 }] });
+  assert.deepEqual(bad.map((b) => [b.index, b.why]), [[1, 'duplicate'], [2, 'mcq-without-options']]);
+  const r = renderFigure('wave', { amplitude: 4, period: 6, cycles: 2, tUnit: 'm', unit: 'cm' });
+  assert.equal(r.facts.wavelength, 6); assert.equal(r.facts.frequency, null);
+});
+
+test('figureTarget sets the exact number of figure slots', async () => {
+  const { planSlots } = await load('exam-profiles.js');
+  const objs = ['pendulum period', 'spring force', 'wave frequency', 'diffraction', 'refraction', 'units', 'energy', 'sound', 'light', 'heat'];
+  const items = Array.from({ length: 30 }, (_, i) => ({ index: i, type: i < 25 ? 'MCQ' : 'Structured', objective: objs[i % objs.length] + ' ' + i, topic: 't' }));
+  for (const T of [3, 8, 14]) {
+    const s = planSlots({ profileKey: 'physics', items, seed: 7, figureTarget: T });
+    assert.equal(s.filter((x) => /figure/.test(x.kind)).length, T, 'T=' + T);
+  }
 });
