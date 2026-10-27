@@ -100,7 +100,7 @@ export function similarToOthers(q, questions, index) {
   return questions.some((o, i) => i !== index && o && nearDup(a, qsig(o)));
 }
 // Su'aalo ku saabsan manhajka/habka waxbarashada (ma aha maaddada) iyo doorashooyin isku macne ah
-const OFF_TOPIC = /\b(national\s+curriculum|curriculum|teaching\s+approach(es)?|instructional\s+approach(es)?|core\s+values?|learner[- ]centred|(physics|chemistry|biology|mathematics|geography|history)\s+(textbook|book)|which\s+chapter|chapter\s+\d+\s+(covers|of\s+the))\b/i;
+const OFF_TOPIC = /\b(national\s+curriculum|curriculum|syllabus|scheme\s+of\s+work|learning\s+(objective|outcome)s?|bloom|(the|this)\s+(textbook|book|chapter|lesson\s+plan)|according\s+to\s+the\s+(book|textbook|text|syllabus)|teaching\s+approach(es)?|instructional\s+approach(es)?|core\s+values?|learner[- ]centred|(physics|chemistry|biology|mathematics|geography|history)\s+(textbook|book)|which\s+chapter|chapter\s+\d+\s+(covers|of\s+the))\b/i;
 const SYN = [[/spring\s+constant|force\s+constant|stiffness\s+constant/g, 'forceconst'], [/\bperiodic\s+time\b|\btime\s+period\b/g, 'period'], [/\bangular\s+velocity\b|\bangular\s+frequency\b/g, 'angfreq']];
 function numOf(t) { const m = String(t).replace(/,/g, '').match(/-?\d+(?:\.\d+)?(?:\s*[x×]\s*10\s*(?:\^|⁻|[⁰¹²³⁴⁵⁶⁷⁸⁹])\S*)?/); if (!m) return null; return parseFloat(m[0]); }
 function nearEqualNumbers(opts) {
