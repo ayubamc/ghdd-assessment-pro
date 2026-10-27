@@ -224,6 +224,9 @@ export function chooseKindForObjective({ profileKey, objective = '', topic = '',
 
 // Qorshee dhammaan su'aalaha: sample-ka qaranka ayaa go'aaminaya TIRADA sawirrada; casharku wuxuu go'aaminayaa NOOCA.
 // items: [{index, type, objective, topic}]
+// Sawirka waa inuu ku habboonaa mawduuca su'aasha (tusaale: circuit-ka resistor-ka ma gelayo imtixaanka mowjadaha)
+const FIG_TOPIC = { resistor_circuit: /circuit|current|resistor|resistance|voltage|ohm|electric|electron|charge/i, spring_mass: /spring|oscillat|harmonic|hooke|vibrat|period|elastic/i, pendulum: /pendulum|oscillat|harmonic|period|gravity/i, wave: /wave|sound|frequency|wavelength|light|period|amplitude|ultrasound|echo|seismic/i, vt_graph: /motion|velocity|speed|accelerat|kinematic|displacement|distance/i, forces: /force|newton|friction|weight|equilibrium|moment|pressure/i };
+const figFits = (f, it) => { const re = FIG_TOPIC[f]; if (!re) return true; return re.test(`${it?.objective || ''} ${it?.topic || ''}`); };
 export function planSlots({ profileKey, items, seed = 1, figureTarget = 0 }) {
   const prof = NATIONAL_PROFILES[profileKey] || null;
   const rnd = seededRand(hashStr(`${profileKey}:${seed}:${items.length}`));
@@ -262,8 +265,9 @@ export function planSlots({ profileKey, items, seed = 1, figureTarget = 0 }) {
     for (let i = 0; i < pool.length && need > 0; i += Math.max(1, Math.floor(pool.length / (need + 1)))) {
       const s = pool[i]; if (!s || s.kind === KINDS.MCQ_FIGURE) continue;
       const cnt = (k) => slots.filter((x) => x.figure === k).length;
-      const f = preferred.length ? [...preferred].sort((x, y) => cnt(x) - cnt(y) || rnd() - 0.5)[0] : (prof.figures[0] || null);
-      if (!f) break;
+      const okPref = preferred.filter((g) => figFits(g, items[s.index]));
+      const f = okPref.length ? [...okPref].sort((x, y) => cnt(x) - cnt(y) || rnd() - 0.5)[0] : null;
+      if (!f) continue;
       Object.assign(s, { kind: KINDS.MCQ_FIGURE, figure: f, askFacts: defaultFacts(f), deterministic: DETERMINISTIC_FIGURES.includes(f), forced: true });
       need--;
     }
@@ -295,9 +299,11 @@ export function planSlots({ profileKey, items, seed = 1, figureTarget = 0 }) {
       for (const kindSet of [[KINDS.MCQ_TEXT, KINDS.MCQ_CALC], [KINDS.STRUCT_TEXT]]) {
         if (need <= 0) break;
         const pool = slots.filter((s) => kindSet.includes(s.kind));
-        for (const s of pick(pool, Math.min(need, pool.length))) {
-          const f = det.length ? [...det].sort((x, y) => cnt(x) - cnt(y) || rnd() - 0.5)[0] : prof.figures[0];
-          if (!f) break;
+        for (const s of pick(pool, pool.length)) {
+          if (need <= 0) break;
+          const okDet = det.filter((g) => figFits(g, items[s.index]));
+          const f = okDet.length ? [...okDet].sort((x, y) => cnt(x) - cnt(y) || rnd() - 0.5)[0] : null;
+          if (!f) continue;
           Object.assign(s, { kind: kindSet[0] === KINDS.STRUCT_TEXT ? KINDS.STRUCT_FIGURE : KINDS.MCQ_FIGURE, figure: f, askFacts: defaultFacts(f), deterministic: DETERMINISTIC_FIGURES.includes(f), forced: true });
           need--;
         }

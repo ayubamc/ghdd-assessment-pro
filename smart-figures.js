@@ -14,7 +14,7 @@ const tokens = (s) => new Set((String(s || '').toLowerCase().match(/[\p{L}\p{N}]
 
 // ---- Su'aalaha jajaban: qoraal la'aan, cinwaan qayb, MCQ doorasho la'aan, ama MCQ oo ah qeexid ("Define...") ----
 const SECTION_LABEL = /^\s*(part|section|qaybta|القسم)\b/i;
-const DEFINE_STEM = /^\s*(define|explain|describe|discuss|list|outline|state|name|relate|differentiate|distinguish|compare|examine|identify|select|choose|state\s+(?:and|two|three|four|five)|qeex|sharax|faahfaahi|taxan|ka hadal|\u0634\u0631\u062d|\u0639\u0631\u0641)\b/i;
+const DEFINE_STEM = /^\s*(define|explain|describe|discuss|list|outline|state|name|relate|differentiate|distinguish|compare|examine|state\s+(?:and|two|three|four|five)|qeex|sharax|faahfaahi|taxan|ka hadal|\u0634\u0631\u062d|\u0639\u0631\u0641)\b/i;
 const FIG_REF = /\b(figure|diagram|graph|chart|table|picture|map|circuit)\s+(below|above|shown|given)|\b(in|from|on|by)\s+the\s+(figure|diagram|graph|chart|circuit|picture)\b|\bshown\s+(in|below|above)\b|\b(below|following)\s+(figure|diagram|graph|chart|circuit)|sawirka\s+(hoose|kor)|jaantuska\s+(hoose|kor)|khariidadda\s+hoose|shaxda\s+hoose/i;
 const STOP = new Set('a an the of in on at to is are was were be it its this that these those which what who whom whose how why when where following correct best one ones following statement statements below above shown figure given by for with from as and or not state identify determine find describe choose select'.split(' '));
 const toks = (t) => new Set(String(t || '').toLowerCase().replace(/[^\p{L}\p{N}.]+/gu, ' ').split(' ').filter((w) => w && !STOP.has(w)));
@@ -76,6 +76,7 @@ function nearDup(a, b) {
   if (a.ct && a.ct === b.ct && a.ctt.size >= 2 && /\p{L}{3}/u.test(a.ct) && call >= 0.25) return true;
   if (Math.min(a.all.size, b.all.size) >= 6 && call >= 0.6) return true;
   if (c >= 0.5 && a.ctt.size >= 3 && jac(a.ctt, b.ctt) >= 0.6) return true;
+  if (Math.min(a.ctt.size, b.ctt.size) >= 3 && jac(a.st, b.st) >= 0.3 && jac(a.ctt, b.ctt) >= 0.25) return true;
   // same fact tested twice: one correct answer contains the other and the stems share their key words
   if (Math.min(a.ctt.size, b.ctt.size) >= 3 && contain(a.ctt, b.ctt) >= 0.9 && contain(a.st, b.st) >= 0.3) return true;
   return false;
@@ -133,7 +134,7 @@ export function findBrokenQuestions(questions, { dangling = false, partPlan = nu
     else if (isMcq && DEFINE_STEM.test(text)) why = 'mcq-is-open-question';
     else if (OFF_TOPIC.test(text)) why = 'off-topic';
     else if (isMcq && hasSynonymOptions(opts)) why = 'duplicate-options';
-    else if (!isMcq && !opts.length && MCQ_STYLE.test(text)) why = 'mcq-style-in-written';
+    else if (!isMcq && !opts.length && (MCQ_STYLE.test(text) || /^\s*[A-Da-d][.)]?\s*$/.test(String(q?.answer || '')))) why = 'mcq-style-in-written';
     else if (!isMcq && !opts.length && Number(q?.marks) >= 6 && text.split(/\s+/).length < 18 && !/\(a\)/i.test(text)) why = 'too-simple';
     if (!why) {
       const sig = figSig(q), tx = text.toLowerCase().replace(/[^\p{L}\p{N}]+/gu, ' ').trim();
