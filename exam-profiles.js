@@ -28,7 +28,7 @@ export const KINDS = {
 // Noocyada sawirka ee uu app-ku si deterministic ah u sameyn karo (sax 100%)
 export const DETERMINISTIC_FIGURES = [
   'network_topology', 'spring_mass', 'pendulum', 'vt_graph', 'wave', 'forces', 'right_triangle', 'bar_chart', 'line_chart',
-  'pie_chart', 'data_table', 'logic_gate', 'flowchart', 'resistor_circuit', 'coord_line', 'organic_structure'
+  'pie_chart', 'data_table', 'logic_gate', 'flowchart', 'ui_toolbar', 'resistor_circuit', 'coord_line', 'organic_structure'
 ];
 // Noocyada u baahan sawir AI/buug (biology, geography, map)
 export const SCHEMATIC_FIGURES = ['labelled_schematic', 'map', 'textbook_diagram'];
@@ -79,11 +79,11 @@ export const NATIONAL_PROFILES = {
     notes: 'Khariidad Soomaaliya/Afrika, sawir tamar dabeyl, volcano; xisaabin cufnaan (qof/km²)'
   }),
   technology: P({
-    style: {"mcq": "Choose the Correct answer", "structured": "PART TWO: STRUCTURED QUESTIONS", "marksWord": "Marks", "letters": "ABCD", "suffix": ")"},
+    style: {"mcq": "Choose the correct answer for each of the following", "structured": "Part Two: Direct Questions", "marksWord": "Marks", "letters": "abcd", "suffix": "."},
     label: 'Technology', basis: 'sampled', language: 'en', letters: 'latin',
     mcq: { count: 60, marks: 60 }, structured: { marks: 40, count: 8 },
     figureShare: [0.12, 0.25],
-    figures: ['flowchart', 'network_topology', 'data_table', 'logic_gate', 'textbook_diagram'],
+    figures: ['flowchart', 'network_topology', 'ui_toolbar', 'data_table', 'logic_gate', 'textbook_diagram'],
     codeShare: [0.15, 0.3],
     notes: 'Flowchart, UI Word/Excel/PowerPoint, topology, binary, koodh (compiler, errors)'
   }),
@@ -175,6 +175,7 @@ const FIGURE_RULES = [
   [['physics', 'technology'], /logic gate|and gate|or gate|not gate|\bnand\b|\bnor\b|boolean|digital electronics/i, 'logic_gate', ['gate_name']],
   [['technology'], /topology|network layout|star network|ring network|bus network|mesh network|hub and switch/i, 'network_topology', ['topology_name']],
   [['technology'], /flow ?chart|algorithm|decision symbol|process symbol|program flow|pseudocode/i, 'flowchart', ['symbol_type']],
+  [['technology'], /toolbar|ribbon|quick access|title bar|menu bar|bold|italic|underline|powerpoint|ms word|microsoft word|excel|window|user interface|interface/i, 'ui_toolbar', ['button_names', 'active_tab']],
   [['math', 'physics'], /straight line|gradient|slope|linear (graph|equation)|y ?= ?mx|coordinate/i, 'coord_line', ['gradient', 'y_intercept']],
   [['math'], /pythag|hypotenuse|right.?angle|trigonomet|triangle/i, 'right_triangle', ['hypotenuse', 'area', 'perimeter']],
   [['chemistry'], /branch|isomer|structural formula|displayed formula|hydrocarbon|alkane|alkene|alkyne|alcohol|carboxylic|organic|functional group|homologous|ester|aldehyde|ketone|iupac|nomenclature|carbon compound/i, 'organic_structure', ['iupac_name', 'molecular_formula', 'carbon_count', 'hydrogen_count', 'longest_chain', 'branch_count', 'functional_group']],

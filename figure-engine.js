@@ -241,6 +241,55 @@ RENDERERS.flowchart = (spec) => {
   return { svg: svgWrap(s, n === 1 ? 190 : 125, n === 1 ? -85 : -118), facts: { nodes: nodes.map((x) => x.type), symbol_type: nodes.length === 1 ? nodes[0].type : null } };
 };
 
+// Technology: Word / PowerPoint / Excel interface pieces (toolbar B I U, ribbon tabs, quick-access toolbar).
+// Sawirka ma muujiyo magaca qalabka marka su'aashu weydiinayso magaca; kaliya shaqooyinka muuqda ayuu sawiraa.
+const RIBBONS = {
+  word: ['File', 'Home', 'Insert', 'Design', 'Layout', 'References', 'Mailings', 'Review', 'View'],
+  powerpoint: ['File', 'Home', 'Insert', 'Design', 'Transitions', 'Animations', 'Slide Show', 'Review', 'View'],
+  excel: ['File', 'Home', 'Insert', 'Page Layout', 'Formulas', 'Data', 'Review', 'View']
+};
+RENDERERS.ui_toolbar = (spec) => {
+  const type = String(spec.type || 'bius').toLowerCase();
+  let s = '', facts;
+  if (type === 'bius') {
+    const x0 = 210, y0 = 150, bw = 64, bh = 56;
+    s += R(x0 - 14, y0 - 14, bw * 3 + 28, bh + 28, { sw: 1.8, rx: 6 });
+    [['B', 'bold'], ['I', 'italic'], ['U', 'underline']].forEach(([ch, st], i) => {
+      const bx = x0 + i * bw;
+      s += R(bx + 4, y0, bw - 8, bh, { sw: 1.4, rx: 4 });
+      s += `<text x="${bx + bw / 2}" y="${y0 + 40}" font-family="Times New Roman, serif" font-size="34" text-anchor="middle" fill="#000" data-role="id" font-weight="${st === 'bold' ? 'bold' : 'normal'}" font-style="${st === 'italic' ? 'italic' : 'normal'}"${st === 'underline' ? ' text-decoration="underline"' : ''}>${ch}</text>`;
+    });
+    facts = { buttons: ['Bold', 'Italic', 'Underline'], button_names: 'Bold, Italic, Underline' };
+    return { svg: svgWrap(s, 180, -50), facts };
+  }
+  if (type === 'ribbon_tabs') {
+    const app = RIBBONS[String(spec.app || 'powerpoint').toLowerCase()] ? String(spec.app || 'powerpoint').toLowerCase() : 'powerpoint';
+    const tabs = RIBBONS[app], n = tabs.length, x0 = 20, w = (W - 40) / n, y0 = 140, h = 44;
+    const active = tabs.includes(spec.active) ? spec.active : null;
+    s += R(x0, y0 - 40, W - 40, 36, { sw: 1.6, fill: '#f2f2f2' });
+    s += R(x0, y0, W - 40, h, { sw: 1.8 });
+    tabs.forEach((t, i) => {
+      const bx = x0 + i * w;
+      if (i > 0) s += L(bx, y0, bx, y0 + h, { w: 1 });
+      if (t === active) s += R(bx + 2, y0 + 2, w - 4, h - 4, { sw: 2.4 });
+      s += T(bx + w / 2, y0 + h / 2 + 5, t, { size: n > 8 ? 8.5 : 10, role: 'data' });
+    });
+    facts = { app, tabs, active_tab: active, tab_count: n };
+    return { svg: svgWrap(s, 180, -50), facts };
+  }
+  if (type === 'quick_access') {
+    const x0 = 200, y0 = 150, bw = 70, bh = 56;
+    s += R(x0 - 14, y0 - 14, bw * 3 + 28, bh + 28, { sw: 1.8, rx: 6 });
+    // save (floppy), undo, redo
+    s += R(x0 + 18, y0 + 10, 34, 36, { sw: 1.8 }) + R(x0 + 25, y0 + 10, 20, 12, { sw: 1.4 }) + R(x0 + 24, y0 + 30, 22, 16, { sw: 1.4 });
+    s += PATH(`M${x0 + bw + 46} ${y0 + 36} C${x0 + bw + 46} ${y0 + 14} ${x0 + bw + 14} ${y0 + 14} ${x0 + bw + 14} ${y0 + 34}`, { sw: 2.4 }) + arrowHead(x0 + bw + 14, y0 + 36, 0, 9, 11);
+    s += PATH(`M${x0 + 2 * bw + 24} ${y0 + 36} C${x0 + 2 * bw + 24} ${y0 + 14} ${x0 + 2 * bw + 56} ${y0 + 14} ${x0 + 2 * bw + 56} ${y0 + 34}`, { sw: 2.4 }) + arrowHead(x0 + 2 * bw + 56, y0 + 36, 0, 9, 11);
+    facts = { commands: ['Save', 'Undo', 'Redo'], button_names: 'Save, Undo, Redo' };
+    return { svg: svgWrap(s, 180, -50), facts };
+  }
+  throw new Error('ui_toolbar: type aan la aqoon (bius|ribbon_tabs|quick_access)');
+};
+
 RENDERERS.resistor_circuit = (spec) => {
   const mode = spec.mode === 'parallel' ? 'parallel' : 'series';
   const vals = (spec.values || []).map((v) => num(v)).filter((v) => v > 0);
@@ -463,6 +512,7 @@ export const FIGURE_SCHEMAS = {
   data_table: '{"title":"","headers":["Item","Amount"],"rows":[["Capital","24000"],["Stock","1500"]],"ask":{"row":"Stock","col":"Amount"}}  (use "?" as a cell value to hide it)',
   logic_gate: '{"gate":"AND"}  (AND|OR|NOT|NAND|NOR|XOR)',
   flowchart: '{"nodes":[{"type":"start","label":"Start"},{"type":"process","label":"Input"},{"type":"decision","label":"?"}]}  (types: start,end,process,decision,io; one node with label "?" = identify the symbol)',
+  ui_toolbar: '{"type":"bius"}  (type bius = Bold/Italic/Underline buttons | ribbon_tabs with "app":"word|powerpoint|excel" and optional "active":"Home" | quick_access = Save/Undo/Redo; the figure never prints the button names)',
   resistor_circuit: '{"mode":"series","values":[4,6],"voltage":12}  (mode series|parallel; 2-3 resistors in ohms)',
   network_topology: '{"type":"star","nodes":5}  (type star|ring|bus|mesh|tree; nodes 3-6; the figure never carries the topology name)',
   spring_mass: '{"k":100,"x":0.05,"direction":"right","xUnit":"m","kUnit":"N/m"}  (horizontal mass-spring system displaced from equilibrium; ask restoring_force or potential_energy; the figure shows k and x only)',

@@ -18,6 +18,9 @@ test('renderers draw valid, answer-free SVG and compute facts', async () => {
   assert.equal(renderFigure('resistor_circuit', { mode: 'parallel', values: [6, 12, 4], voltage: 12 }).facts.equivalent_resistance, 2);
   assert.equal(renderFigure('resistor_circuit', { mode: 'series', values: [4, 6], voltage: 12 }).facts.total_current, 1.2);
   assert.equal(renderFigure('logic_gate', { gate: 'nand' }).facts.gate_name, 'NAND');
+  assert.equal(renderFigure('ui_toolbar', { type: 'bius' }).facts.button_names, 'Bold, Italic, Underline');
+  for (const sp of [{ type: 'bius' }, { type: 'quick_access' }, { type: 'ribbon_tabs', app: 'powerpoint', active: 'Home' }, { type: 'ribbon_tabs', app: 'word' }, { type: 'ribbon_tabs', app: 'excel' }]) assert.equal(verifySvg(renderFigure('ui_toolbar', sp).svg).ok, true);
+  assert.throws(() => renderFigure('ui_toolbar', { type: 'xyz' }));
   assert.throws(() => renderFigure('vt_graph', { points: [[0, 0], [0, 5], [3, 5]] }));
   assert.throws(() => renderFigure('bar_chart', { labels: ['a', 'b', 'c'], values: [5, 5, 3] }), /ugu weyn/);
 });
@@ -113,7 +116,7 @@ test('broken questions are detected and repaired; figure direction fixed; topolo
   assert.equal(qs[3].options[0], 'Hub'); // good questions untouched
   for (const t of ['star', 'ring', 'bus', 'mesh', 'tree']) { const r = renderFigure('network_topology', { type: t, nodes: 5 }); assert.equal(verifySvg(r.svg).ok, true, t); assert.equal(r.facts.topology_name, t); }
   const tech = getProfile('Technology', 'Form 4');
-  assert.equal(tech.style.mcq, 'Choose the Correct answer'); assert.equal(tech.style.letters, 'ABCD'); assert.equal(getProfile('Taariikh', '').style.letters, 'BTJX');
+  assert.equal(tech.style.mcq, 'Choose the correct answer for each of the following'); assert.equal(tech.style.letters, 'abcd'); assert.equal(getProfile('Taariikh', '').style.letters, 'BTJX');
 });
 
 test('physics: real symbols (spring, pendulum), varied figure kinds and no dangling figure references', async () => {
