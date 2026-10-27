@@ -7,7 +7,7 @@ import { AsyncLocalStorage } from 'node:async_hooks';
 import path from 'path';
 import fs from 'fs';
 import { fileURLToPath } from 'url';
-import { aiProviderStatus, asFigure } from './ai-providers.js';
+import { aiProviderStatus, asFigure, inFigure } from './ai-providers.js';
 import { getProfile, NATIONAL_PROFILES } from './exam-profiles.js';
 import { createSmartFigures, buildExamPlan, slotHint, plannedObjectives, cleanQuestionMath, findBrokenQuestions, stripDanglingFigureRefs } from './smart-figures.js';
 import { renderFigure, verifySvg } from './figure-engine.js';
@@ -1133,7 +1133,7 @@ globalThis.fetch = async (url, opts) => {
 
 // ───────────────────────── Claude (Anthropic) for Somali ─────────────────────────
 // Railway variables: ANTHROPIC_API_KEY (required), CLAUDE_MODEL (default claude-sonnet-5-5),
-// CLAUDE_FOR = so (default: only Somali exams) | all (every language) | off.
+// CLAUDE_FOR = so (default: only Somali exams) | all (every language) | figures (ONLY diagram/figure generation) | off.
 // Every existing Gemini call is answered by Claude when it is a Somali request; if Claude fails
 // (no credit, rate limit, error) the very same request is sent to Gemini, so the app never stops.
 const SOMALI_STYLE = `SOMALI QUALITY RULES (MANDATORY whenever you write Somali): Write like a Somali teacher composing a real school exam in Af-Soomaali, NOT like a translation from English. Use natural, short, direct sentences with one idea each and the standard wording used in Somali classrooms and school books. Use the usual exam command words: Qeex, Sharax, Taxay, Sheeg, Ka dooro, Ku buuxi, Isku xidh, Xisaabi, Barbar-dhig, Tusaale u soo qaado, Ka jawaab. Never translate word for word: rebuild every sentence the way a Somali teacher would say it, with correct particles (ka, ku, u, la, ay, uu, waxaa, waxay), correct agreement and standard Latin spelling. Use the established Somali technical term when school books have one; when no accepted Somali term exists keep the common term as taught (English or Arabic, written once, in plain letters) instead of inventing a new word. Never leave English sentences, never write machine-translation phrasing, never use invented or unclear words. A student must understand each question at first reading without guessing.`;
@@ -1143,6 +1143,7 @@ function claudeWanted(promptText) {
   const mode = String(process.env.CLAUDE_FOR || 'so').toLowerCase();
   if (!process.env.ANTHROPIC_API_KEY || mode === 'off' || Date.now() < claudeState.until) return false;
   if (mode === 'all') return true;
+  if (mode === 'figures') return inFigure(); // Claude is paid: use it ONLY for figure generation (text calls)
   const ctx = String(langStore.getStore()?.lang || '');
   if (ctx) return ctx === 'so' || ctx === 'somali';
   return /OUTPUT LANGUAGE:\s*Somali|(?:into|in)\s+Somali\s+only/i.test(promptText);

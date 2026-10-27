@@ -20,6 +20,7 @@ import { AsyncLocalStorage } from 'node:async_hooks';
 const als = new AsyncLocalStorage();
 // Calls made inside asFigure(...) (sawirada / diagrams) use the paid GEMINI_FIGURE_API_KEY first, so figures never starve.
 export const asFigure = (fn) => als.run({ figure: true }, fn);
+export const inFigure = () => !!als.getStore()?.figure;
 const figureKey = () => String(process.env.GEMINI_FIGURE_API_KEY || '').trim();
 
 // ───────── Gemini keys ─────────
