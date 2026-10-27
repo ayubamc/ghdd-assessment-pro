@@ -1191,12 +1191,16 @@ const auditViaClaude = (p, fn) => {
   const on = subs.length && subs.some((s) => (s === 'math' ? /math|xisaab|رياضيات/.test(subj) : s === 'chemistry' ? /chem|kimis|كيمياء/.test(subj) : subj.includes(s)));
   return on ? asAudit(fn) : fn();
 };
+// Keep a reserve for figures: when the estimated remaining Claude budget is below CLAUDE_RESERVE (default $1.00), the paid audit/repair stops and only figures keep using Claude.
+const claudeBudgetCache = { remaining: Infinity };
+async function refreshClaudeBudget() { try { const s = await claudeUsageSummary(); claudeBudgetCache.remaining = Number(s.estimatedRemainingUSD); } catch (_) { /* keep last value */ } }
+setTimeout(refreshClaudeBudget, 15000); setInterval(refreshClaudeBudget, 60000).unref?.();
 const claudeModel = () => process.env.CLAUDE_MODEL || 'claude-sonnet-5-5';
 function claudeWanted(promptText) {
   const mode = String(process.env.CLAUDE_FOR || 'so').toLowerCase();
   if (!process.env.ANTHROPIC_API_KEY || mode === 'off' || Date.now() < claudeState.until) return false;
   if (mode === 'all') return true;
-  if (mode === 'figures') return inFigure() || inAudit(); // Claude is paid: figures, plus the answer-key audit/repair of the subjects in CLAUDE_AUDIT_SUBJECTS (see auditViaClaude)
+  if (mode === 'figures') return inFigure() || (inAudit() && claudeBudgetCache.remaining >= Number(process.env.CLAUDE_RESERVE || 1)); // Claude is paid: figures, plus the answer-key audit/repair of the subjects in CLAUDE_AUDIT_SUBJECTS (see auditViaClaude)
   const ctx = String(langStore.getStore()?.lang || '');
   if (ctx) return ctx === 'so' || ctx === 'somali';
   return /OUTPUT LANGUAGE:\s*Somali|(?:into|in)\s+Somali\s+only/i.test(promptText);
