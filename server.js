@@ -2229,6 +2229,21 @@ ${sourceForRange(p, range || { from: 0, to: count })}
   tlog('repair done');
   try { if (Date.now() - T0 < 140000) { const vr = await verifyCalcMcqs(questions, p); console.log(`[gen] answer check: ${JSON.stringify(vr)}`); } } catch (e) { console.warn('Answer check skipped:', e.message); }
   tlog('answers checked');
+  // Hubin xoog leh (Claude, ~$0.05): jawaabo khalad ah, laba doorasho oo sax ah, su'aalo is-diidaya -> waa la bedelaa. Iyo wixii ka hadhay dib-u-sameynta.
+  try {
+    if (Date.now() - T0 < 135000) {
+      const au = await asFigure(() => smartFigures.auditMcqs(p, questions));
+      console.log(`[gen] audit: ${JSON.stringify(au)}`);
+      const left = findBrokenQuestions(questions, { dangling: false, partPlan: p.partPlan });
+      if (left.length) {
+        const rr = await asFigure(() => smartFigures.repairBroken(p, questions, plannedObjectives(p, questions.length), { deadline: T0 + 175000 }));
+        console.log(`[gen] rescue repair: ${JSON.stringify(rr)}`);
+        if (repairReport) { repairReport.found += rr.found; repairReport.repaired += rr.repaired; repairReport.failed = rr.failed; } else repairReport = rr;
+      }
+      questions.forEach((q) => { if (q) { delete q._fix; delete q._fixWhy; } });
+    }
+  } catch (e) { console.warn('Audit skipped:', e.message); }
+  tlog('audit done');
   const figPromise = (p.figureMode === 'smart' && examPlan) ? asFigure(() => smartFigures.smartFigureStage(p, questions, examPlan)) : null;
   try { if (Date.now() - T0 < 110000) await diversifyStems(questions, p.examLanguage); else console.log('[gen] stem variety skipped (time budget)'); } catch (e) { console.warn('Stem variety skipped:', e.message); }
   tlog('stems done');

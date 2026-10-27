@@ -133,6 +133,7 @@ export function findBrokenQuestions(questions, { dangling = false, partPlan = nu
     else if (isMcq && opts.length !== 4) why = 'mcq-without-options';
     else if (isMcq && DEFINE_STEM.test(text)) why = 'mcq-is-open-question';
     else if (OFF_TOPIC.test(text)) why = 'off-topic';
+    else if (q?._fix) why = 'audit-fail';
     else if (isMcq && hasSynonymOptions(opts)) why = 'duplicate-options';
     else if (!isMcq && !opts.length && (MCQ_STYLE.test(text) || /^\s*[A-Da-d][.)]?\s*$/.test(String(q?.answer || '')))) why = 'mcq-style-in-written';
     else if (!isMcq && !opts.length && Number(q?.marks) >= 6 && text.split(/\s+/).length < 18 && !/\(a\)/i.test(text)) why = 'too-simple';
@@ -410,6 +411,7 @@ Return ONLY JSON: {"question":"","options":${isMcq ? '["","","",""]' : '[]'},"an
             Object.assign(fixed, chk.q);
           } else { fixed.options = []; if (fixed.question.length < 12 || !fixed.answer) throw new Error('structured repair incomplete'); }
           if (why === 'duplicate') { delete fixed.diagramSvg; delete fixed.diagram; delete fixed.diagramPng; delete fixed.figureMeta; }
+          delete fixed._fix; delete fixed._fixWhy;
           cleanQuestionMath(fixed);
           if (findBrokenQuestions([fixed], { dangling: true }).length) throw new Error('still broken');
           if (similarToOthers(fixed, questions, index)) throw new Error('still similar to another question');
@@ -427,7 +429,35 @@ Return ONLY JSON: {"question":"","options":${isMcq ? '["","","",""]' : '[]'},"an
     return L.length ? `DO NOT repeat or rephrase any of these existing questions (the new question must test a clearly different fact, quantity or situation):\n- ${L.join('\n- ')}\n` : '';
   }
 
-  return { smartFigureStage, visionVerify, repairBroken };
+  // Hubin xoog leh: MCQ kasta waxaa si madaxbannaan u xalliya AI (furaha la'aan). Haddii jawaabtiisu ka duwan tahay furaha,
+  // haddii laba doorasho ay sax yihiin, ama su'aashu is-diidaysaa -> waxaa lagu calaamadiyaa _fix si loo bedelo.
+  async function auditMcqs(p, questions, { max = 12 } = {}) {
+    const items = [];
+    questions.forEach((q, i) => { const o = Array.isArray(q?.options) ? q.options.map(optionText) : []; if (o.length === 4 && !q.diagramSvg && !q.diagramPng && /^(mcq|multiple)/i.test(q.type || 'mcq')) items.push({ i, q, o }); });
+    if (!items.length) return { checked: 0, flagged: 0 };
+    const text = items.map((x, k) => `${k + 1}. ${String(x.q.question || x.q.text || '').replace(/\s+/g, ' ')}\n   A. ${x.o[0]}\n   B. ${x.o[1]}\n   C. ${x.o[2]}\n   D. ${x.o[3]}`).join('\n');
+    const prompt = `You are a strict external examiner for ${p.subject || 'the subject'} (${p.className || 'secondary school'}). Solve EVERY multiple-choice question below yourself, independently (no answer key is given). For each question return:
+- "best": the single best option letter A, B, C or D;
+- "also": array of OTHER option letters that are also correct or defensible (empty if exactly one option is correct);
+- "problem": "" if the question is sound, otherwise a short reason (data inconsistent or contradictory, no correct option, ambiguous, trick wording, or not about ${p.subject || 'the subject'} but about the curriculum/textbook).
+Return ONLY JSON: {"results":[{"n":1,"best":"A","also":[],"problem":""}]}
+QUESTIONS:
+${text}`;
+    let j; try { j = await callGeminiJson(prompt, { maxTokens: 6000, temperature: 0 }); } catch (e) { return { checked: 0, flagged: 0, error: e.message }; }
+    const res = Array.isArray(j?.results) ? j.results : [];
+    let flagged = 0;
+    for (const r of res) {
+      const x = items[Number(r.n) - 1]; if (!x || flagged >= max) continue;
+      const key = answerIndex({ answer: x.q.answer, options: x.o });
+      const best = LETTERS.indexOf(String(r.best || '').toUpperCase().trim()[0]);
+      const also = (Array.isArray(r.also) ? r.also : []).filter((l) => LETTERS.includes(String(l).toUpperCase()));
+      const bad = (key >= 0 && best >= 0 && best !== key) || also.length > 0 || String(r.problem || '').trim().length > 3;
+      if (bad) { x.q._fix = true; x.q._fixWhy = String(r.problem || (also.length ? 'two options correct' : 'key mismatch')).slice(0, 120); flagged++; }
+    }
+    return { checked: items.length, flagged };
+  }
+
+  return { smartFigureStage, visionVerify, repairBroken, auditMcqs };
 }
 
 function slimFacts(f) {
