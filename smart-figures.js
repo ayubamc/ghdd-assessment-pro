@@ -57,7 +57,7 @@ function correctText(q) {
 function qsig(q) {
   const text = String(q?.question || q?.text || '');
   const ct = String(correctText(q)).toLowerCase().replace(/[^\p{L}\p{N}.]+/gu, ' ').trim();
-  return { st: toks(text), ot: toks((Array.isArray(q?.options) ? q.options : []).join(' ')), ct, ctt: toks(ct) };
+  return { all: toks(text + ' ' + ct), st: toks(text), ot: toks((Array.isArray(q?.options) ? q.options : []).join(' ')), ct, ctt: toks(ct) };
 }
 function nearDup(a, b) {
   if (a.st.size < 3 || b.st.size < 3) return false;
@@ -65,6 +65,10 @@ function nearDup(a, b) {
   if (j >= 0.7 || c >= 0.85) return true;
   if (j >= 0.5 && jac(a.ot, b.ot) >= 0.5) return true;
   if (c >= 0.5 && a.ct && a.ct.length >= 2 && a.ct === b.ct) return true;
+  // same idea + same answer (e.g. two questions whose answer is "constructive interference"), or heavy overlap of stem+answer words
+  const call = contain(a.all, b.all);
+  if (a.ct && a.ct === b.ct && a.ctt.size >= 2 && /\p{L}{3}/u.test(a.ct) && call >= 0.25) return true;
+  if (Math.min(a.all.size, b.all.size) >= 6 && call >= 0.6) return true;
   if (c >= 0.5 && a.ctt.size >= 3 && jac(a.ctt, b.ctt) >= 0.6) return true;
   return false;
 }
