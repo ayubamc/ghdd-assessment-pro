@@ -37,7 +37,7 @@ const P = (o) => o;
 
 export const NATIONAL_PROFILES = {
   physics: P({
-    style: {"mcq": "Choose the best answer for each of the following", "structured": "Part Two: Direct Questions", "marksWord": "Marks", "letters": "abcd", "suffix": "."},
+    style: {"mcq": "Choose the correct answer for each of the following", "structured": "Part Two: Direct Questions", "marksWord": "Marks", "letters": "abcd", "suffix": "."},
     label: 'Physics', basis: 'sampled', language: 'en', letters: 'latin',
     mcq: { count: 60, marks: 60 }, structured: { marks: 40, count: 8 },
     figureShare: [0.35, 0.5],
@@ -45,7 +45,7 @@ export const NATIONAL_PROFILES = {
     notes: 'MCQ-yada waxaa ku jira v-t graph, wave, circuit, force, sawirro buug'
   }),
   chemistry: P({
-    style: {"mcq": "Choose the best answer for each of the following", "structured": "Part Two: Direct Questions", "marksWord": "Marks", "letters": "abcd", "suffix": "."},
+    style: {"mcq": "Choose the correct answer for each of the following", "structured": "Part Two: Direct Questions", "marksWord": "Marks", "letters": "abcd", "suffix": "."},
     label: 'Chemistry', basis: 'sampled', language: 'en', letters: 'latin',
     mcq: { count: 60, marks: 60 }, structured: { marks: 40, count: 8 },
     figureShare: [0.2, 0.35],
@@ -54,7 +54,7 @@ export const NATIONAL_PROFILES = {
     notes: 'Formula qaab, pH/mole xisaabin, jaantus xaaladaha shayga, qaab-dhismeed organic'
   }),
   biology: P({
-    style: {"mcq": "Choose the best answer for each of the following", "structured": "Part Two: Direct Questions", "marksWord": "Marks", "letters": "abcd", "suffix": "."},
+    style: {"mcq": "Choose the correct answer for each of the following", "structured": "Part Two: Direct Questions", "marksWord": "Marks", "letters": "abcd", "suffix": "."},
     label: 'Biology', basis: 'sampled', language: 'en', letters: 'latin',
     mcq: { count: 60, marks: 60 }, structured: { marks: 40, count: 8 },
     figureShare: [0.25, 0.4],
@@ -62,7 +62,7 @@ export const NATIONAL_PROFILES = {
     notes: 'Jaantus unugyada, maqaarka, neuron, ubaxa, sawirro qalab (PCR) - badanaa sawir buug'
   }),
   math: P({
-    style: {"mcq": "Choose the best answer for each of the following", "structured": "Part Two: Direct Questions", "marksWord": "Marks", "letters": "abcd", "suffix": "."},
+    style: {"mcq": "Choose the correct answer for each of the following", "structured": "Part Two: Direct Questions", "marksWord": "Marks", "letters": "abcd", "suffix": "."},
     label: 'Xisaab', basis: 'sampled', language: 'so', letters: 'latin',
     mcq: { count: 60, marks: 60 }, structured: { marks: 40, count: 8 },
     figureShare: [0.1, 0.2],
