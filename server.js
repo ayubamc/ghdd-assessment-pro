@@ -9,7 +9,7 @@ import fs from 'fs';
 import { fileURLToPath } from 'url';
 import { aiProviderStatus, asFigure, inFigure } from './ai-providers.js';
 import { getProfile, NATIONAL_PROFILES } from './exam-profiles.js';
-import { createSmartFigures, buildExamPlan, slotHint, plannedObjectives, interleavePlan, cleanQuestionMath, findBrokenQuestions, stripDanglingFigureRefs, similarToOthers, fixEchoKeys, dropConflictingFigures } from './smart-figures.js';
+import { createSmartFigures, buildExamPlan, slotHint, plannedObjectives, interleavePlan, cleanQuestionMath, findBrokenQuestions, stripDanglingFigureRefs, similarToOthers, fixEchoKeys, dropConflictingFigures, EDU_META } from './smart-figures.js';
 import { renderFigure, verifySvg } from './figure-engine.js';
 
 const { Pool } = pg;
@@ -378,7 +378,7 @@ async function extractRangeObjectiveInventoryRaw(sourceText, pageRange, language
   if (batch.length) batches.push(batch);
   // XAWAARAHA: baaqyada bogagga waa is-barbar (ilaa 4 isku mar), natiijooyinkuna waxay u biirayaan isla kala-dambayntii hore.
   const promptFor = (group) => {
-    return `Audit every supplied scanned textbook PDF/OCR page. Extract all explicit learning objectives/outcomes. Where explicit objectives are absent, derive a small, complete set of topic-level assessable objectives from the actual curriculum content across the supplied pages. Do not turn every fact or example into a separate objective; do not invent content or omit any explicit objective. Preserve all distinct skills/topics that the selected pages teach. Keep PDF/OCR page number distinct from printed book page. Return JSON only: {"pages":[{"page":3,"topics":[{"unit":"","topic":"","objectives":[{"id":"P3-O1","text":"","evidence":"short evidence from the page"}]}]}]}. Every supplied PDF/OCR page must appear exactly once. Objective IDs must be unique and use the actual PDF/OCR page, e.g. P3-O1, P3-O2. Each objective should describe one assessable learning outcome. If a page has no assessable content, include it with topics: []. Use language ${languageName} for unit/topic/objective/evidence.\nPAGES:\n${group.map(pg=>`[PDF/OCR PAGE ${pg.page}]\n${pg.text}`).join('\n\n')}`;
+    return `Audit every supplied scanned textbook PDF/OCR page. Extract all explicit learning objectives/outcomes. IGNORE every statement about education policy, curriculum aims, national educational reform, values, pedagogy, teaching methods, classroom activities or assessment: list ONLY objectives about the subject content itself (facts, concepts, calculations, experiments). Where explicit objectives are absent, derive a small, complete set of topic-level assessable objectives from the actual curriculum content across the supplied pages. Do not turn every fact or example into a separate objective; do not invent content or omit any explicit objective. Preserve all distinct skills/topics that the selected pages teach. Keep PDF/OCR page number distinct from printed book page. Return JSON only: {"pages":[{"page":3,"topics":[{"unit":"","topic":"","objectives":[{"id":"P3-O1","text":"","evidence":"short evidence from the page"}]}]}]}. Every supplied PDF/OCR page must appear exactly once. Objective IDs must be unique and use the actual PDF/OCR page, e.g. P3-O1, P3-O2. Each objective should describe one assessable learning outcome. If a page has no assessable content, include it with topics: []. Use language ${languageName} for unit/topic/objective/evidence.\nPAGES:\n${group.map(pg=>`[PDF/OCR PAGE ${pg.page}]\n${pg.text}`).join('\n\n')}`;
   };
   const pagesOf = (r) => (Array.isArray(r) ? r : (r && (r.pages || r.pageAnalysis || r.analysis))) || null;
   const callOnce = async (grp) => {
@@ -426,6 +426,7 @@ async function extractRangeObjectiveInventoryRaw(sourceText, pageRange, language
       if (!row) throw new Error(`Objective inventory: PDF/OCR page ${pg.page} was not analyzed. No page may be silently skipped.`);
       for (const topic of (Array.isArray(row.topics)?row.topics:[])) for (const obj of (Array.isArray(topic.objectives)?topic.objectives:[])) {
         const text=String(obj.text||'').trim(); if(!text) continue;
+        if (EDU_META.test(`${text} ${topic.topic||''} ${topic.unit||''}`)) continue; // education-policy / teaching-method objectives are never examined
         let id=String(obj.id||'');
         if(!new RegExp('^P'+pg.page+'-O\\d+$').test(id) || seenIds.has(id)) { let seq=1; while(seenIds.has(`P${pg.page}-O${seq}`)) seq++; id=`P${pg.page}-O${seq}`; }
         seenIds.add(id);

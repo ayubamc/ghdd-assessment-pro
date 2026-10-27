@@ -199,7 +199,7 @@ RENDERERS.data_table = (spec) => {
   const totals = {};
   headers.forEach((h, ci) => { const col = rows.map((r) => Number(String(r[ci]).replace(/[, ]/g, ''))); if (col.every(Number.isFinite)) totals[h] = r2(col.reduce((a, b) => a + b, 0)); });
   const cells = {}; rows.forEach((r) => { cells[r[0]] = Object.fromEntries(headers.slice(1).map((h, i) => [h, r[i + 1]])); });
-  return { svg: svgWrap(s), facts: { column_total: totals, cells, cell_lookup: spec.ask && cells[spec.ask.row] ? cells[spec.ask.row][spec.ask.col] ?? null : null } };
+  return { svg: svgWrap(s), facts: { column_total: totals, cells, cell_lookup: (() => { const v = spec.ask && cells[spec.ask.row] ? cells[spec.ask.row][spec.ask.col] ?? null : null; return v === '?' || v === '' ? null : v; })() } };
 };
 
 RENDERERS.logic_gate = (spec) => {

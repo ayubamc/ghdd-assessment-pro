@@ -229,6 +229,7 @@
       const start = m.index;
       let chain = null, used = tok, pre = '', post = '';
       if (!/[-–—−=≡(]/.test(tok)) continue;
+      if (!/[-–—−=≡]/.test(tok)) continue; // a lone formula such as (C6H14) is text, not a structure
       const attempts = [tok];
       if (/^\(/.test(tok) && /\)$/.test(tok)) attempts.push(tok.slice(1, -1));   // "(CH3-CH2-OH)" in a sentence
       for (const a of attempts) {

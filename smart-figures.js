@@ -151,6 +151,7 @@ export function similarToOthers(q, questions, index) {
   return questions.some((o, i) => i !== index && o && nearDup(a, qsig(o)));
 }
 // Su'aalo ku saabsan manhajka/habka waxbarashada (ma aha maaddada) iyo doorashooyin isku macne ah
+export const EDU_META = /\b(pedagog\w*|educational\s+(reform|outcomes?|goals?|aims?|system|policy|policies|philosophy|values?)|education(al)?\s+reform|islamic\s+values?|active\s+citizens?|civic\s+(participation|engagement)|rote\s+memori[sz]ation|experiential\s+learning|kinesthetic|learner[- ]cent(red|ered)|teacher[- ]cent(red|ered)|teaching\s+(method|methods|strategy|strategies|approach|approaches|aids?)|classroom\s+(activity|activities|management)|lesson\s+(plan|planning|objectives?)|role[- ]?play|form\s+\d\s+\w+\s+lesson|a\s+teacher\s+(asks|wants|has|uses|implements|plans|organi[sz]es|gives)|instructional|assessment\s+(strategy|strategies|methods?)|competenc(y|ies)[- ]based|learning\s+(styles?|approach|approaches|strategy|strategies|outcomes?)|modernis(e|ing|ation)\s+(of\s+)?(education|learning))\b/i;
 const OFF_TOPIC = /\b(national\s+curriculum|curriculum|syllabus|scheme\s+of\s+work|learning\s+(objective|outcome)s?|bloom|(the|this)\s+(textbook|book|chapter|lesson\s+plan)|according\s+to\s+the\s+(book|textbook|text|syllabus)|teaching\s+approach(es)?|instructional\s+approach(es)?|core\s+values?|learner[- ]centred|(physics|chemistry|biology|mathematics|geography|history)\s+(textbook|book)|which\s+chapter|chapter\s+\d+\s+(covers|of\s+the))\b/i;
 const SYN = [[/spring\s+constant|force\s+constant|stiffness\s+constant/g, 'forceconst'], [/\bperiodic\s+time\b|\btime\s+period\b/g, 'period'], [/\bangular\s+velocity\b|\bangular\s+frequency\b/g, 'angfreq']];
 function numOf(t) { const m = String(t).replace(/,/g, '').match(/-?\d+(?:\.\d+)?(?:\s*[x×]\s*10\s*(?:\^|⁻|[⁰¹²³⁴⁵⁶⁷⁸⁹])\S*)?/); if (!m) return null; return parseFloat(m[0]); }
@@ -221,7 +222,7 @@ export function findBrokenQuestions(questions, { dangling = false, partPlan = nu
     else if (dangling && FIG_REF.test(text) && !q?.diagramSvg && !q?.diagramPng && !(q?.diagram && q.diagram !== 'undefined')) why = 'dangling-figure';
     else if (isMcq && opts.length !== 4) why = 'mcq-without-options';
     else if (isMcq && DEFINE_STEM.test(text)) why = 'mcq-is-open-question';
-    else if (OFF_TOPIC.test(text)) why = 'off-topic';
+    else if (OFF_TOPIC.test(text) || EDU_META.test(text)) why = 'off-topic';
     else if (q?._fix) why = 'audit-fail';
     else if (isMcq && hasSynonymOptions(opts)) why = 'duplicate-options';
     else if (!isMcq && posKnown && opts.length >= 2) why = 'mcq-style-in-written';
