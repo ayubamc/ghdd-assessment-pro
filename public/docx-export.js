@@ -343,25 +343,26 @@
     const txtEl = kids.find(k => k.classList.contains('question-text'));
     const mkEl = kids.find(k => k.classList.contains('marks'));
     const W = (a, b) => widths.slice(a, b).reduce((x, y) => x + y, 0);
-    const mk = (el, a, b, align, bold, topOnly) => new D.TableCell({
+    // Su'aasha + sawirka waa hal sanduuq: sawirka waxaa lagu dhex dhigay unugga su'aasha (ma jiro xariiq isaga kala goysa)
+    let figBlocks = [];
+    if (figEl) {
+      const keepW = env.maxW, keepH = env.figMaxH; env.maxW = 340; env.figMaxH = 165;
+      try { figBlocks = blocksFromChildren(figEl, ctx, env, {}); } finally { env.maxW = keepW; env.figMaxH = keepH; }
+    }
+    const edge = (left, right) => ({ top: line(), bottom: none(), left: left ? line() : none(), right: right ? line() : none() });
+    const mk = (el, a, b, align, bold, left, right, extra) => new D.TableCell({
       width: { size: W(a, b), type: D.WidthType.DXA }, columnSpan: b - a > 1 ? b - a : undefined, verticalAlign: D.VerticalAlign.TOP,
-      borders: topOnly ? { top: line(), left: line(), right: line(), bottom: none() } : bord,
-      children: [para(el ? inlineKids(el, ctx, bold ? { bold: true } : {}, env) : [], ctx, { align, after: 0, keepNext: !!figEl })]
+      borders: edge(left, right),
+      children: [para(el ? inlineKids(el, ctx, bold ? { bold: true } : {}, env) : [], ctx, { align, after: 0, keepNext: true }), ...(extra || [])]
     });
-    const row1 = new D.TableRow({ cantSplit: true, children: [mk(numEl, 0, 1, undefined, true, true), mk(txtEl, 1, 5, undefined, false, true), mk(mkEl, 5, 6, 'end', true, true)] });
+    const row1 = new D.TableRow({ cantSplit: true, children: [mk(numEl, 0, 1, undefined, true, true, false), mk(txtEl, 1, 5, undefined, false, false, false, figBlocks.length ? fixCellBlocks(figBlocks, ctx) : null), mk(mkEl, 5, 6, 'end', true, false, true)] });
     const optCell = (td, a, b) => new D.TableCell({
       width: { size: W(a, b), type: D.WidthType.DXA }, columnSpan: b - a > 1 ? b - a : undefined, verticalAlign: D.VerticalAlign.TOP, borders: bord,
       children: (() => { const keep = env.maxW; env.maxW = Math.max(60, Math.floor(W(a, b) / 15) - 18); try { return fixCellBlocks(blocksFromChildren(td, ctx, env, {}), ctx); } finally { env.maxW = keep; } })()
     });
     const row2 = new D.TableRow({ cantSplit: true, children: [optCell(opts[0], 0, 2), optCell(opts[1], 2, 3), optCell(opts[2], 3, 4), optCell(opts[3], 4, 6)] });
-    let figRow = null;
-    if (figEl) {
-      const keepW = env.maxW, keepH = env.figMaxH; env.maxW = 340; env.figMaxH = 165;
-      let kids2 = []; try { kids2 = blocksFromChildren(figEl, ctx, env, {}); } finally { env.maxW = keepW; env.figMaxH = keepH; }
-      if (kids2.length) figRow = new D.TableRow({ cantSplit: true, children: [new D.TableCell({ width: { size: CONTENT_W, type: D.WidthType.DXA }, columnSpan: 6, borders: { top: none(), left: line(), right: line(), bottom: none() }, children: fixCellBlocks(kids2, ctx) })] });
-    }
     return new D.Table({
-      rows: figRow ? [row1, figRow, row2] : [row1, row2], width: { size: CONTENT_W, type: D.WidthType.DXA }, columnWidths: widths,
+      rows: [row1, row2], width: { size: CONTENT_W, type: D.WidthType.DXA }, columnWidths: widths,
       layout: D.TableLayoutType.FIXED, visuallyRightToLeft: ctx.rtl || undefined,
       margins: { top: 60, bottom: 60, left: 100, right: 100 },
       borders: { ...allBorders(line()), insideHorizontal: none(), insideVertical: none() }
@@ -644,5 +645,5 @@
     return D.Packer.toBlob(doc);
   }
   window.buildExamDocx = buildExamDocx;
-  window.GHDD_DOCX_VERSION = 'r25';
+  window.GHDD_DOCX_VERSION = 'r32';
 })();

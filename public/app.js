@@ -1732,7 +1732,7 @@ async function ensureDocxExporter(){
     catch(_){try{await loadJsText('https://cdn.jsdelivr.net/npm/docx@9.8.1/dist/index.iife.js');}catch(__){}}
   }
   if(!window.docx)throw new Error('Maktabadda docx lama helin. Geli faylka public/vendor/docx.iife.js oo dib u deploy garee.');
-  try{await loadJsText('/docx-export.js?v=r30');}
+  try{await loadJsText('/docx-export.js?v=r32');}
   catch(e){throw new Error('Hubi in faylka public/docx-export.js la geliyay. '+e.message);}
   if(typeof window.buildExamDocx!=='function')throw new Error('docx-export.js si sax uma shaqeynin.');
 }
