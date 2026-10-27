@@ -484,7 +484,7 @@ async function diagramSvgToPng(svg){
 }
 
 function isArabicSubjectName(subject){return /\barabic\b|carabi|carbi|عرب/i.test(String(subject||''));}
-function isEnglishF4Exam(subject,className){return (/\benglish\b|ingiriis/i.test(String(subject||''))||isArabicSubjectName(subject)) && /form\s*4|form\s*four|f4|grade\s*12|secondary\s*4/i.test(String(className||''));}
+function isEnglishF4Exam(subject,className){return (/\benglish\b|ingiriis/i.test(String(subject||''))||isArabicSubjectName(subject)) && /form\s*4|form\s*four|f4|fasal\w*\s*4|grade\s*12|secondary\s*4|(?:الفصل|فصل|الصف|صف)\s*(?:الرابع|4|٤)|^\s*(?:4|٤|four)\s*$/i.test(String(className||''));}
 function figureNoteHtml(q,withAnswers,lang){
   if(!withAnswers||!q.figureMeta)return '';
   const m=q.figureMeta,c=q.figureCheck;

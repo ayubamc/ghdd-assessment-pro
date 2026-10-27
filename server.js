@@ -325,17 +325,18 @@ function stripCitationsFromQuestion(q) {
 }
 
 // Subject-specific assessment profiles and hard source-page validation.
+const F4_CLASS_RE = /form\s*4|form\s*four|f4|fasal\w*\s*4|fasaladda\s*4|grade\s*12|secondary\s*4|(?:الفصل|فصل|الصف|صف)\s*(?:الرابع|4|٤)|^\s*(?:4|٤|four)\s*$/i;
 const ARABIC_SUBJECT_RE = /\barabic\b|carabi|carbi|عرب/;
 function isArabicForm4(p = {}) {
   const subject = String(p.subject || '').toLowerCase();
   const klass = String(p.className || p.klass || '').toLowerCase();
-  return ARABIC_SUBJECT_RE.test(subject) && /form\s*4|form\s*four|f4|fasaladda\s*4/.test(klass);
+  return ARABIC_SUBJECT_RE.test(subject) && F4_CLASS_RE.test(klass);
 }
 // English AND Arabic Form 4 share the same national structure (passage + 4 MCQ parts + short answers + composition).
 function isEnglishForm4(p = {}) {
   const subject = String(p.subject || '').toLowerCase();
   const klass = String(p.className || p.klass || '').toLowerCase();
-  return (/\benglish\b|ingiriis/.test(subject) || ARABIC_SUBJECT_RE.test(subject)) && /form\s*4|form\s*four|f4|fasaladda\s*4/.test(klass);
+  return (/\benglish\b|ingiriis/.test(subject) || ARABIC_SUBJECT_RE.test(subject)) && F4_CLASS_RE.test(klass);
 }
 const ARABIC_F4_NOTE = 'ARABIC LANGUAGE EXAM (MANDATORY): this exam follows exactly the same national structure as the English Form 4 exam, but EVERYTHING is written in clear Modern Standard Arabic: the passage, every question, every option, every answer and every marking guide. No Somali or English words (except an unavoidable technical term in brackets). Section mapping: Q1-10 reading comprehension (فهم المقروء) from the passage; Q11-20 grammar (النحو والصرف: الإعراب، الأفعال، الضمائر، المفرد والجمع، الأدوات والحروف); Q21-30 literature and rhetoric (الأدب والبلاغة: تشبيه، استعارة، كناية، سجع، جناس، الشعر والنثر، الأمثال); Q31-40 vocabulary (المفردات: المرادفات، الأضداد، معاني الكلمات)؛ Q41-49 short-answer questions totalling 50 marks; Q50 written expression (التعبير الكتابي) worth 10 marks with exactly THREE labelled topic choices (أ، ب، ج) and the student chooses ONE. Use correct Arabic grammar terminology. ';
 function readSelectedPageMarkers(sourceText) {
