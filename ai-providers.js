@@ -107,7 +107,7 @@ function toChat(body, p) {
 }
 
 const active = new Map(); // provider -> in-flight (max 3 si aan RPM u dhaafin)
-async function slot(name, max = num(process.env.AI_FALLBACK_CONCURRENCY, 3)) {
+async function slot(name, max = num(process.env.AI_FALLBACK_CONCURRENCY, 2)) {
   while ((active.get(name) || 0) >= max) await new Promise(r => setTimeout(r, 150));
   active.set(name, (active.get(name) || 0) + 1);
   return () => active.set(name, active.get(name) - 1);
@@ -119,7 +119,8 @@ async function callProvider(p, body) {
   if (estTokens(body) > p.maxIn) { console.log(`AI fallback ${p.name} skipped: prompt ~${estTokens(body)} tokens > ${p.maxIn}`); return null; }
   const release = await slot(p.name);
   try {
-    for (let attempt = 0; attempt < 2; attempt++) {
+    let waited = 0;
+    for (let attempt = 0; attempt < 5; attempt++) {
       const r = await tfetch(p.base + '/chat/completions', {
         method: 'POST',
         headers: { 'content-type': 'application/json', authorization: 'Bearer ' + p.key, ...p.headers },
@@ -129,6 +130,11 @@ async function callProvider(p, body) {
       if (!r.ok) {
         const msg = JSON.stringify(d).slice(0, 300);
         if (r.status === 400 && req.response_format) { delete req.response_format; continue; } // JSON mode lama taageero
+        if (r.status === 429) { // xadka daqiiqadda: sug Retry-After (<=30s) kadib dib isku day, ha ka tagin AI-ga
+          const ra = Number(r.headers.get('retry-after')) || 0;
+          const wait = Math.min(30, Math.max(3, ra || 8)) * 1000;
+          if (waited + wait <= num(process.env.AI_FALLBACK_MAX_WAIT_MS, 60000)) { waited += wait; stats.lastError = `${p.name} 429 wait ${Math.round(wait / 1000)}s`; await new Promise((x) => setTimeout(x, wait)); continue; }
+        }
         if (r.status === 429 || r.status === 413 || r.status >= 500) provCool.set(p.name, Date.now() + (r.status === 413 ? 20e3 : 60e3));
         else if (r.status === 401 || r.status === 403 || r.status === 404) provCool.set(p.name, Date.now() + 30 * 60e3);
         stats.lastError = `${p.name} ${r.status}: ${msg}`;

@@ -9,7 +9,7 @@ import fs from 'fs';
 import { fileURLToPath } from 'url';
 import { aiProviderStatus } from './ai-providers.js';
 import { getProfile, NATIONAL_PROFILES } from './exam-profiles.js';
-import { createSmartFigures, buildExamPlan, slotHint, plannedObjectives } from './smart-figures.js';
+import { createSmartFigures, buildExamPlan, slotHint, plannedObjectives, cleanQuestionMath } from './smart-figures.js';
 import { renderFigure, verifySvg } from './figure-engine.js';
 
 const { Pool } = pg;
@@ -1966,6 +1966,7 @@ ${String(p.sourceText || p.text || '')}
   const languageReport = await enforceQuestionLanguage(questions, p.examLanguage);
   // Sawirrada iyo stem-variety waa is-barbar (waxay taabanayaan su'aalo kala duwan)
   // Su'aalaha jajaban (qoraal la'aan / cinwaan qayb / MCQ doorasho la'aan ama qeexid) waa la hagaajiyaa ka hor sawirrada
+  questions.forEach(cleanQuestionMath); // LaTeX -> π, √, ², ×
   let repairReport = null;
   try { repairReport = await smartFigures.repairBroken(p, questions, plannedObjectives(p, questions.length)); } catch (e) { console.warn('Repair skipped:', e.message); }
   const figPromise = (p.figureMode === 'smart' && examPlan) ? smartFigures.smartFigureStage(p, questions, examPlan) : null;

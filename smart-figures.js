@@ -15,11 +15,37 @@ const tokens = (s) => new Set((String(s || '').toLowerCase().match(/[\p{L}\p{N}]
 // ---- Su'aalaha jajaban: qoraal la'aan, cinwaan qayb, MCQ doorasho la'aan, ama MCQ oo ah qeexid ("Define...") ----
 const SECTION_LABEL = /^\s*(part|section|qaybta|القسم)\b/i;
 const DEFINE_STEM = /^\s*(define|explain|describe|discuss|list|outline|state\s+(?:and|two|three|four|five)|qeex|sharax|faahfaahi|taxan|ka hadal|\u0634\u0631\u062d|\u0639\u0631\u0641)\b/i;
-const FIG_REF = /\b(figure|diagram|graph|chart|table|picture|map|circuit)\s+(below|above|shown)|\b(below|following)\s+(figure|diagram|graph|chart|circuit)|sawirka\s+(hoose|kor)|jaantuska\s+(hoose|kor)|khariidadda\s+hoose|shaxda\s+hoose/i;
+const FIG_REF = /\b(figure|diagram|graph|chart|table|picture|map|circuit)\s+(below|above|shown|given)|\b(in|from|on|by)\s+the\s+(figure|diagram|graph|chart|circuit|picture)\b|\bshown\s+(in|below|above)\b|\b(below|following)\s+(figure|diagram|graph|chart|circuit)|sawirka\s+(hoose|kor)|jaantuska\s+(hoose|kor)|khariidadda\s+hoose|shaxda\s+hoose/i;
+const STOP = new Set('a an the of in on at to is are was were be it its this that these those which what who whom whose how why when where following correct best one ones following statement statements below above shown figure given by for with from as and or not state identify determine find describe choose select'.split(' '));
+const toks = (t) => new Set(String(t || '').toLowerCase().replace(/[^\p{L}\p{N}.]+/gu, ' ').split(' ').filter((w) => w && !STOP.has(w)));
+const jac = (a, b) => { if (!a.size || !b.size) return 0; let i = 0; for (const x of a) if (b.has(x)) i++; return i / (a.size + b.size - i); };
+const MCQ_STYLE = /\b(which\s+(one\s+)?of\s+the\s+following|choose\s+the|select\s+the\s+(correct|best|true)|true\s+statement|correct\s+statement|best\s+describes)\b/i;
+// LaTeX / formulas oo qoraal caadi ah ka dhig (π, √, ², ×) si Word-ka u muuqdaan si fiican
+export function cleanMathText(t) {
+  let s = String(t ?? '');
+  if (!/[\\^$]/.test(s)) return s;
+  s = s.replace(/\$\$?([^$]+)\$\$?/g, '$1').replace(/\\[()\[\]]/g, '');
+  for (let i = 0; i < 4; i++) s = s.replace(/\\d?frac\s*\{([^{}]*)\}\s*\{([^{}]*)\}/g, (_, a, b) => `${/^[\w.]+$/.test(a) ? a : '(' + a + ')'}/${/^[\w.]+$/.test(b) ? b : '(' + b + ')'}`);
+  s = s.replace(/\\sqrt\s*\{([^{}]*)\}/g, '√($1)').replace(/\\sqrt\s*([\w.]+)/g, '√$1');
+  const g = { pi: 'π', times: '×', cdot: '·', theta: 'θ', omega: 'ω', lambda: 'λ', Delta: 'Δ', delta: 'δ', mu: 'μ', rho: 'ρ', alpha: 'α', beta: 'β', phi: 'φ', approx: '≈', leq: '≤', geq: '≥', neq: '≠', rightarrow: '→', degree: '°', Omega: 'Ω', sigma: 'σ', epsilon: 'ε', infty: '∞', pm: '±' };
+  s = s.replace(/\\([A-Za-z]+)/g, (m, w) => (g[w] !== undefined ? g[w] : m)).replace(/\^\{?\\?circ\}?/g, '°');
+  const sup = { 0: '⁰', 1: '¹', 2: '²', 3: '³', 4: '⁴', 5: '⁵', 6: '⁶', 7: '⁷', 8: '⁸', 9: '⁹', '-': '⁻' };
+  s = s.replace(/\^\{?(-?\d{1,2})\}?/g, (_, n) => [...n].map((c) => sup[c] || c).join(''));
+  const sub = { 0: '₀', 1: '₁', 2: '₂', 3: '₃', 4: '₄', 5: '₅', 6: '₆', 7: '₇', 8: '₈', 9: '₉' };
+  s = s.replace(/_\{?(\d{1,2})\}?/g, (_, n) => [...n].map((c) => sub[c] || c).join('')).replace(/_\{([A-Za-z]+)\}/g, '_$1');
+  return s.replace(/\\,|\\;|\\ /g, ' ').replace(/[{}]/g, '').replace(/\s{2,}/g, ' ').trim();
+}
+export function cleanQuestionMath(q) {
+  if (!q || typeof q !== 'object') return q;
+  for (const k of ['question', 'text', 'answer']) if (typeof q[k] === 'string') q[k] = cleanMathText(q[k]);
+  if (Array.isArray(q.options)) q.options = q.options.map((o) => (typeof o === 'string' ? cleanMathText(o) : o));
+  if (Array.isArray(q.keyPoints)) q.keyPoints = q.keyPoints.map((o) => (typeof o === 'string' ? cleanMathText(o) : o));
+  return q;
+}
 const figSig = (q) => { try { const m = q?.figureMeta; if (!m || !m.spec) return ''; const st = (o) => Array.isArray(o) ? o.map(st) : o && typeof o === 'object' ? Object.fromEntries(Object.keys(o).sort().map((k) => [k, st(o[k])])) : o; return m.kind + JSON.stringify(st(m.spec)); } catch (_) { return ''; } };
 export function findBrokenQuestions(questions, { dangling = false, partPlan = null } = {}) {
   const bad = [];
-  const seenSig = new Map(), seenTxt = new Map();
+  const seenSig = new Map(), seenTxt = new Map(), seenTok = [];
   questions.forEach((q, i) => {
     const text = String(q?.question || q?.text || '').trim();
     const posMcq = Array.isArray(partPlan) && partPlan.length ? /^(mcq|multiple)/i.test(partTypeAt(partPlan, i)) : false;
@@ -30,10 +56,14 @@ export function findBrokenQuestions(questions, { dangling = false, partPlan = nu
     else if (dangling && FIG_REF.test(text) && !q?.diagramSvg && !q?.diagramPng && !(q?.diagram && q.diagram !== 'undefined')) why = 'dangling-figure';
     else if (isMcq && opts.length !== 4) why = 'mcq-without-options';
     else if (isMcq && DEFINE_STEM.test(text)) why = 'mcq-is-open-question';
+    else if (!isMcq && !opts.length && MCQ_STYLE.test(text)) why = 'mcq-style-in-written';
+    else if (!isMcq && !opts.length && Number(q?.marks) >= 6 && text.split(/\s+/).length < 18 && !/\(a\)/i.test(text)) why = 'too-simple';
     if (!why) {
       const sig = figSig(q), tx = text.toLowerCase().replace(/[^\p{L}\p{N}]+/gu, ' ').trim();
-      if ((sig && seenSig.has(sig)) || (tx.length > 20 && seenTxt.has(tx))) why = 'duplicate';
-      else { if (sig) seenSig.set(sig, i); if (tx.length > 20) seenTxt.set(tx, i); }
+      const st = toks(text), ot = toks(opts.join(' '));
+      const near = seenTok.some((p) => { const j = jac(st, p.st); return j >= 0.75 || (j >= 0.5 && jac(ot, p.ot) >= 0.5); });
+      if ((sig && seenSig.has(sig)) || (tx.length > 20 && seenTxt.has(tx)) || (st.size >= 3 && near)) why = 'duplicate';
+      else { if (sig) seenSig.set(sig, i); if (tx.length > 20) seenTxt.set(tx, i); seenTok.push({ st, ot }); }
     }
     if (why) bad.push({ index: i, why, mcq: isMcq });
   });
@@ -263,11 +293,13 @@ Write ONE ${isMcq ? 'multiple-choice question with exactly four options and one 
 OBJECTIVE: ${objective}
 TOPIC: ${topic}
 ${why === 'dangling-figure' || why === 'duplicate' ? (why === 'duplicate' ? 'This replaces a duplicate question: test a DIFFERENT idea of the same objective in plain text (concept, unit, definition or reasoning). ' : '') + 'IMPORTANT: no figure, diagram, graph or table exists. The question must be fully answerable from the text alone; NEVER refer to any figure/diagram/graph/table/"below"/"above".' : ''}
-${isMcq ? 'The stem must be a complete question or sentence to complete (never "Define..." or "Explain..."). Options are short and plausible; wrong options come from typical mistakes. "answer" = A, B, C or D.' : 'The question must be complete (never a section title). Give 2-5 short "keyPoints".'}
+${isMcq ? 'The stem must be a complete question or sentence to complete (never "Define..." or "Explain..."). Options are short and plausible; wrong options come from typical mistakes. "answer" = A, B, C or D.' : 'The question must be a WRITTEN question (never "which of the following" / "choose" / "true statement" and never an MCQ). ' + (Number(q.marks) >= 6 ? `It is worth ${q.marks} marks, so write it as 2-4 labelled parts (a), (b), (c)... with the marks of each part in brackets adding up to ${q.marks}: mix recall, calculation (with given numbers) and explanation. ` : '') + 'Give a model answer with working, and 2-5 short "keyPoints".'}
 Marks: ${q.marks || 1}.
 Return ONLY JSON: {"question":"","options":${isMcq ? '["","","",""]' : '[]'},"answer":"","keyPoints":[]}`;
         try {
-          const j = await callGeminiJson(prompt, { maxTokens: 1500, temperature: 0.3 });
+          let j = null, lastErr = null;
+          for (let a = 0; a < 2 && !j; a++) { try { j = await callGeminiJson(prompt, { maxTokens: 2500, temperature: a ? 0.5 : 0.3 }); } catch (e) { lastErr = e; } }
+          if (!j) throw lastErr || new Error('AI unavailable');
           const fixed = { ...q, ...(isMcq ? { type: 'MCQ' } : {}), question: String(j.question || '').trim(), answer: String(j.answer || '').trim(), keyPoints: Array.isArray(j.keyPoints) && j.keyPoints.length ? j.keyPoints.map(String) : q.keyPoints };
           if (isMcq) {
             fixed.options = (Array.isArray(j.options) ? j.options : []).map((o) => optionText(String(o)));

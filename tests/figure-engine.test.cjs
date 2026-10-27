@@ -107,7 +107,7 @@ test('broken questions are detected and repaired; figure direction fixed; topolo
   assert.equal(fixFigureDirection('Study the figure above. Which one?'), 'Study the figure below. Which one?');
   assert.equal(fixFigureDirection('Eeg sawirka kore'), 'Eeg sawirka hoose');
   let n = 0;
-  const sf = createSmartFigures({ callGeminiJson: async (pr) => (++n && /four options/.test(pr) ? { question: 'Which term describes the process of building information systems? (' + n + ')', options: ['SDLC', 'Spreadsheet', 'Firewall', 'Router'], answer: 'A', keyPoints: [] } : { question: 'Explain how a query retrieves data from a table.', options: [], answer: 'It filters records.', keyPoints: ['filters', 'returns records'] }), aiGenerateDiagram: async () => '', splitMarkedPages: () => [] });
+  const sf = createSmartFigures({ callGeminiJson: async (pr) => (++n && /four options/.test(pr) ? { question: ['Which term describes the process of building information systems?', 'Which device forwards packets between different networks?', 'Which software manages hardware resources of a computer?'][n % 3], options: ['Option' + n + 'A', 'Spreadsheet' + n, 'Firewall' + n, 'Router' + n], answer: 'A', keyPoints: [] } : { question: 'Explain how a query retrieves data from a table.', options: [], answer: 'It filters records.', keyPoints: ['filters', 'returns records'] }), aiGenerateDiagram: async () => '', splitMarkedPages: () => [] });
   const rep = await sf.repairBroken({ subject: 'Technology', examLanguage: 'en' }, qs, []);
   assert.equal(rep.repaired, 3); assert.equal(findBrokenQuestions(qs).length, 0);
   assert.equal(qs[3].options[0], 'Hub'); // good questions untouched
@@ -162,4 +162,19 @@ test('figureTarget sets the exact number of figure slots', async () => {
     const s = planSlots({ profileKey: 'physics', items, seed: 7, figureTarget: T });
     assert.equal(s.filter((x) => /figure/.test(x.kind)).length, T, 'T=' + T);
   }
+});
+
+test('LaTeX is cleaned; near-duplicates, MCQ-style written and trivial 12-mark questions are flagged', async () => {
+  const { cleanMathText, findBrokenQuestions } = await load('smart-figures.js');
+  assert.equal(cleanMathText('T = 2\\pi \\sqrt{\\frac{l}{g}}'), 'T = 2π √(l/g)');
+  assert.equal(cleanMathText('kx^2 and m/s^2'), 'kx² and m/s²');
+  const M = (q, o) => ({ type: 'MCQ', question: q, options: o, marks: 1 });
+  const qs = [
+    M('What is the SI unit of frequency?', ['Hertz', 'Second', 'Joule', 'Newton']),
+    M('Which of the following is the SI unit of frequency?', ['Hertz', 'Joule', 'Newton', 'Meter']),
+    M('Study the horizontal mass-spring system shown in the figure. Calculate the force.', ['1 N', '2 N', '3 N', '4 N']),
+    { type: 'Structured', question: 'Which of the following best describes a transverse wave in a medium?', options: [], marks: 12 },
+    { type: 'Structured', question: 'Name the type of wave that cannot travel through liquids.', options: [], marks: 12 }
+  ];
+  assert.deepEqual(findBrokenQuestions(qs, { dangling: true }).map((b) => [b.index, b.why]), [[1, 'duplicate'], [2, 'dangling-figure'], [3, 'mcq-style-in-written'], [4, 'too-simple']]);
 });
