@@ -512,7 +512,8 @@ function nationalSpecs(lang,totalCount){
   const pr=nationalProfile; if(!pr)return null;
   // Qaab-dhismeedka iyo SAAMIGA oo keliya ayaa laga qaadaa sample-ka; tirada su'aalaha iyo dhibcaha waa kuwa adigu dejisay.
   const mc=pr.mcq.count, sc=Math.max(1,pr.structured.count);
-  let nM=Math.round(totalCount*mc/(mc+sc)); nM=Math.min(totalCount-1,Math.max(1,nM));
+  // Structured/calculation questions stay FEW (≈16% of the questions, e.g. 50 → 8 structured + 42 MCQ) so each one is not worth too many marks.
+  const nS=Math.min(sc,Math.max(Math.min(2,totalCount-1),Math.round(totalCount*0.16))); let nM=totalCount-nS; nM=Math.min(totalCount-1,Math.max(1,nM));
   const tot=(pr.mcq.marks+pr.structured.marks)||100;
   return [{section:examText(lang,'mcq'),type:'MCQ',count:nM,weight:pr.mcq.marks/tot},{section:examText(lang,'structured'),type:'Structured',count:totalCount-nM,weight:pr.structured.marks/tot}];
 }
