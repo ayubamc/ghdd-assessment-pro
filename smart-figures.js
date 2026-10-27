@@ -38,8 +38,11 @@ export function cleanMathText(t) {
   s = s.replace(/_\{?(\d{1,2})\}?/g, (_, n) => [...n].map((c) => sub[c] || c).join('')).replace(/_\{([A-Za-z]+)\}/g, '_$1');
   return s.replace(/\\\s*$/g, '').replace(/\\,|\\;|\\ /g, ' ').replace(/[{}]/g, '').replace(/\s{2,}/g, ' ').trim();
 }
+const timesX = (t) => String(t ?? '').replace(/(\d)\s*[x*]\s*(10\s*[⁰¹²³⁴⁵⁶⁷⁸⁹⁻^])/g, '$1 × $2');
 export function cleanQuestionMath(q) {
   if (!q || typeof q !== 'object') return q;
+  for (const k of ['question', 'text', 'answer']) if (typeof q[k] === 'string') q[k] = timesX(q[k]);
+  if (Array.isArray(q.options)) q.options = q.options.map((o) => (typeof o === 'string' ? timesX(o) : o));
   for (const k of ['question', 'text', 'answer']) if (typeof q[k] === 'string') q[k] = greekWords(q[k]);
   if (Array.isArray(q.options)) q.options = q.options.map((o) => (typeof o === 'string' ? greekWords(o) : o));
   for (const k of ['question', 'text', 'answer']) if (typeof q[k] === 'string') q[k] = cleanMathText(q[k]);
@@ -73,6 +76,8 @@ function nearDup(a, b) {
   if (a.ct && a.ct === b.ct && a.ctt.size >= 2 && /\p{L}{3}/u.test(a.ct) && call >= 0.25) return true;
   if (Math.min(a.all.size, b.all.size) >= 6 && call >= 0.6) return true;
   if (c >= 0.5 && a.ctt.size >= 3 && jac(a.ctt, b.ctt) >= 0.6) return true;
+  // same fact tested twice: one correct answer contains the other and the stems share their key words
+  if (Math.min(a.ctt.size, b.ctt.size) >= 3 && contain(a.ctt, b.ctt) >= 0.9 && contain(a.st, b.st) >= 0.3) return true;
   return false;
 }
 export function stripDanglingFigureRefs(questions) {
@@ -94,7 +99,7 @@ export function similarToOthers(q, questions, index) {
   return questions.some((o, i) => i !== index && o && nearDup(a, qsig(o)));
 }
 // Su'aalo ku saabsan manhajka/habka waxbarashada (ma aha maaddada) iyo doorashooyin isku macne ah
-const OFF_TOPIC = /\b(national\s+curriculum|teaching\s+approach(es)?|core\s+values?\s+and|learner[- ]centred|competency[- ]based\s+curriculum)\b/i;
+const OFF_TOPIC = /\b(national\s+curriculum|curriculum|teaching\s+approach(es)?|instructional\s+approach(es)?|core\s+values?|learner[- ]centred|(physics|chemistry|biology|mathematics|geography|history)\s+(textbook|book)|which\s+chapter|chapter\s+\d+\s+(covers|of\s+the))\b/i;
 const SYN = [[/spring\s+constant|force\s+constant|stiffness\s+constant/g, 'forceconst'], [/\bperiodic\s+time\b|\btime\s+period\b/g, 'period'], [/\bangular\s+velocity\b|\bangular\s+frequency\b/g, 'angfreq']];
 function hasSynonymOptions(opts) {
   const n = opts.map((o) => { let t = String(o).toLowerCase(); for (const [re, to] of SYN) t = t.replace(re, to); return t.replace(/[^\p{L}\p{N}]+/gu, ''); });

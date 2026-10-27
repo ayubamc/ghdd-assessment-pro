@@ -966,6 +966,8 @@ $('generateExam').onclick=async()=>{
     $('saveGeneratedExam').onclick=saveExamPackage;
 
         status.textContent=`Guul! ${qs.length} su’aalood ayaa laga sameeyey bogagga ${start}–${end}. Dib u eeg su’aalaha iyo jawaabaha.`;
+    {const want=Number(diagramCount)||0;const got=normalized.filter(q=>q.diagramSvg||q.diagramPng).length;
+     if(figureMode==='smart'&&want>0&&got<want){status.textContent+=` ⚠️ DIGNIIN: ${want} sawir ayaa la rabay, laakiin ${got} oo keliya ayaa jira. Hubi Claude API (lacagta) ama mar kale samee.`;}}
     const fr=generated.figureReport;
     if(fr){
       const kinds=Object.entries(fr.kinds||{}).map(([k,n])=>`${k}×${n}`).join(', ');
