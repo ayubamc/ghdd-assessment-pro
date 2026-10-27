@@ -39,7 +39,7 @@ export const NATIONAL_PROFILES = {
   physics: P({
     style: {"mcq": "Choose the best answer for each of the following", "structured": "Part Two: Direct Questions", "marksWord": "Marks", "letters": "abcd", "suffix": "."},
     label: 'Physics', basis: 'sampled', language: 'en', letters: 'latin',
-    mcq: { count: 40, marks: 40 }, structured: { marks: 60, count: 8 },
+    mcq: { count: 60, marks: 60 }, structured: { marks: 40, count: 8 },
     figureShare: [0.35, 0.5],
     figures: ['vt_graph', 'wave', 'forces', 'spring_mass', 'pendulum', 'resistor_circuit', 'coord_line', 'textbook_diagram'],
     notes: 'MCQ-yada waxaa ku jira v-t graph, wave, circuit, force, sawirro buug'
