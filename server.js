@@ -231,7 +231,7 @@ function cleanMathText(text) {
   t = t.replace(/\\lim\s*_\{([^{}]*)\}/g, (_, x) => 'lim(' + x.replace(/\\to\b|\\rightarrow\b/g, '→') + ')');
   // fractions and roots (repeat for simple nesting)
   for (let i = 0; i < 4; i++) {
-    t = t.replace(/\\[dt]?frac\s*\{([^{}]*)\}\s*\{([^{}]*)\}/g, (_, a, b) => `${wrapIfComplex(a)}/${wrapIfComplex(b)}`);
+    t = t.replace(/(?:\\[dt]?|\b)frac\s*\{([^{}]*)\}\s*\{([^{}]*)\}/g, (_, a, b) => `${wrapIfComplex(a)}/${wrapIfComplex(b)}`);
     t = t.replace(/\\sqrt\s*\[([^\]]*)\]\s*\{([^{}]*)\}/g, (_, n, x) => `${toScript(n, SUP) || '^(' + n + ')'}√${wrapIfComplex(x)}`);
     t = t.replace(/\\sqrt\s*\{([^{}]*)\}/g, (_, x) => `√${wrapIfComplex(x)}`);
   }
@@ -2133,12 +2133,14 @@ async function verifyCalcMcqs(questions, p) {
     const opts = Array.isArray(q.options) ? q.options : [];
     const t = String(q.question || '');
     if (opts.length !== 4 || !/^(mcq|multiple)/i.test(q.type || 'mcq')) return;
+    const mathy = isMathSubject(p.subject) || isMathSubject(p.className) || isMathSubject(p.sourceTitle);
+    if (mathy && /\d|[√π∠]|\b(?:sin|cos|tan|cot|log|ln)\b/.test(t + opts.join(' ')) && !/^(which|what|state|identify|name|select)\b[^?]{0,80}\b(identity|formula|term|rule|theorem|expression|equation)\b/i.test(t)) { pick.push(i); return; }
     if ((t.match(/\d+(?:\.\d+)?/g) || []).length >= 2 && /calculat|determin|find|what is|how (?:much|many|long|far|fast)|compute|evaluate|solve|simplif|work out|value of|energy|speed|period|frequency|force|constant|wavelength|mass|volume|concentration|mole/i.test(t)) pick.push(i);
   });
   if (!pick.length) return { checked: 0, wrong: 0, fixed: 0 };
   const wrong = [];
-  for (let b = 0; b < pick.length; b += 20) {
-    const group = pick.slice(b, b + 20);
+  for (let b = 0; b < pick.length; b += 14) {
+    const group = pick.slice(b, b + 14);
     const items = group.map((i) => ({ i, question: String(questions[i].question || ''), options: questions[i].options.map(optStrip) }));
     const prompt = `You are a careful ${p.subject || 'science'} teacher checking multiple-choice exam questions. For EACH item, solve the problem yourself with exact arithmetic and correct units (the data you need is in the text; if a figure is mentioned, rely on the numbers in the text). Then say which option letter (A, B, C or D) equals YOUR result, or "NONE" if no option matches it. Do not guess.\nITEMS: ${JSON.stringify(items)}\nReturn ONLY JSON: {"results":[{"i":0,"working":"short calculation","result":"your value","letter":"A|B|C|D|NONE"}]}`;
     let out = null;
@@ -2272,7 +2274,7 @@ ${sourceForRange(p, range || { from: 0, to: count })}
   let repairReport = null;
   try { repairReport = await smartFigures.repairBroken(p, questions, plannedObjectives(p, questions.length), { deadline: Math.max(T0 + 150000, Date.now() + 70000) }); } catch (e) { console.warn('Repair skipped:', e.message); }
   tlog('repair done');
-  try { if (Date.now() - T0 < 200000) { const vr = await verifyCalcMcqs(questions, p); console.log(`[gen] answer check: ${JSON.stringify(vr)}`); } } catch (e) { console.warn('Answer check skipped:', e.message); }
+  try { if (Date.now() - T0 < 235000) { const vr = await verifyCalcMcqs(questions, p); console.log(`[gen] answer check: ${JSON.stringify(vr)}`); } } catch (e) { console.warn('Answer check skipped:', e.message); }
   tlog('answers checked');
   try { const ek = fixEchoKeys(questions); if (ek) console.log(`[gen] echo keys fixed: ${ek}`); } catch (e) { console.warn('Echo check skipped:', e.message); }
   // Hubin xoog leh (Gemini/Groq bilaash ah; Claude kaliya sawirrada): jawaabo khalad ah, laba doorasho oo sax ah, su'aalo is-diidaya -> waa la bedelaa. Iyo wixii ka hadhay dib-u-sameynta.
