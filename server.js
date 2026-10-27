@@ -9,7 +9,7 @@ import fs from 'fs';
 import { fileURLToPath } from 'url';
 import { aiProviderStatus, asFigure, inFigure } from './ai-providers.js';
 import { getProfile, NATIONAL_PROFILES } from './exam-profiles.js';
-import { createSmartFigures, buildExamPlan, slotHint, plannedObjectives, interleavePlan, cleanQuestionMath, findBrokenQuestions, stripDanglingFigureRefs, similarToOthers, fixEchoKeys } from './smart-figures.js';
+import { createSmartFigures, buildExamPlan, slotHint, plannedObjectives, interleavePlan, cleanQuestionMath, findBrokenQuestions, stripDanglingFigureRefs, similarToOthers, fixEchoKeys, dropConflictingFigures } from './smart-figures.js';
 import { renderFigure, verifySvg } from './figure-engine.js';
 
 const { Pool } = pg;
@@ -2354,6 +2354,7 @@ ${sourceForRange(p, range || { from: 0, to: count })}
   if (p.passage && passage) passage.text = stripSourceCitations(passage.text);
   // Su'aalaha oo sawir ka hadlaya laakiin sawir aan lahayn (diyaarin fashilantay) waa la hagaajiyaa
   try { const r2 = await smartFigures.repairBroken(p, questions, plannedObjectives(p, questions.length), { dangling: true }); if (repairReport) { repairReport.found += r2.found; repairReport.repaired += r2.repaired; repairReport.failed += r2.failed; } else repairReport = r2; } catch (e) { console.warn('Dangling-figure repair skipped:', e.message); }
+  try { const dc = dropConflictingFigures(questions); if (dc) console.log(`Removed ${dc} figure(s) whose numbers conflict with the question`); } catch (e) { console.warn('figure conflict check skipped:', e.message); }
   try { const dropped = stripDanglingFigureRefs(questions); if (dropped) console.log(`Removed ${dropped} dangling figure reference(s)`); } catch (e) { console.warn('strip refs skipped:', e.message); }
   // final symbol clean-up (repair/figure stages can re-introduce LaTeX): math -> Unicode math, chemistry -> plain formulas, other subjects -> generic
   if (mathMode) questions.forEach((q) => mapQuestionText(q, cleanMathText));

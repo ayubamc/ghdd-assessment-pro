@@ -39,6 +39,22 @@ export function cleanMathText(t) {
   return s.replace(/\\\s*$/g, '').replace(/\\,|\\;|\\ /g, ' ').replace(/[{}]/g, '').replace(/\s{2,}/g, ' ').trim();
 }
 const timesX = (t) => String(t ?? '').replace(/(\d)\s*[x*]\s*(10\s*[⁰¹²³⁴⁵⁶⁷⁸⁹⁻^])/g, '$1 × $2');
+// Sawir aan la socon su'aasha: lambarrada sawirka (k=250, x=0.08) ayaan ku jirin qoraalka (k=200, x=0.06) -> sawirka waa laga saaraa
+export function dropConflictingFigures(questions) {
+  let n = 0;
+  const nums = (t) => new Set((String(t || '').match(/\d+(?:\.\d+)?/g) || []).map((x) => String(Number(x))));
+  questions.forEach((q) => {
+    const svg = q?.diagramSvg; if (!svg || typeof svg !== 'string') return;
+    const labels = [...svg.matchAll(/<text[^>]*>([^<]*)<\/text>/gi)].map((m) => m[1]).join(' ');
+    const fn = nums(labels); if (!fn.size) return;
+    const text = `${q.question || q.text || ''} ${(q.options || []).join(' ')}`;
+    if (FIG_REF.test(text)) return;
+    const qn = nums(text); if (qn.size < 2) return;
+    const missing = [...fn].filter((x) => !qn.has(x));
+    if (missing.length && missing.length === fn.size) { delete q.diagramSvg; delete q.diagramPng; delete q.diagram; delete q.figureMeta; n++; }
+  });
+  return n;
+}
 export function cleanQuestionMath(q) {
   if (!q || typeof q !== 'object') return q;
   for (const k of ['question', 'text', 'answer']) if (typeof q[k] === 'string') q[k] = timesX(q[k]);
@@ -166,7 +182,7 @@ export function findBrokenQuestions(questions, { dangling = false, partPlan = nu
     const isMcq = posKnown ? posMcq : /^(mcq|multiple)/i.test(q?.type || '');
     const opts = Array.isArray(q?.options) ? q.options.map((o) => String(o || '').trim()).filter(Boolean) : [];
     let why = '';
-    if (text.length < 8 || (SECTION_LABEL.test(text) && text.length < 90)) why = 'empty-or-section-title';
+    if (text.length < 8 || /^[A-Z][A-Z0-9_ -]{3,}$/.test(text) || /^(word_bank|n\/a|none|undefined|null)$/i.test(text) || (SECTION_LABEL.test(text) && text.length < 90)) why = 'empty-or-section-title';
     else if (dangling && FIG_REF.test(text) && !q?.diagramSvg && !q?.diagramPng && !(q?.diagram && q.diagram !== 'undefined')) why = 'dangling-figure';
     else if (isMcq && opts.length !== 4) why = 'mcq-without-options';
     else if (isMcq && DEFINE_STEM.test(text)) why = 'mcq-is-open-question';
