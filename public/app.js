@@ -1092,6 +1092,42 @@ function chemistryHtml(value,opts){
     return `<span class="chem-struct-wrap chem-struct-block"${before?' data-br-before="1"':''}${after?' data-br-after="1"':''}>${x.svg}</span>`;
   }).join('');
 }
+function splitSubParts(text){
+  const s=String(text||'');
+  const hits=[];let want='a';const re=/\(([a-h])\)/g;let m;
+  while((m=re.exec(s))){
+    if(m[1]!==want)continue;
+    const before=m.index===0||/\s/.test(s[m.index-1]);const after=/\s/.test(s[m.index+3]||' ');
+    if(!before||!after)continue;
+    hits.push(m.index);want=String.fromCharCode(want.charCodeAt(0)+1);
+  }
+  if(hits.length<2)return {stem:s.trim(),parts:[]};
+  const stem=s.slice(0,hits[0]).trim();
+  const parts=hits.map((h,k)=>{
+    let t=s.slice(h,k+1<hits.length?hits[k+1]:s.length).trim();
+    const lab=t.slice(0,3);t=t.slice(3).trim();
+    let marks=null;const mm=t.match(/\s*\[\s*(\d+)\s*(?:marks?)?\s*\]\s*$/i);
+    if(mm){marks=Number(mm[1]);t=t.slice(0,mm.index).trim();}
+    return {label:lab,text:t,marks};
+  });
+  return {stem,parts};
+}
+function distributeMarks(total,n){const base=Math.floor(total/n);let extra=total-base*n;return Array.from({length:n},()=>base+(extra-->0?1:0));}
+function structCardHtml(q,{ns,numberText,fmt,diagram,marksWord,lang}){
+  const {stem,parts}=splitSubParts(q.text);
+  const total=Number(q.marks)||0;
+  const mw=ns?String(ns.marksWord||'Marks').toLowerCase():examText(lang,'marks');
+  const lines=n=>Array.from({length:Math.max(1,n)},()=>'<div class="answer-line"></div>').join('');
+  let body='';
+  if(parts.length){
+    const explicit=parts.every(p=>p.marks!==null)&&parts.reduce((s,p)=>s+p.marks,0)===total;
+    const alloc=explicit?parts.map(p=>p.marks):distributeMarks(total,parts.length);
+    body=parts.map((p,k)=>`<div class="sc-part"><div class="sc-part-row"><span class="sc-part-text"><strong>${esc(p.label)}</strong> ${fmt(p.text)}</span><span class="marks sc-part-marks">[${alloc[k]}]</span></div><div class="answer-space sc-lines">${lines(Math.max(2,Math.min(6,Math.ceil(alloc[k]*0.9))))}</div></div>`).join('');
+  }else{
+    body=`<div class="answer-space sc-lines">${lines(Math.max(2,Math.min(8,Math.ceil(total*0.8))))}</div>`;
+  }
+  return `<div class="paper-question structured-box struct-card"><div class="sc-head"><span class="question-number">${numberText}.</span><span class="question-text">${fmt(parts.length?stem:q.text)}</span><span class="marks">[${total} ${esc(mw)}]</span></div>${diagram}${body}</div>`;
+}
 function paperQuestionsHtml(normalized,passage,lang,withAnswers,mathMode){
        const fmt=v=>{const raw=String(v??'');return mathMode?mathHtml(esc(raw)):chemistryHtml(raw);};
        const fmtPlain=v=>{const raw=String(v??'');return mathMode?mathHtml(esc(raw)):chemistryHtml(raw,{plain:true});};
@@ -1186,6 +1222,7 @@ function paperQuestionsHtml(normalized,passage,lang,withAnswers,mathMode){
              keyPointsHtml=`<div class="key-points"><div class="kp-head"><strong>${L.h}</strong></div><table class="kp-table"><tbody>${kp.map((k,j)=>`<tr><td class="kp-n">${j+1}</td><td>${fmt(k.point)}</td><td class="kp-m">${k.marks} ${L.m}</td></tr>`).join('')}</tbody></table><div class="kp-note">${L.note}</div></div>`;
            }
          }
+         if(!withAnswers&&isDirect&&!keyPointsHtml)return `${sectionHtml}${structCardHtml(q,{ns,numberText:numbers[i],fmt,diagram,lang})}`;
          return `${sectionHtml}<div class="paper-question structured-box">${questionLine}${diagram}${answerSpace}${answer}${figureNoteHtml(q,withAnswers,lang)}${keyPointsHtml}${objectiveHtml}</div>`;
        }).join('');
      }
@@ -1681,7 +1718,7 @@ async function ensureDocxExporter(){
     catch(_){try{await loadJsText('https://cdn.jsdelivr.net/npm/docx@9.8.1/dist/index.iife.js');}catch(__){}}
   }
   if(!window.docx)throw new Error('Maktabadda docx lama helin. Geli faylka public/vendor/docx.iife.js oo dib u deploy garee.');
-  try{await loadJsText('/docx-export.js?v=r28');}
+  try{await loadJsText('/docx-export.js?v=r29');}
   catch(e){throw new Error('Hubi in faylka public/docx-export.js la geliyay. '+e.message);}
   if(typeof window.buildExamDocx!=='function')throw new Error('docx-export.js si sax uma shaqeynin.');
 }

@@ -367,6 +367,57 @@
       borders: { ...allBorders(line()), insideHorizontal: none(), insideVertical: none() }
     });
   }
+  // Structured / direct question card: ONE bordered table  — head row (no. | question | marks), optional figure,
+  // then every sub-part (a)(b)(c) as its own row with its marks, followed by ruled answer lines.
+  function structCardTable(el, ctx, env) {
+    const NUM = 700, MK = 1500, TX = CONTENT_W - NUM - MK;
+    const outer = allBorders(line());
+    const g = line('888888');
+    const head = Array.from(el.children).find(c => c.classList.contains('sc-head'));
+    const kids = head ? Array.from(head.children) : [];
+    const numEl = kids.find(k => k.classList.contains('question-number'));
+    const txtEl = kids.find(k => k.classList.contains('question-text'));
+    const mkEl = kids.find(k => k.classList.contains('marks'));
+    const cell = (els, w, align, bold, span, extra) => new D.TableCell({
+      width: { size: w, type: D.WidthType.DXA }, columnSpan: span, verticalAlign: D.VerticalAlign.TOP, borders: extra || {},
+      children: [para(els ? (Array.isArray(els) ? els : [els]).flatMap(e => inlineKids(e, ctx, bold ? { bold: true } : {}, env)) : [], ctx, { align, after: 0, keepNext: true })]
+    });
+    const rows = [new D.TableRow({ cantSplit: true, children: [cell(numEl, NUM, undefined, true), cell(txtEl, TX, undefined, false), cell(mkEl, MK, 'end', true)] })];
+    const figEl = Array.from(el.children).find(c => c.classList.contains('exam-diagram'));
+    if (figEl) {
+      const keepW = env.maxW, keepH = env.figMaxH; env.maxW = 380; env.figMaxH = 190;
+      let fk = []; try { fk = blocksFromChildren(figEl, ctx, env, {}); } finally { env.maxW = keepW; env.figMaxH = keepH; }
+      if (fk.length) rows.push(new D.TableRow({ cantSplit: true, children: [new D.TableCell({ width: { size: CONTENT_W, type: D.WidthType.DXA }, columnSpan: 3, children: fixCellBlocks(fk, ctx) })] }));
+    }
+    const lineRows = (n, last) => Array.from({ length: n }, (_, i) => {
+      const isLast = last && i === n - 1;
+      return new D.TableRow({
+        height: { value: 340, rule: D.HeightRule.ATLEAST }, cantSplit: true,
+        children: [cell(null, NUM, undefined, false, undefined, isLast ? { bottom: line() } : undefined),
+          new D.TableCell({ width: { size: TX + MK, type: D.WidthType.DXA }, columnSpan: 2, borders: { bottom: isLast ? line() : g }, children: [emptyPara(ctx)] })]
+      });
+    });
+    const nLines = (box) => Math.max(1, box ? box.querySelectorAll('.answer-line').length : 0);
+    const parts = Array.from(el.children).filter(c => c.classList.contains('sc-part'));
+    if (parts.length) {
+      for (const p of parts) {
+        const row = Array.from(p.children).find(c => c.classList.contains('sc-part-row'));
+        const pk = row ? Array.from(row.children) : [];
+        const tx = pk.find(k => k.classList.contains('sc-part-text')), mk = pk.find(k => k.classList.contains('marks'));
+        rows.push(new D.TableRow({ cantSplit: true, children: [cell(null, NUM, undefined, false), cell(tx, TX, undefined, false), cell(mk, MK, 'end', true)] }));
+        rows.push(...lineRows(nLines(Array.from(p.children).find(c => c.classList.contains('sc-lines'))), p === parts[parts.length - 1]));
+      }
+    } else {
+      rows.push(...lineRows(nLines(Array.from(el.children).find(c => c.classList.contains('sc-lines'))), true));
+    }
+    // the very last ruled line doubles as the bottom edge of the box (solid, same colour as the other edges)
+    return new D.Table({
+      rows, width: { size: CONTENT_W, type: D.WidthType.DXA }, columnWidths: [NUM, TX, MK],
+      layout: D.TableLayoutType.FIXED, visuallyRightToLeft: ctx.rtl || undefined,
+      margins: { top: 50, bottom: 40, left: 100, right: 100 },
+      borders: { ...outer, insideHorizontal: none(), insideVertical: none() }
+    });
+  }
   function wordBoxTable(box, ctx, env) {
     const words = Array.from(box.children), cols = 5, w = Math.floor(CONTENT_W / cols);
     const rows = [];
@@ -484,6 +535,7 @@
         borders: { ...allBorders(none()), insideHorizontal: g, insideVertical: none() } }), spacer());
       return;
     }
+    if (cls.contains('struct-card')) { out.push(structCardTable(el, ctx, env), spacer()); return; }
     if (cls.contains('mcq-question-row')) {
       const inStruct = !!el.closest('.structured-box');
       const b = inStruct ? { top: none(), left: none(), right: none(), bottom: line() } : allBorders(line());
