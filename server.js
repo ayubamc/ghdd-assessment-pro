@@ -2203,13 +2203,13 @@ ${sourceForRange(p, range || { from: 0, to: count })}
     questions = firstBatch.questions;
   }
   // If the answer was cut short (long Somali/Arabic exams), ask for ONLY the missing questions and continue.
-  for (let round = 0; questions.length < p.count && round < 3; round++) {
+  for (let round = 0; questions.length < p.count && round < 6 && Date.now() - T0 < 120000; round++) {
     const missing = p.count - questions.length;
     const avoid = questions.map(q => ({ question: String(q.question || '').slice(0, 140), objective: String(q.objective || '').slice(0, 140) }));
     try {
       const extra = await requestQuestionBatch(buildPrompt(missing, remainingPlan(p.partPlan, questions.length), avoid, passage));
       questions = questions.concat(extra.questions.slice(0, missing));
-    } catch (e) { console.warn('Top-up batch failed:', e.message); break; }
+    } catch (e) { console.warn('Top-up batch failed:', e.message); await new Promise((r) => setTimeout(r, 1500)); }
   }
   // Bloom is teacher-only: strip any leaked label, then make sure the whole paper is in the selected language.
   tlog(`questions written (${questions.length})`);
