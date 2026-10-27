@@ -105,7 +105,7 @@ export const NATIONAL_PROFILES = {
     notes: 'Supply curve, income statement, liability xisaabin, sawirro xafiis; jadwal demand/supply'
   }),
   history: P({
-    style: {"mcq": "B. Goobo geli jawaabta saxda ah", "structured": "QAYBTA 2AAD EE IMTIXAANKA", "marksWord": "Dhibcood", "letters": "BTJX", "suffix": ")"},
+    style: {"mcq": "B. Goobo geli jawaabta saxda ah", "structured": "QAYBTA 2AAD EE IMTIXAANKA", "marksWord": "Dhibcood", "letters": "btjx", "suffix": "."},
     label: 'History', basis: 'sampled', language: 'so', letters: 'somali',
     mcq: { count: 60, marks: 60 }, structured: { marks: 40, count: 8 },
     figureShare: [0, 0.03], figures: [],

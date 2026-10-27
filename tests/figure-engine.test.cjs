@@ -116,7 +116,7 @@ test('broken questions are detected and repaired; figure direction fixed; topolo
   assert.equal(qs[3].options[0], 'Hub'); // good questions untouched
   for (const t of ['star', 'ring', 'bus', 'mesh', 'tree']) { const r = renderFigure('network_topology', { type: t, nodes: 5 }); assert.equal(verifySvg(r.svg).ok, true, t); assert.equal(r.facts.topology_name, t); }
   const tech = getProfile('Technology', 'Form 4');
-  assert.equal(tech.style.mcq, 'Choose the correct answer for each of the following'); assert.equal(tech.style.letters, 'abcd'); assert.equal(getProfile('Taariikh', '').style.letters, 'BTJX');
+  assert.equal(tech.style.mcq, 'Choose the correct answer for each of the following'); assert.equal(tech.style.letters, 'abcd'); assert.equal(getProfile('Taariikh', '').style.letters, 'btjx');
 });
 
 test('physics: real symbols (spring, pendulum), varied figure kinds and no dangling figure references', async () => {
