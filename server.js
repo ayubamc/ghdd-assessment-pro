@@ -379,12 +379,40 @@ async function extractRangeObjectiveInventoryRaw(sourceText, pageRange, language
   const promptFor = (group) => {
     return `Audit every supplied scanned textbook PDF/OCR page. Extract all explicit learning objectives/outcomes. Where explicit objectives are absent, derive a small, complete set of topic-level assessable objectives from the actual curriculum content across the supplied pages. Do not turn every fact or example into a separate objective; do not invent content or omit any explicit objective. Preserve all distinct skills/topics that the selected pages teach. Keep PDF/OCR page number distinct from printed book page. Return JSON only: {"pages":[{"page":3,"topics":[{"unit":"","topic":"","objectives":[{"id":"P3-O1","text":"","evidence":"short evidence from the page"}]}]}]}. Every supplied PDF/OCR page must appear exactly once. Objective IDs must be unique and use the actual PDF/OCR page, e.g. P3-O1, P3-O2. Each objective should describe one assessable learning outcome. If a page has no assessable content, include it with topics: []. Use language ${languageName} for unit/topic/objective/evidence.\nPAGES:\n${group.map(pg=>`[PDF/OCR PAGE ${pg.page}]\n${pg.text}`).join('\n\n')}`;
   };
+  const pagesOf = (r) => (Array.isArray(r) ? r : (r && (r.pages || r.pageAnalysis || r.analysis))) || null;
+  const callOnce = async (grp) => {
+    const r = await callGeminiJson(promptFor(grp), { maxTokens: 14000, temperature: 0.05, thinking: 0 });
+    const p = pagesOf(r);
+    return Array.isArray(p) ? p : null;
+  };
+  // Retry: a weak/quota-limited AI answer sometimes comes back without "pages". Try the whole group once more,
+  // then page by page (smaller prompts are far more reliable on fallback providers).
+  const analyzeGroup = async (grp) => {
+    let lastErr = '';
+    for (let a = 0; a < 2; a++) {
+      try {
+        const p = await callOnce(grp);
+        if (p && grp.every((g) => p.some((x) => Number(x.page) === g.page))) return { pages: p };
+      } catch (e) { lastErr = e.message; }
+    }
+    const merged = [];
+    for (const g of grp) {
+      let got = null;
+      for (let a = 0; a < 3 && !got; a++) {
+        try { const p = await callOnce([g]); if (p && p.length) got = p.find((x) => Number(x.page) === g.page) || (p.length === 1 ? { ...p[0], page: g.page } : null); }
+        catch (e) { lastErr = e.message; }
+      }
+      if (!got) throw new Error(`Objective inventory: AI did not return page-by-page analysis for page ${g.page}.${lastErr ? ' (' + lastErr.slice(0, 160) + ')' : ''}`);
+      merged.push(got);
+    }
+    return { pages: merged };
+  };
   const results = new Array(batches.length);
   let nextB = 0;
   const workers = Array.from({ length: Math.min(4, batches.length) }, async () => {
     while (nextB < batches.length) {
       const bi = nextB++;
-      results[bi] = await callGeminiJson(promptFor(batches[bi]), { maxTokens: 14000, temperature: 0.05, thinking: 0 });
+      results[bi] = await analyzeGroup(batches[bi]);
     }
   });
   await Promise.all(workers);
