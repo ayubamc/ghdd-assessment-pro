@@ -128,11 +128,11 @@ export const NATIONAL_PROFILES = {
     notes: 'Isla qaab-dhismeedka English: passage (Q1-10) + naxwe + suugaan/balaagha + mufradaat + su\'aalo gaagaaban + ta\'biir; dhammaan qoraalku waa Carabi'
   }),
   tarbiya: P({
-    style: {"mcq": "Dooro jawaabta saxda ah", "structured": "Qaybta 2aad: Su'aalaha toosan", "marksWord": "Dhibcood", "letters": "ABCD", "suffix": ")"},
-    label: 'Tarbiya Islaamiga', basis: 'assumed', language: 'so', letters: 'latin',
+    style: {"mcq": "القسم الأول: ضع دائرة حول رقم الإجابة الصحيحة فيما يلي", "structured": "القسم الثاني: أجب عن الأسئلة الآتية", "marksWord": "درجة", "letters": "أبجد", "suffix": "-"},
+    label: 'Tarbiya Islaamiga', basis: 'sampled', language: 'ar', letters: 'latin',
     mcq: { count: 60, marks: 60 }, structured: { marks: 40, count: 8 },
-    figureShare: [0, 0.03], figures: [],
-    notes: 'La qiyaasay: MCQ + qoraal; hubi sample-ka'
+    figureShare: [0, 0], figures: [],
+    notes: "Sample-ka qaranka Tarbiya waa Carabi: Qaybta 1aad MCQ (4 doorasho: أ ب ج د) oo ku saabsan fiqhiga, quraanka/tafsiirka, xadiista, caqiidada iyo taariikhda; Qaybta 2aad su'aalo toos ah (qeex, kala sooc, tusaale, jadwal buuxi, aayad ka soo saar xukun, xisaabin zakaad/diyo). Dhibcaha waxay raacayaan Physics: 60 MCQ (60 dhibcood) + 8 su'aalood toos ah (5 dhibcood mid walba = 40). Sawir ma jiro."
   })
 };
 
