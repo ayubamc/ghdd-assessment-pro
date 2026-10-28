@@ -480,6 +480,12 @@ function normalizeBlueprintObjectiveSelection(blueprint, inventory, totalQuestio
       if (!fallback) break;
       ids.push(String(fallback.id));
     }
+    // Few objectives but many questions: reuse the best-matching objective instead of leaving the row empty
+    // (question objective validation already allows reuse when objectives < questions).
+    if (!ids.length && rowCount > 0 && all.length) {
+      const best = [...all].sort((x,y) => score(row,y)-score(row,x) || Number(x.page)-Number(y.page))[0];
+      if (best) ids.push(String(best.id));
+    }
     row.objectiveIds = ids;
     for (const id of ids) chosen.add(id);
     const pages = [...new Set(ids.map(id => Number(byId.get(id)?.page)).filter(Number.isInteger))].sort((a,b)=>a-b);
@@ -2685,7 +2691,7 @@ app.post('/api/blueprint', async (req, res) => {
     const countSum=blueprint.coverage.reduce((n,x)=>n+Number(x.questionCount||0),0);
     const pageIssues=validateBlueprintSourcePages(blueprint,p.pageRange,sourcePageCheck.pages);
     const objectiveIssues=validateBlueprintObjectiveCoverage(blueprint,objectiveInventory,totalQuestions);
-    if (objectiveIssues.length) return res.status(422).json({error:'Blueprint waa la diiday: objective mapping-ka objectives-ka la doortay ama source pages-kooda lama xaqiijin.',validation:{ok:false,pageRange:sourcePageCheck,pageIssues,objectiveIssues:objectiveIssues.slice(0,40),objectiveCount:objectiveInventory.objectives.length}});
+    if (objectiveIssues.length) return res.status(422).json({error:'Blueprint waa la diiday: objective mapping-ka objectives-ka la doortay ama source pages-kooda lama xaqiijin. Sababta: '+objectiveIssues.slice(0,3).join(' | ')+' — Isku day mar kale (AI-gu mararka qaar ayuu khalad ku sameeyaa).',validation:{ok:false,pageRange:sourcePageCheck,pageIssues,objectiveIssues:objectiveIssues.slice(0,40),objectiveCount:objectiveInventory.objectives.length}});
     blueprint.objectiveInventory=objectiveInventory;
     if (pageIssues.length) return res.status(422).json({error:'Blueprint waa la diiday: tixraacyada bogagga lama xaqiijin. Samee Blueprint cusub; lama oggola in si aamusan loo saxo ama loo qiyaaso bogagga.',validation:{ok:false,pageRange:sourcePageCheck,pageIssues,marksSum,countSum,marksMatch:marksSum===totalMarks,questionsMatch:countSum===totalQuestions}});
     const structuralIssues=[];
