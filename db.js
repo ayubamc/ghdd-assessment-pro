@@ -9,24 +9,24 @@ if (SQL_LOG) setInterval(() => { try { fs.writeFileSync(process.env.SQL_LOG, JSO
 
 function schema(id) {
   return [
-    `CREATE TABLE IF NOT EXISTS settings (key TEXT PRIMARY KEY, value TEXT NOT NULL)`,
-    `CREATE TABLE IF NOT EXISTS counters (name TEXT PRIMARY KEY, value INTEGER NOT NULL)`,
-    `CREATE TABLE IF NOT EXISTS schools (
+    `CREATE TABLE IF NOT EXISTS nt_settings (key TEXT PRIMARY KEY, value TEXT NOT NULL)`,
+    `CREATE TABLE IF NOT EXISTS nt_counters (name TEXT PRIMARY KEY, value INTEGER NOT NULL)`,
+    `CREATE TABLE IF NOT EXISTS nt_schools (
       id ${id}, code TEXT NOT NULL UNIQUE, name TEXT NOT NULL, region TEXT, head TEXT,
       phone TEXT, created_at TEXT)`,
-    `CREATE TABLE IF NOT EXISTS subjects (
+    `CREATE TABLE IF NOT EXISTS nt_subjects (
       id ${id}, name TEXT NOT NULL, sort INTEGER NOT NULL DEFAULT 0, active INTEGER NOT NULL DEFAULT 1)`,
-    `CREATE TABLE IF NOT EXISTS students (
+    `CREATE TABLE IF NOT EXISTS nt_students (
       id ${id}, roll_no TEXT NOT NULL UNIQUE, exam_year INTEGER NOT NULL, school_id INTEGER NOT NULL,
       full_name TEXT NOT NULL, mother_name TEXT NOT NULL, gender TEXT, parent_phone TEXT,
       phone_key TEXT, name_key TEXT, qr_token TEXT NOT NULL UNIQUE, status TEXT NOT NULL DEFAULT 'active',
       created_at TEXT, updated_at TEXT)`,
-    `CREATE INDEX IF NOT EXISTS students_school_idx ON students (school_id)`,
-    `CREATE INDEX IF NOT EXISTS students_name_idx ON students (name_key)`,
-    `CREATE TABLE IF NOT EXISTS marks (
+    `CREATE INDEX IF NOT EXISTS nt_students_school_idx ON nt_students (school_id)`,
+    `CREATE INDEX IF NOT EXISTS nt_students_name_idx ON nt_students (name_key)`,
+    `CREATE TABLE IF NOT EXISTS nt_marks (
       student_id INTEGER NOT NULL, subject_id INTEGER NOT NULL, score REAL, code TEXT, updated_at TEXT,
       PRIMARY KEY (student_id, subject_id))`,
-    `CREATE TABLE IF NOT EXISTS audit_log (id ${id}, at TEXT NOT NULL, action TEXT NOT NULL, details TEXT)`
+    `CREATE TABLE IF NOT EXISTS nt_audit_log (id ${id}, at TEXT NOT NULL, action TEXT NOT NULL, details TEXT)`
   ];
 }
 

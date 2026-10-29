@@ -51,19 +51,19 @@ function rateLimit(key, max, windowMs) {
 const clientIp = (req) => String(req.headers['x-forwarded-for'] || req.socket.remoteAddress || '').split(',')[0].trim();
 
 async function audit(action, details) {
-  try { await db.query('INSERT INTO audit_log (at, action, details) VALUES ($1, $2, $3)', [now(), action, JSON.stringify(details || {})]); }
+  try { await db.query('INSERT INTO nt_audit_log (at, action, details) VALUES ($1, $2, $3)', [now(), action, JSON.stringify(details || {})]); }
   catch (e) { console.error('audit', e.message); }
 }
 
 // ---------- settings ----------
 async function loadSettings() {
-  const rows = await db.query('SELECT key, value FROM settings');
+  const rows = await db.query('SELECT key, value FROM nt_settings');
   const map = Object.fromEntries(rows.map((r) => [r.key, JSON.parse(r.value)]));
   settings = Calc.withDefaults(map.main || {});
   auth = map.auth || null;
 }
 async function saveSetting(key, value) {
-  await db.query('INSERT INTO settings (key, value) VALUES ($1, $2) ON CONFLICT (key) DO UPDATE SET value = excluded.value', [key, JSON.stringify(value)]);
+  await db.query('INSERT INTO nt_settings (key, value) VALUES ($1, $2) ON CONFLICT (key) DO UPDATE SET value = excluded.value', [key, JSON.stringify(value)]);
 }
 async function saveMain() { await saveSetting('main', settings); dataVersion++; }
 
@@ -80,26 +80,26 @@ async function init() {
     auth.defaultPw = false;
     await saveSetting('auth', auth);
   }
-  const main = await db.query('SELECT key FROM settings WHERE key = $1', ['main']);
+  const main = await db.query('SELECT key FROM nt_settings WHERE key = $1', ['main']);
   if (!main.length) await saveMain();
-  const subs = await db.query('SELECT id FROM subjects');
+  const subs = await db.query('SELECT id FROM nt_subjects');
   if (!subs.length) {
     let i = 1;
-    for (const name of DEFAULT_SUBJECTS) await db.query('INSERT INTO subjects (name, sort, active) VALUES ($1, $2, 1)', [name, i++]);
+    for (const name of DEFAULT_SUBJECTS) await db.query('INSERT INTO nt_subjects (name, sort, active) VALUES ($1, $2, 1)', [name, i++]);
   }
-  const sch = await db.query('SELECT id FROM schools');
+  const sch = await db.query('SELECT id FROM nt_schools');
   if (!sch.length) {
-    await db.query('INSERT INTO schools (code, name, region, created_at) VALUES ($1, $2, $3, $4)', ['HWD', 'Howlwadaag Secondary School', '', now()]);
+    await db.query('INSERT INTO nt_schools (code, name, region, created_at) VALUES ($1, $2, $3, $4)', ['HWD', 'Howlwadaag Secondary School', '', now()]);
   }
 }
 
 // ---------- xogta oo dhan ----------
 async function loadAll() {
   const [schools, subjects, students, marks] = await Promise.all([
-    db.query('SELECT id, code, name, region, head, phone FROM schools ORDER BY name'),
-    db.query('SELECT id, name, sort, active FROM subjects ORDER BY sort, id'),
-    db.query('SELECT id, roll_no, exam_year, school_id, full_name, mother_name, gender, parent_phone, qr_token, status, created_at FROM students ORDER BY roll_no'),
-    db.query('SELECT student_id, subject_id, score, code FROM marks')
+    db.query('SELECT id, code, name, region, head, phone FROM nt_schools ORDER BY name'),
+    db.query('SELECT id, name, sort, active FROM nt_subjects ORDER BY sort, id'),
+    db.query('SELECT id, roll_no, exam_year, school_id, full_name, mother_name, gender, parent_phone, qr_token, status, created_at FROM nt_students ORDER BY roll_no'),
+    db.query('SELECT student_id, subject_id, score, code FROM nt_marks')
   ]);
   const num = (x) => (x == null ? x : Number(x));
   return {
@@ -122,8 +122,8 @@ async function computed() {
 function rollFor(year, seq) { return String(year % 100).padStart(2, '0') + String(seq).padStart(4, '0'); }
 async function allocateRolls(q, year, n) {
   const name = 'roll_' + year;
-  await q('INSERT INTO counters (name, value) VALUES ($1, 0) ON CONFLICT (name) DO NOTHING', [name]);
-  const r = await q('UPDATE counters SET value = value + $2 WHERE name = $1 RETURNING value', [name, n]);
+  await q('INSERT INTO nt_counters (name, value) VALUES ($1, 0) ON CONFLICT (name) DO NOTHING', [name]);
+  const r = await q('UPDATE nt_counters SET value = value + $2 WHERE name = $1 RETURNING value', [name, n]);
   const end = Number(r[0].value);
   return Array.from({ length: n }, (_, i) => rollFor(year, end - n + 1 + i));
 }
@@ -179,7 +179,7 @@ route('POST', '/api/public/result', async (req, body) => {
   const phone = Calc.normPhone(body.phone);
   if (!roll || !phone) fail(400, 'Fadlan geli Roll Number-ka iyo taleefanka waalidka.');
   if (!settings.released) fail(403, 'Natiijada imtixaanka weli lama sii dayn. Fadlan dib u soo eeg marka GHDD ay ku dhawaaqdo.');
-  const rows = await db.query('SELECT * FROM students WHERE roll_no = $1', [roll]);
+  const rows = await db.query('SELECT * FROM nt_students WHERE roll_no = $1', [roll]);
   const st = rows[0];
   if (!st || st.status !== 'active' || st.phone_key !== phone) fail(404, 'Roll Number-ka ama taleefanka waalidka lama helin. Hubi oo mar kale isku day.');
   const { C, data } = await computed();
@@ -192,7 +192,7 @@ route('POST', '/api/public/result', async (req, body) => {
 
 route('GET', '/api/public/card/:token', async (req, body, p) => {
   rateLimit('card:' + clientIp(req), 60, 10 * 60 * 1000);
-  const rows = await db.query('SELECT s.roll_no, s.full_name, s.mother_name, s.gender, s.exam_year, s.status, c.name AS school FROM students s LEFT JOIN schools c ON c.id = s.school_id WHERE s.qr_token = $1', [p.token]);
+  const rows = await db.query('SELECT s.roll_no, s.full_name, s.mother_name, s.gender, s.exam_year, s.status, c.name AS school FROM nt_students s LEFT JOIN nt_schools c ON c.id = s.school_id WHERE s.qr_token = $1', [p.token]);
   if (!rows.length) fail(404, 'Kaarkan lama aqoonsan. Waxaa laga yaabaa inuu yahay mid been abuur ah.');
   const s = rows[0];
   return { roll: s.roll_no, name: s.full_name, mother: s.mother_name, gender: s.gender, year: s.exam_year, school: s.school, valid: s.status === 'active', orgName: settings.orgName, examTitle: settings.examTitle, released: !!settings.released };
@@ -265,13 +265,13 @@ route('POST', '/api/admin/schools', async (req, body) => {
   const name = String(body.name || '').trim().slice(0, 120);
   if (!code || !name) fail(400, 'Geli magaca dugsiga iyo koodkiisa.');
   const fields = [String(body.region || '').trim().slice(0, 80), String(body.head || '').trim().slice(0, 80), String(body.phone || '').trim().slice(0, 30)];
-  const dup = await db.query('SELECT id FROM schools WHERE code = $1', [code]);
+  const dup = await db.query('SELECT id FROM nt_schools WHERE code = $1', [code]);
   if (body.id) {
     if (dup.length && Number(dup[0].id) !== Number(body.id)) fail(409, 'Koodkan dugsi kale ayaa haysta.');
-    await db.query('UPDATE schools SET code = $1, name = $2, region = $3, head = $4, phone = $5 WHERE id = $6', [code, name, ...fields, Number(body.id)]);
+    await db.query('UPDATE nt_schools SET code = $1, name = $2, region = $3, head = $4, phone = $5 WHERE id = $6', [code, name, ...fields, Number(body.id)]);
   } else {
     if (dup.length) fail(409, 'Koodkan dugsi kale ayaa haysta.');
-    await db.query('INSERT INTO schools (code, name, region, head, phone, created_at) VALUES ($1, $2, $3, $4, $5, $6)', [code, name, ...fields, now()]);
+    await db.query('INSERT INTO nt_schools (code, name, region, head, phone, created_at) VALUES ($1, $2, $3, $4, $5, $6)', [code, name, ...fields, now()]);
   }
   dataVersion++;
   await audit('school_save', { code, name });
@@ -279,9 +279,9 @@ route('POST', '/api/admin/schools', async (req, body) => {
 }, { admin: true });
 
 route('DELETE', '/api/admin/schools/:id', async (req, body, p) => {
-  const n = await db.query('SELECT id FROM students WHERE school_id = $1 LIMIT 1', [Number(p.id)]);
+  const n = await db.query('SELECT id FROM nt_students WHERE school_id = $1 LIMIT 1', [Number(p.id)]);
   if (n.length) fail(409, 'Dugsigan arday ayaa ka diiwaangashan, lama tirtiri karo.');
-  await db.query('DELETE FROM schools WHERE id = $1', [Number(p.id)]);
+  await db.query('DELETE FROM nt_schools WHERE id = $1', [Number(p.id)]);
   dataVersion++;
   await audit('school_delete', { id: p.id });
   return { ok: true };
@@ -294,8 +294,8 @@ route('POST', '/api/admin/subjects', async (req, body) => {
     for (const s of list) {
       const name = String(s.name || '').trim().slice(0, 60);
       if (!name) continue;
-      if (s.id) await q('UPDATE subjects SET name = $1, sort = $2, active = $3 WHERE id = $4', [name, i++, s.active ? 1 : 0, Number(s.id)]);
-      else await q('INSERT INTO subjects (name, sort, active) VALUES ($1, $2, $3)', [name, i++, s.active === false ? 0 : 1]);
+      if (s.id) await q('UPDATE nt_subjects SET name = $1, sort = $2, active = $3 WHERE id = $4', [name, i++, s.active ? 1 : 0, Number(s.id)]);
+      else await q('INSERT INTO nt_subjects (name, sort, active) VALUES ($1, $2, $3)', [name, i++, s.active === false ? 0 : 1]);
     }
   });
   dataVersion++;
@@ -319,7 +319,7 @@ async function insertStudents(q, schoolId, rows) {
       params.push(roll, year, schoolId, r.full, r.mother, r.gender, r.phone, Calc.normPhone(r.phone), r.nameKey, token, 'active', t, t);
       out.push({ roll, token, ...r });
     });
-    const ins = await q(`INSERT INTO students (roll_no, exam_year, school_id, full_name, mother_name, gender, parent_phone, phone_key, name_key, qr_token, status, created_at, updated_at) VALUES ${vals.join(', ')} RETURNING id, roll_no`, params);
+    const ins = await q(`INSERT INTO nt_students (roll_no, exam_year, school_id, full_name, mother_name, gender, parent_phone, phone_key, name_key, qr_token, status, created_at, updated_at) VALUES ${vals.join(', ')} RETURNING id, roll_no`, params);
     const ids = new Map(ins.map((x) => [x.roll_no, Number(x.id)]));
     out.slice(i, i + chunk.length).forEach((o) => (o.id = ids.get(o.roll)));
   }
@@ -327,7 +327,7 @@ async function insertStudents(q, schoolId, rows) {
 }
 
 async function schoolExists(id) {
-  const r = await db.query('SELECT id FROM schools WHERE id = $1', [Number(id)]);
+  const r = await db.query('SELECT id FROM nt_schools WHERE id = $1', [Number(id)]);
   if (!r.length) fail(400, 'Dugsiga la doortay lama helin.');
 }
 
@@ -335,7 +335,7 @@ route('POST', '/api/admin/students', async (req, body) => {
   await schoolExists(body.school_id);
   const c = cleanStudent(body);
   if (c.errs.length) fail(400, c.errs.join('. '));
-  const dup = await db.query('SELECT s.roll_no, c.name AS school FROM students s LEFT JOIN schools c ON c.id = s.school_id WHERE s.name_key = $1 AND s.status = $2 AND s.exam_year = $3', [c.nameKey, 'active', settings.examYear]);
+  const dup = await db.query('SELECT s.roll_no, c.name AS school FROM nt_students s LEFT JOIN nt_schools c ON c.id = s.school_id WHERE s.name_key = $1 AND s.status = $2 AND s.exam_year = $3', [c.nameKey, 'active', settings.examYear]);
   if (dup.length) fail(409, `Ardaygan horay ayaa loo diiwaangeliyay (Roll No ${dup[0].roll_no}, ${dup[0].school || ''}). Arday hal mar ayuu roll number qaataa.`, { roll: dup[0].roll_no });
   const created = await db.tx((q) => insertStudents(q, Number(body.school_id), [c]));
   dataVersion++;
@@ -346,7 +346,7 @@ route('POST', '/api/admin/students', async (req, body) => {
 route('POST', '/api/admin/students/bulk', async (req, body) => {
   await schoolExists(body.school_id);
   const rows = Array.isArray(body.rows) ? body.rows.slice(0, 3000) : fail(400, 'Xogta ardayda lama helin.');
-  const existing = new Map((await db.query('SELECT name_key, roll_no FROM students WHERE status = $1 AND exam_year = $2', ['active', settings.examYear])).map((r) => [r.name_key, r.roll_no]));
+  const existing = new Map((await db.query('SELECT name_key, roll_no FROM nt_students WHERE status = $1 AND exam_year = $2', ['active', settings.examYear])).map((r) => [r.name_key, r.roll_no]));
   const ok = [], skipped = [], seen = new Set();
   rows.forEach((r, i) => {
     const c = cleanStudent(r);
@@ -365,11 +365,11 @@ route('POST', '/api/admin/students/bulk', async (req, body) => {
 
 route('PUT', '/api/admin/students/:id', async (req, body, p) => {
   const id = Number(p.id);
-  const cur = (await db.query('SELECT * FROM students WHERE id = $1', [id]))[0] || fail(404, 'Ardayga lama helin.');
+  const cur = (await db.query('SELECT * FROM nt_students WHERE id = $1', [id]))[0] || fail(404, 'Ardayga lama helin.');
   await schoolExists(body.school_id);
   const c = cleanStudent(body);
   if (c.errs.length) fail(400, c.errs.join('. '));
-  await db.query('UPDATE students SET full_name = $1, mother_name = $2, gender = $3, parent_phone = $4, phone_key = $5, name_key = $6, school_id = $7, updated_at = $8 WHERE id = $9',
+  await db.query('UPDATE nt_students SET full_name = $1, mother_name = $2, gender = $3, parent_phone = $4, phone_key = $5, name_key = $6, school_id = $7, updated_at = $8 WHERE id = $9',
     [c.full, c.mother, c.gender, c.phone, Calc.normPhone(c.phone), c.nameKey, Number(body.school_id), now(), id]);
   dataVersion++;
   await audit('student_edit', { roll: cur.roll_no, before: { name: cur.full_name, mother: cur.mother_name, phone: cur.parent_phone, school: cur.school_id }, after: { name: c.full, mother: c.mother, phone: c.phone, school: body.school_id } });
@@ -378,8 +378,8 @@ route('PUT', '/api/admin/students/:id', async (req, body, p) => {
 
 route('POST', '/api/admin/students/:id/status', async (req, body, p) => {
   const status = body.status === 'active' ? 'active' : 'cancelled';
-  const cur = (await db.query('SELECT roll_no FROM students WHERE id = $1', [Number(p.id)]))[0] || fail(404, 'Ardayga lama helin.');
-  await db.query('UPDATE students SET status = $1, updated_at = $2 WHERE id = $3', [status, now(), Number(p.id)]);
+  const cur = (await db.query('SELECT roll_no FROM nt_students WHERE id = $1', [Number(p.id)]))[0] || fail(404, 'Ardayga lama helin.');
+  await db.query('UPDATE nt_students SET status = $1, updated_at = $2 WHERE id = $3', [status, now(), Number(p.id)]);
   dataVersion++;
   await audit('student_status', { roll: cur.roll_no, status });
   return { ok: true };
@@ -389,8 +389,8 @@ route('POST', '/api/admin/marks', async (req, body) => {
   if (settings.locked) fail(423, 'Natiijada waa la xiray (locked). Si aad wax u beddesho, ka fur qaybta Dejinta.');
   const changes = Array.isArray(body.changes) ? body.changes : fail(400, 'Isbeddel lama helin.');
   if (changes.length > 20000) fail(400, 'Isbeddello aad u badan hal mar.');
-  const students = new Set((await db.query('SELECT id FROM students WHERE status = $1', ['active'])).map((r) => Number(r.id)));
-  const subjects = new Set((await db.query('SELECT id FROM subjects')).map((r) => Number(r.id)));
+  const students = new Set((await db.query('SELECT id FROM nt_students WHERE status = $1', ['active'])).map((r) => Number(r.id)));
+  const subjects = new Set((await db.query('SELECT id FROM nt_subjects')).map((r) => Number(r.id)));
   const ups = new Map(), dels = [], errors = [];
   for (const ch of changes) {
     const [sid, subId, val] = [Number(ch[0]), Number(ch[1]), ch[2]];
@@ -405,7 +405,7 @@ route('POST', '/api/admin/marks', async (req, body) => {
   const small = ups.size + dels.length <= 30;
   if (small && (ups.size || dels.length)) {
     const ids = [...new Set([...ups.values(), ...dels].map((x) => x[0]))];
-    before = await db.query(`SELECT m.student_id, m.subject_id, m.score, m.code, s.roll_no FROM marks m JOIN students s ON s.id = m.student_id WHERE m.student_id IN (${ids.map((_, i) => '$' + (i + 1)).join(', ')})`, ids);
+    before = await db.query(`SELECT m.student_id, m.subject_id, m.score, m.code, s.roll_no FROM nt_marks m JOIN nt_students s ON s.id = m.student_id WHERE m.student_id IN (${ids.map((_, i) => '$' + (i + 1)).join(', ')})`, ids);
   }
   await db.tx(async (q) => {
     const list = [...ups.values()];
@@ -413,9 +413,9 @@ route('POST', '/api/admin/marks', async (req, body) => {
       const chunk = list.slice(i, i + 400);
       const params = [];
       const vals = chunk.map((r) => { const b = params.length; params.push(r[0], r[1], r[2], r[3], t); return `($${b + 1}, $${b + 2}, $${b + 3}, $${b + 4}, $${b + 5})`; });
-      await q(`INSERT INTO marks (student_id, subject_id, score, code, updated_at) VALUES ${vals.join(', ')} ON CONFLICT (student_id, subject_id) DO UPDATE SET score = excluded.score, code = excluded.code, updated_at = excluded.updated_at`, params);
+      await q(`INSERT INTO nt_marks (student_id, subject_id, score, code, updated_at) VALUES ${vals.join(', ')} ON CONFLICT (student_id, subject_id) DO UPDATE SET score = excluded.score, code = excluded.code, updated_at = excluded.updated_at`, params);
     }
-    for (const d of dels) await q('DELETE FROM marks WHERE student_id = $1 AND subject_id = $2', d);
+    for (const d of dels) await q('DELETE FROM nt_marks WHERE student_id = $1 AND subject_id = $2', d);
   });
   dataVersion++;
   const detail = { saved: ups.size, cleared: dels.length, errors: errors.length, source: body.source || 'gacan' };
@@ -437,14 +437,14 @@ route('GET', '/api/admin/result/:id', async (req, body, p) => {
 }, { admin: true });
 
 route('GET', '/api/admin/audit', async () => {
-  const rows = await db.query('SELECT id, at, action, details FROM audit_log ORDER BY id DESC LIMIT 300');
+  const rows = await db.query('SELECT id, at, action, details FROM nt_audit_log ORDER BY id DESC LIMIT 300');
   return { rows: rows.map((r) => ({ ...r, details: JSON.parse(r.details || '{}') })) };
 }, { admin: true });
 
 route('GET', '/api/admin/backup', async () => {
   const data = await loadAll();
-  const counters = await db.query('SELECT name, value FROM counters');
-  const tokens = await db.query('SELECT id, phone_key, name_key, updated_at FROM students');
+  const counters = await db.query('SELECT name, value FROM nt_counters');
+  const tokens = await db.query('SELECT id, phone_key, name_key, updated_at FROM nt_students');
   return { kind: 'ghdd-backup', version: 1, at: now(), data, counters, extra: tokens };
 }, { admin: true });
 
@@ -454,25 +454,25 @@ route('POST', '/api/admin/restore', async (req, body) => {
   const d = body.data;
   const extra = new Map((body.extra || []).map((e) => [Number(e.id), e]));
   await db.tx(async (q) => {
-    for (const t of ['marks', 'students', 'subjects', 'schools']) await q(`DELETE FROM ${t}`);
-    for (const s of d.schools) await q('INSERT INTO schools (id, code, name, region, head, phone, created_at) VALUES ($1, $2, $3, $4, $5, $6, $7)', [s.id, s.code, s.name, s.region || '', s.head || '', s.phone || '', now()]);
-    for (const s of d.subjects) await q('INSERT INTO subjects (id, name, sort, active) VALUES ($1, $2, $3, $4)', [s.id, s.name, s.sort, s.active]);
+    for (const t of ['nt_marks', 'nt_students', 'nt_subjects', 'nt_schools']) await q(`DELETE FROM ${t}`);
+    for (const s of d.schools) await q('INSERT INTO nt_schools (id, code, name, region, head, phone, created_at) VALUES ($1, $2, $3, $4, $5, $6, $7)', [s.id, s.code, s.name, s.region || '', s.head || '', s.phone || '', now()]);
+    for (const s of d.subjects) await q('INSERT INTO nt_subjects (id, name, sort, active) VALUES ($1, $2, $3, $4)', [s.id, s.name, s.sort, s.active]);
     for (const s of d.students) {
       const e = extra.get(s.id) || {};
-      await q('INSERT INTO students (id, roll_no, exam_year, school_id, full_name, mother_name, gender, parent_phone, phone_key, name_key, qr_token, status, created_at, updated_at) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)',
+      await q('INSERT INTO nt_students (id, roll_no, exam_year, school_id, full_name, mother_name, gender, parent_phone, phone_key, name_key, qr_token, status, created_at, updated_at) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)',
         [s.id, s.roll_no, s.exam_year, s.school_id, s.full_name, s.mother_name, s.gender, s.parent_phone, e.phone_key || Calc.normPhone(s.parent_phone), e.name_key || (Calc.normName(s.full_name) + '|' + Calc.normName(s.mother_name)), s.qr_token, s.status, s.created_at || now(), e.updated_at || now()]);
     }
     for (let i = 0; i < d.marks.length; i += 400) {
       const chunk = d.marks.slice(i, i + 400), params = [];
       const vals = chunk.map((m) => { const b = params.length; params.push(m[0], m[1], m[2], m[3], now()); return `($${b + 1}, $${b + 2}, $${b + 3}, $${b + 4}, $${b + 5})`; });
-      if (chunk.length) await q(`INSERT INTO marks (student_id, subject_id, score, code, updated_at) VALUES ${vals.join(', ')}`, params);
+      if (chunk.length) await q(`INSERT INTO nt_marks (student_id, subject_id, score, code, updated_at) VALUES ${vals.join(', ')}`, params);
     }
     // Roll number-ka marna dib looma isticmaalo: counter-ku waa inuu ka weynaadaa kan ugu sarreeya
     for (const c of body.counters || []) {
-      await q('INSERT INTO counters (name, value) VALUES ($1, $2) ON CONFLICT (name) DO UPDATE SET value = CASE WHEN counters.value > excluded.value THEN counters.value ELSE excluded.value END', [c.name, Number(c.value)]);
+      await q('INSERT INTO nt_counters (name, value) VALUES ($1, $2) ON CONFLICT (name) DO UPDATE SET value = CASE WHEN nt_counters.value > excluded.value THEN nt_counters.value ELSE excluded.value END', [c.name, Number(c.value)]);
     }
     if (db.kind === 'postgres') {
-      for (const t of ['schools', 'subjects', 'students']) await q(`SELECT setval(pg_get_serial_sequence('${t}', 'id'), COALESCE((SELECT MAX(id) FROM ${t}), 1))`);
+      for (const t of ['nt_schools', 'nt_subjects', 'nt_students']) await q(`SELECT setval(pg_get_serial_sequence('${t}', 'id'), COALESCE((SELECT MAX(id) FROM ${t}), 1))`);
     }
   });
   if (d.settings) { settings = Calc.withDefaults(Object.assign({}, d.settings)); await saveMain(); }
