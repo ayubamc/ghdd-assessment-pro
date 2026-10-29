@@ -34,7 +34,13 @@ function logSql(sql) { if (SQL_LOG) SQL_LOG.add(sql); }
 
 async function openPg(url) {
   const { Pool } = require('pg');
-  const local = /localhost|127\.0\.0\.1|@\/|host=\//.test(url);
+  const local = /localhost|127\.0\.0\.1|@\/|host=\/|\.railway\.internal/.test(url);
+  // sslmode / channel_binding waxaa maamula dejinta ssl ee hoose (Neon, Railway public, iwm.)
+  try {
+    const u = new URL(url);
+    ['sslmode', 'channel_binding', 'sslrootcert'].forEach((k) => u.searchParams.delete(k));
+    url = u.toString();
+  } catch (_) { /* url sidiisa ha ahaado */ }
   const pool = new Pool({
     connectionString: url,
     ssl: local || process.env.PGSSL === 'off' ? false : { rejectUnauthorized: false },
