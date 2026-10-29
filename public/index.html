@@ -1,0 +1,73 @@
+<!doctype html>
+<html lang="so">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Natiijada Imtixaanka – GHDD</title>
+<meta name="description" content="Ka eeg natiijada imtixaanka Form 4 ee GHDD adigoo isticmaalaya Roll Number-kaaga iyo taleefanka waalidka.">
+<meta name="theme-color" content="#1c5cab">
+<link rel="manifest" href="/manifest.webmanifest">
+<link rel="icon" href="/icon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="/css/app.css">
+</head>
+<body>
+<header class="topbar no-print">
+  <div class="wrap">
+    <div class="brand"><div class="seal">GHDD</div><div><b id="org">Golaha Hormarinta Dugsiyada Dadweynaha</b><small id="title">Natiijada Imtixaanka Form 4</small></div></div>
+  </div>
+</header>
+<main class="wrap" style="padding-top:18px;padding-bottom:40px">
+  <div id="lookup" class="center-card" style="margin-top:2vh">
+    <div class="hero">
+      <div class="seal">GHDD</div>
+      <h1>Natiijada Imtixaanka</h1>
+      <p class="muted" id="sub">Geli Roll Number-kaaga iyo taleefanka waalidkaa / masuulkaaga.</p>
+    </div>
+    <div id="state"></div>
+    <form id="f" class="card" autocomplete="on">
+      <label class="f"><span>Roll Number</span><input id="roll" inputmode="numeric" autocomplete="off" placeholder="Tusaale: 260001" required></label>
+      <label class="f"><span>Taleefanka waalidka (masuulka ardayga)</span><input id="phone" type="tel" inputmode="tel" placeholder="Tusaale: 061 5xx xxxx" required></label>
+      <button class="btn primary block" id="go" type="submit">Eeg Natiijada</button>
+      <p class="small muted" style="margin:10px 0 0">Roll Number-ka waxaa ku qoran kaarka imtixaanka (passcard). Taleefanku waa kii la diiwaangeliyay markii la qoray ardayga.</p>
+    </form>
+    <div id="err"></div>
+  </div>
+  <div id="out" style="max-width:760px;margin:0 auto"></div>
+</main>
+<script src="/js/result-view.js"></script>
+<script>
+(function () {
+  const $ = (id) => document.getElementById(id);
+  const esc = ResultView.esc;
+  const params = new URLSearchParams(location.search);
+  if (params.get('roll')) $('roll').value = params.get('roll').replace(/\D/g, '');
+
+  fetch('/api/public/info').then((r) => r.json()).then((i) => {
+    $('org').textContent = i.orgName; $('title').textContent = i.examTitle + ' – ' + i.examYear;
+    if (!i.released) $('state').innerHTML = '<div class="banner warn">Natiijada imtixaanka ' + esc(i.examYear) + ' weli lama sii dayn. Marka GHDD ay ku dhawaaqdo ayaad halkan ka eegi kartaa.</div>';
+    else $('state').innerHTML = '<div class="banner good">Natiijada imtixaanka ' + esc(i.examYear) + ' waa la sii daayay.</div>';
+  }).catch(() => {});
+
+  $('f').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    $('err').innerHTML = '';
+    $('go').disabled = true; $('go').textContent = 'Waa la raadinayaa…';
+    try {
+      const res = await fetch('/api/public/result', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ roll: $('roll').value, phone: $('phone').value }) });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Cillad ayaa dhacday');
+      $('lookup').classList.add('hidden');
+      $('out').innerHTML = ResultView.render(data) +
+        '<div class="row no-print" style="margin-top:14px;justify-content:center"><button class="btn primary" onclick="window.print()">Daabac / PDF</button><button class="btn" id="again">Arday kale raadi</button></div>';
+      $('again').onclick = () => { $('out').innerHTML = ''; $('lookup').classList.remove('hidden'); $('roll').value = ''; $('phone').value = ''; $('roll').focus(); };
+      window.scrollTo(0, 0);
+    } catch (err) {
+      const msg = navigator.onLine === false || err instanceof TypeError ? 'Internet ma jiro. Fadlan hubi xiriirkaaga oo mar kale isku day.' : err.message;
+      $('err').innerHTML = '<div class="banner bad">' + esc(msg) + '</div>';
+    } finally { $('go').disabled = false; $('go').textContent = 'Eeg Natiijada'; }
+  });
+  if ('serviceWorker' in navigator) navigator.serviceWorker.register('/sw.js').catch(() => {});
+})();
+</script>
+</body>
+</html>

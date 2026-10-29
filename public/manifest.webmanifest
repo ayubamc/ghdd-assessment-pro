@@ -1,0 +1,13 @@
+{
+  "name": "GHDD – Natiijada Imtixaanka",
+  "short_name": "GHDD Natiijo",
+  "description": "Nidaamka natiijada imtixaanka Form 4 ee GHDD",
+  "start_url": "/admin",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#f3f5f9",
+  "theme_color": "#1c5cab",
+  "icons": [
+    { "src": "/icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any maskable" }
+  ]
+}

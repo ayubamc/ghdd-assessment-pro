@@ -1,0 +1,16 @@
+{
+  "name": "ghdd-natiijo",
+  "version": "1.0.0",
+  "description": "GHDD - Nidaamka Natiijada Imtixaanka Form 4 (roll number, passcard, natiijo online, falanqayn)",
+  "main": "server.js",
+  "private": true,
+  "scripts": {
+    "start": "node server.js"
+  },
+  "engines": {
+    "node": ">=22.13"
+  },
+  "dependencies": {
+    "pg": "^8.13.1"
+  }
+}
