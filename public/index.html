@@ -5,6 +5,9 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <meta name="theme-color" content="#123b78">
+<link rel="manifest" href="/manifest.webmanifest">
+<link rel="icon" type="image/png" sizes="192x192" href="/icon-192.png">
+<link rel="apple-touch-icon" href="/icon-192.png">
 <title>GHDD Assessment Pro</title>
 <style>
 :root{--blue:#123b78;--light:#edf4fc;--gold:#e9b63f;--text:#172338;--line:#dce4ef}
@@ -550,5 +553,15 @@ PDF weyn wuxuu u baahan karaa xusuus badan, waqti dheeraad ah iyo kayd PostgreSQ
 </script>
 <script src="/chem-struct.js?v=1"></script>
 <script src="/app.js?v=r23"></script>
+<button id="installApp" type="button" hidden style="position:fixed;right:16px;bottom:16px;z-index:9999;box-shadow:0 4px 14px rgba(0,0,0,.25);border-radius:24px;padding:12px 18px">⬇ Ku rakib app-ka</button>
+<script>
+(function(){
+  if('serviceWorker' in navigator){window.addEventListener('load',function(){navigator.serviceWorker.register('/sw.js').catch(function(){})})}
+  var deferred=null,btn=document.getElementById('installApp');
+  window.addEventListener('beforeinstallprompt',function(e){e.preventDefault();deferred=e;btn.hidden=false});
+  btn.addEventListener('click',function(){if(!deferred)return;deferred.prompt();deferred.userChoice.finally(function(){deferred=null;btn.hidden=true})});
+  window.addEventListener('appinstalled',function(){btn.hidden=true});
+})();
+</script>
 </body>
 </html>
